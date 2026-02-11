@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
-import { Rocket, CheckCircle, Users, Globe, Zap } from 'lucide-react'
+import { Rocket, CheckCircle, Users, Globe, Zap, AlertCircle } from 'lucide-react'
 
 export function EarlyAccessForm() {
   const [email, setEmail] = useState('')
@@ -13,39 +13,64 @@ export function EarlyAccessForm() {
   const [boxDescription, setBoxDescription] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
-  const [signupCount, setSignupCount] = useState(127) // 초기 소셜프루프 숫자
+  const [signupCount, setSignupCount] = useState(0)
+  const [error, setError] = useState('')
+
+  // 페이지 로드 시 현재 가입자 수 조회
+  useEffect(() => {
+    async function fetchCount() {
+      try {
+        const { data, error } = await supabase.rpc('get_early_access_count')
+        if (!error && data !== null) {
+          setSignupCount(data)
+        }
+      } catch {
+        // Supabase 미연결 시 기본값 유지
+      }
+    }
+    fetchCount()
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email) return
 
     setIsSubmitting(true)
+    setError('')
 
     try {
-      // Supabase 연결 시 실제 저장
-      const { error } = await supabase
+      const { error: insertError } = await supabase
         .from('early_access')
         .insert([
           {
             email,
-            company_name: companyName,
-            box_description: boxDescription,
+            company_name: companyName || null,
+            box_description: boxDescription || null,
           },
         ])
 
-      if (error) {
-        // Supabase 미연결 시에도 UI는 성공 처리 (개발 단계)
-        console.warn('Supabase not connected yet:', error.message)
+      if (insertError) {
+        // 이메일 중복 체크
+        if (insertError.code === '23505') {
+          setError('This email is already on the waitlist!')
+          toast.error('You\'re already on the list!')
+          setIsSubmitting(false)
+          return
+        }
+        throw insertError
+      }
+
+      // 성공 시 카운트 다시 조회
+      const { data: newCount } = await supabase.rpc('get_early_access_count')
+      if (newCount !== null) {
+        setSignupCount(newCount)
       }
 
       setIsSubmitted(true)
-      setSignupCount(prev => prev + 1)
       toast.success('Welcome to Packive! You\'re on the list.')
     } catch (err) {
-      // 개발 단계에서는 에러가 나도 성공 처리
-      setIsSubmitted(true)
-      setSignupCount(prev => prev + 1)
-      toast.success('Welcome to Packive! You\'re on the list.')
+      setError('Something went wrong. Please try again.')
+      toast.error('Please try again.')
     } finally {
       setIsSubmitting(false)
     }
@@ -59,7 +84,7 @@ export function EarlyAccessForm() {
             <CheckCircle className="w-10 h-10 text-green-600" />
           </div>
           <h3 className="text-3xl font-bold text-gray-900 mb-4">
-            You&apos;re in! 🎉
+            You&apos;re in!
           </h3>
           <p className="text-lg text-gray-600 mb-2">
             You&apos;re <span className="font-bold text-[#2563EB]">#{signupCount}</span> on the early access list.
@@ -75,7 +100,6 @@ export function EarlyAccessForm() {
   return (
     <section id="early-access" className="py-24 bg-gradient-to-b from-[#2563EB]/5 to-white">
       <div className="max-w-4xl mx-auto px-6">
-        {/* 상단 소셜프루프 */}
         <div className="text-center mb-12">
           <div className="inline-flex items-center gap-2 bg-[#F59E0B]/10 text-[#F59E0B] px-4 py-2 rounded-full text-sm font-semibold mb-6">
             <Rocket className="w-4 h-4" />
@@ -86,15 +110,14 @@ export function EarlyAccessForm() {
             <span className="text-[#2563EB]">your packaging</span>
           </h2>
           <p className="text-lg text-gray-600 max-w-2xl mx-auto mb-6">
-            Join {signupCount}+ brands already on the waitlist.
+            Join {signupCount > 0 ? `${signupCount}+` : ''} brands already on the waitlist.
             Get early access to the platform that turns your box idea into a print-ready file in 30 minutes.
           </p>
-          
-          {/* 신뢰 지표 */}
+
           <div className="flex flex-wrap justify-center gap-6 text-sm text-gray-500">
             <div className="flex items-center gap-1.5">
               <Users className="w-4 h-4 text-[#2563EB]" />
-              <span>{signupCount}+ waitlisted</span>
+              <span>{signupCount > 0 ? `${signupCount}+ waitlisted` : 'Be the first!'}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <Globe className="w-4 h-4 text-[#7C3AED]" />
@@ -107,7 +130,6 @@ export function EarlyAccessForm() {
           </div>
         </div>
 
-        {/* 가입 폼 */}
         <div className="max-w-lg mx-auto">
           <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8 space-y-4">
             <div>
@@ -150,6 +172,13 @@ export function EarlyAccessForm() {
               />
             </div>
 
+            {error && (
+              <div className="flex items-center gap-2 text-red-600 text-sm">
+                <AlertCircle className="w-4 h-4" />
+                <span>{error}</span>
+              </div>
+            )}
+
             <Button
               type="submit"
               disabled={isSubmitting || !email}
@@ -164,7 +193,6 @@ export function EarlyAccessForm() {
           </form>
         </div>
 
-        {/* 하단 기대효과 */}
         <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
           <div>
             <div className="text-3xl font-bold text-[#2563EB]">30 min</div>
