@@ -1,12 +1,14 @@
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
+import { Toaster } from "react-hot-toast"
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Packive - 패키지 디자인, 누구나 쉽게",
-  description: "박스 형태 선택부터 칼선전개도 자동 생성, 디자인, 3D 미리보기, 인쇄 파일 출력까지.",
+  title: "Packive — Design Your Packaging in Minutes",
+  description:
+    "Auto-generate die-cut templates, design on top, preview in 3D, and export print-ready files. No Illustrator needed.",
 }
 
 export default function RootLayout({
@@ -15,8 +17,11 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="ko">
-      <body className={inter.className}>{children}</body>
+    <html lang="en">
+      <body className={inter.className}>
+        {children}
+        <Toaster position="top-center" />
+      </body>
     </html>
   )
 }
