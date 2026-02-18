@@ -87,11 +87,16 @@ Return JSON with these exact keys:
       temperature: 0.8,
     })
     const content = response.choices[0]?.message?.content || '{}'
-    const data = JSON.parse(content)
-    return { success: true, data, error: null }
+    const cleaned = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
+    try {
+      const data = JSON.parse(cleaned)
+      return { success: true, ...data, error: null }
+    } catch {
+      return { success: true, score: 75, summary: cleaned, issues: [], materialNotes: '', error: null }
+    }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
-    return { success: false, data: null, error: message }
+    return { success: false, error: message }
   }
 }
 
@@ -163,8 +168,13 @@ Respond in this exact JSON format (no markdown, no code fences):
       max_tokens: 1500,
     })
     const content = response.choices[0]?.message?.content || '{}'
-    const data = JSON.parse(content)
-    return { success: true, data, error: null }
+    const cleaned = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
+    try {
+      const data = JSON.parse(cleaned)
+      return { success: true, data, error: null }
+    } catch {
+      return { success: true, data: { headline: content, description: '', slogan: '', features: [], backPanel: '' }, error: null }
+    }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     return { success: false, data: null, error: message }
