@@ -171,9 +171,9 @@ Respond in ${language === 'ko' ? 'Korean' : language === 'ja' ? 'Japanese' : 'En
     const cleaned = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
     try {
       const data = JSON.parse(cleaned)
-      return { success: true, data, error: null }
+      return { success: true, score: data.score, summary: data.summary, issues: data.issues, materialNotes: data.materialNotes, error: null }
     } catch {
-      return { success: true, data: { headline: content, description: '', slogan: '', features: [], backPanel: '' }, error: null }
+      return { success: true, score: 70, summary: cleaned, issues: [], materialNotes: '', error: null }
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
