@@ -143,7 +143,7 @@ MATERIAL-SPECIFIC CHECKS:
 11. For corrugated board (fluted): Fine gradients and thin lines (<0.5pt) may not reproduce well due to the uneven surface.
 12. For single-sheet cardboard: Embossing and debossing areas should be marked separately.
 
-Respond in ${language === 'ko' ? 'Korean' : language === 'ja' ? 'Japanese' : 'English'}. Respond in this exact JSON format (no markdown, no code fences):
+IMPORTANT: ALL text values (summary, description, suggestion, materialNotes) MUST be written in ${language === 'ko' ? 'Korean (한국어)' : language === 'ja' ? 'Japanese (日本語)' : 'English'}. Respond in this exact JSON format (no markdown, no code fences):
 {
   "score": (number 0-100),
   "issues": [{"type": "string", "severity": "critical|warning|info", "description": "string", "suggestion": "string"}],
