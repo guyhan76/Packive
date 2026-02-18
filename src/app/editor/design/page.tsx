@@ -114,6 +114,8 @@ function DesignPageInner() {
     allPanelIds.forEach((id) => { init[id] = { json: null, thumbnail: null, designed: false }; });
     return init;
   });
+  const panelsRef = useRef(panels);
+  useEffect(() => { panelsRef.current = panels; }, [panels]);
   const tuckH = getTuckLengthByMaterial(materialId);
   const glueW = getGlueFlapWidth(materialId);
   const dustH = getDustFlapHeight(W);
@@ -235,8 +237,7 @@ function DesignPageInner() {
           try { doc.addImage(pnl.thumbnail, "PNG", px, py, p.w, p.h); } catch (e) { console.warn(e); }
         } else if (pc) {
           doc.setFontSize(Math.min(p.w * 0.15, p.h * 0.15, 8));
-  const panelsRef = useRef(panels);
-  useEffect(() => { panelsRef.current = panels; }, [panels]);
+
 
           doc.setTextColor(180, 180, 180);
           doc.text(pc.name, px + p.w / 2, py + p.h / 2, { align: "center", baseline: "middle" });
