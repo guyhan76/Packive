@@ -1457,7 +1457,7 @@ export default function PanelEditor({
       }
     });
     const json = JSON.stringify(c.toJSON(['_isBgImage','selectable','evented','name']));
-    const thumb = c.toDataURL({format:'png',multiplier:0.3});
+    const thumb = c.toDataURL({format:'png',multiplier:1});
     // Re-add guides
     guides.forEach(g => c.add(g)); c.renderAll();
     onSave(panelId, json, thumb);
