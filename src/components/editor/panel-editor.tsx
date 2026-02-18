@@ -1925,7 +1925,7 @@ export default function PanelEditor({
                 <div className="space-y-2 mt-2">
                   <div className="flex items-baseline gap-2"><span className="text-4xl font-black bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">{(reviewResult.data?.score || reviewResult.score)}</span><span className="text-xs text-gray-500">/ 100</span></div>
                   <p className="text-[11px] text-gray-300 leading-relaxed">{(reviewResult.data?.summary || reviewResult.summary)}</p>
-                  {(reviewResult.data?.issues || reviewResult.issues)?.length>0 && <div className="mt-1.5 space-y-1 p-2 bg-red-500/10 rounded-lg border border-red-500/20"><div className="text-[10px] font-bold text-red-400 mb-1">Issues Found:</div>{(reviewResult.data?.issues || reviewResult.issues)?.map((issue:any,i:number)=><p key={i} className="text-[10px] text-red-300/80 leading-snug">• {issue}</p>)}</div>}
+                  {(reviewResult.data?.issues || reviewResult.issues)?.length>0 && <div className="mt-1.5 space-y-1 p-2 bg-red-500/10 rounded-lg border border-red-500/20"><div className="text-[10px] font-bold text-red-400 mb-1">Issues Found:</div>{(reviewResult.data?.issues || reviewResult.issues)?.map((issue:any,i:number)=><p key={i} className="text-[10px] text-red-300/80 leading-snug">⚠ {typeof issue === 'string' ? issue : `[${issue.severity}] ${issue.description}`}</p>)}</div>}
                 </div>
               )}
             </div>
