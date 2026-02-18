@@ -93,6 +93,11 @@ function formatBoxType(bt: string): string {
   return bt.replace(/fefco/gi, "FEFCO");
 }
 function DesignPageInner() {
+  useEffect(() => {
+    Object.keys(localStorage).forEach(k => {
+      if (k.startsWith('panelEditor_autoSave_')) localStorage.removeItem(k);
+    });
+  }, []);
   const searchParams = useSearchParams();
   const router = useRouter();
   const { t } = useI18n();
