@@ -904,7 +904,7 @@ export default function PanelEditor({
   const loadingRef = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [color, setColor] = useState('#000000');
   const [fSize, setFSize] = useState(24);
   const [selectedFont, setSelectedFont] = useState('Arial, sans-serif');
@@ -1554,13 +1554,13 @@ export default function PanelEditor({
 
   const handleAiCopy = useCallback(async () => {
     if (!copyProduct.trim()) return; setCopyLoading(true); setCopyResult(null);
-    try { const r=await fetch('/api/ai/generate-copy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({productName:copyProduct,brandName:copyBrand||undefined})}); const d=await r.json(); if(d.error) throw new Error(d.error); setCopyResult(d); } catch(e:any) { alert('AI Copy: '+e.message); }
+    try { const r=await fetch('/api/ai/generate-copy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({productName:copyProduct,brandName:copyBrand||undefined,language:locale})}); const d=await r.json(); if(d.error) throw new Error(d.error); setCopyResult(d); } catch(e:any) { alert('AI Copy: '+e.message); }
     setCopyLoading(false);
   }, [copyProduct, copyBrand]);
 
   const handleAiReview = useCallback(async () => {
     const c=fcRef.current; if(!c) return; setReviewLoading(true); setReviewResult(null);
-    try { const d=c.toDataURL({format:'png',multiplier:1}); const r=await fetch('/api/ai/review-design',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageBase64:d.replace(/^data:image\/[a-z]+;base64,/,''),boxType:panelId||'package',dimensions:{width:widthMM,height:heightMM},material:'standard'})}); const data=await r.json(); if(data.error) throw new Error(data.error); setReviewResult(data); } catch(e:any) { alert('AI Review: '+e.message); }
+    try { const d=c.toDataURL({format:'png',multiplier:1}); const r=await fetch('/api/ai/review-design',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageBase64:d.replace(/^data:image\/[a-z]+;base64,/,''),boxType:panelId||'package',dimensions:{width:widthMM,height:heightMM},material:'standard',language:locale})}); const data=await r.json(); if(data.error) throw new Error(data.error); setReviewResult(data); } catch(e:any) { alert('AI Review: '+e.message); }
     setReviewLoading(false);
   }, []);
 

@@ -107,7 +107,7 @@ export async function reviewDesignQuality(
   imageBase64: string,
   boxType: string,
   dimensions: { L: number; W: number; D: number },
-  materialId?: string
+  materialId?: string, language?: string
 ) {
   if (!isConfigured()) {
     return { success: false, error: 'OpenAI API key not configured. Add OPENAI_API_KEY to .env.local', data: null }
@@ -143,7 +143,7 @@ MATERIAL-SPECIFIC CHECKS:
 11. For corrugated board (fluted): Fine gradients and thin lines (<0.5pt) may not reproduce well due to the uneven surface.
 12. For single-sheet cardboard: Embossing and debossing areas should be marked separately.
 
-Respond in this exact JSON format (no markdown, no code fences):
+Respond in ${language === 'ko' ? 'Korean' : language === 'ja' ? 'Japanese' : 'English'}. Respond in this exact JSON format (no markdown, no code fences):
 {
   "score": (number 0-100),
   "issues": [{"type": "string", "severity": "critical|warning|info", "description": "string", "suggestion": "string"}],

@@ -3,7 +3,7 @@ import { reviewDesignQuality } from '@/lib/openai'
 
 export async function POST(req: NextRequest) {
   try {
-    const { imageBase64, boxType, dimensions, material } = await req.json()
+    const { imageBase64, boxType, dimensions, material, language } = await req.json()
 
     if (!imageBase64 || !boxType || !dimensions) {
       return NextResponse.json(
@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const result = await reviewDesignQuality(imageBase64, boxType, dimensions, material)
+    const result = await reviewDesignQuality(imageBase64, boxType, dimensions, material, language)
     return NextResponse.json(result)
   } catch {
     return NextResponse.json(
