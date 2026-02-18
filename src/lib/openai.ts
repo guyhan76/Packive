@@ -31,7 +31,7 @@ export async function generatePackageDesign(
       size: '1024x1024',
       quality: 'standard',
     })
-    return { success: true, url: response.data[0]?.url || null, error: null }
+    return { success: true, url: response.data?.[0]?.url || null, error: null }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     return { success: false, url: null, error: message }

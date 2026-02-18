@@ -1341,7 +1341,7 @@ export default function PanelEditor({
           initGuides.push(o); canvas.remove(o);
         }
       });
-      historyRef.current = [JSON.stringify(canvas.toJSON(['_isBgImage','selectable','evented','name']))];
+      historyRef.current = [JSON.stringify(canvas.toJSON())];
       initGuides.forEach(g => canvas.add(g));
       canvas.renderAll();
       historyIdxRef.current = 0;
@@ -1383,7 +1383,7 @@ export default function PanelEditor({
         if ((e.ctrlKey||e.metaKey) && e.code==='KeyD') { e.preventDefault(); const obj = canvas.getActiveObject(); if (!obj || obj.selectable===false) return; if (obj.type==='image'||obj instanceof (require('fabric').FabricImage)) { const t = document.createElement('canvas'); t.width=obj._element?.naturalWidth||obj._element?.width||200; t.height=obj._element?.naturalHeight||obj._element?.height||200; t.getContext('2d')?.drawImage(obj._element,0,0); (require('fabric').FabricImage).fromURL(t.toDataURL('image/png')).then((img:any) => { img.set({left:obj.left+20,top:obj.top+20,scaleX:obj.scaleX,scaleY:obj.scaleY,angle:obj.angle}); canvas.add(img); canvas.setActiveObject(img); canvas.renderAll(); refreshLayers(); }); } else { obj.clone().then((c:any) => { c.set({left:obj.left+20,top:obj.top+20}); canvas.add(c); canvas.setActiveObject(c); canvas.renderAll(); refreshLayers(); }); } }
         if ((e.ctrlKey||e.metaKey) && e.code==='KeyG') { e.preventDefault(); setShowGrid((p:boolean) => !p); }
       };
-      document.addEventListener('keydown', keyHandler);
+      document.addEventListener('keydown', keyHandler);canvas.renderAll();
       const wheelHandler = (opt:any) => { const e = opt.e as WheelEvent; if (e.ctrlKey||e.metaKey) { e.preventDefault(); e.stopPropagation(); const d = e.deltaY > 0 ? -10 : 10; applyZoom(Math.max(25,Math.min(400,zoomRef.current+d))); } };
       canvas.on('mouse:wheel', wheelHandler);
       autoSaveRef.current = setInterval(() => { const c = fcRef.current; if (!c) return; try { const _safeObjs:any[]=[];c.getObjects().forEach((o:any)=>{if(o._isSafeZone||o._isGuideText||o._isSizeLabel){_safeObjs.push(o);c.remove(o);}}); localStorage.setItem('panelEditor_autoSave_'+panelId, JSON.stringify(c.toJSON(['_isBgImage','_isSafeZone','_isGuideLine','_isGuideText','_isSizeLabel','_isBgPattern','selectable','evented','name']))); _safeObjs.forEach(o=>c.add(o)); c.renderAll(); } catch {} }, 10000);
@@ -1786,7 +1786,7 @@ export default function PanelEditor({
             </div>
             <div className="w-full h-px bg-white/10 my-2" />
             <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Pick Color</div>
-            <button onClick={()=>{if(typeof EyeDropper!=='undefined'){new (EyeDropper as any)().open().then((r:any)=>{setPickedColor(r.sRGBHex);setColor(r.sRGBHex);}).catch(()=>{});}}} className="w-full px-2 py-1.5 text-[10px] bg-white/10 hover:bg-white/20 text-gray-300 rounded transition-all text-center">💉 Pick from Screen</button>
+            <button onClick={()=>{if(typeof (window as any).EyeDropper!=='undefined'){new ((window as any).EyeDropper)().open().then((r:any)=>{setPickedColor(r.sRGBHex);setColor(r.sRGBHex);}).catch(()=>{});}}} className="w-full px-2 py-1.5 text-[10px] bg-white/10 hover:bg-white/20 text-gray-300 rounded transition-all text-center">💉 Pick from Screen</button>
             {pickedColor && <div className="mt-1.5 flex items-center gap-2"><div className="w-6 h-6 rounded border border-white/20" style={{background:pickedColor}}/><span className="text-[10px] text-white font-mono">{pickedColor}</span></div>}
           </div>
         )}
@@ -1884,7 +1884,7 @@ export default function PanelEditor({
                 <button key={cat} onClick={()=>setSelectedCategory(cat)} className={`px-2 py-0.5 text-[10px] rounded-full transition-all ${selectedCategory===cat?'bg-blue-500 text-white shadow-lg shadow-blue-500/25':'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-gray-300'}`}>{cat}</button>
               ))}</div>
               <div className="grid grid-cols-2 gap-1.5">
-              <button onClick={() => { const c=fcRef.current; if(!c) return; c.getObjects().slice().forEach(o=>c.remove(o)); c.backgroundColor="#FFFFFF"; c.renderAll(); setTimeout(()=>{pushHistory();handleSavePanel();},50); }} className="col-span-2 py-2 mb-2 bg-red-500/20 hover:bg-red-500/40 text-red-300 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1">
+              <button onClick={() => { const c=fcRef.current; if(!c) return; c.getObjects().slice().forEach((o:any)=>c.remove(o)); c.backgroundColor="#FFFFFF"; c.renderAll(); setTimeout(()=>{pushHistory();handleSavePanel();},50); }} className="col-span-2 py-2 mb-2 bg-red-500/20 hover:bg-red-500/40 text-red-300 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1">
                 <span>🗑️</span> Clear Canvas
               </button>
                 {filteredTemplates.map(tpl=>(

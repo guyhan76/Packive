@@ -8,9 +8,9 @@ interface BoxType {
   id: string
   name: string
   nameKo: string
-  nameJa: string
-  descKo: string
-  descJa: string
+  nameJa?: string
+  descKo?: string
+  descJa?: string
   description: string
   icon: React.ReactNode
   fefcoCode: string
@@ -83,7 +83,7 @@ interface BoxTypeSelectorProps {
 }
 
 export function BoxTypeSelector({ selectedType, onSelect }: BoxTypeSelectorProps) {
-  const { t, lang } = useI18n();
+  const { t, locale: lang } = useI18n();
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold text-gray-900">
