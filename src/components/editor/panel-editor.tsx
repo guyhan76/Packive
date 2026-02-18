@@ -1560,7 +1560,7 @@ export default function PanelEditor({
 
   const handleAiReview = useCallback(async () => {
     const c=fcRef.current; if(!c) return; setReviewLoading(true); setReviewResult(null);
-    try { const d=c.toDataURL({format:'png',multiplier:1}); const r=await fetch('/api/ai/review-design',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageData:d})}); const data=await r.json(); if(data.error) throw new Error(data.error); setReviewResult(data); } catch(e:any) { alert('AI Review: '+e.message); }
+    try { const d=c.toDataURL({format:'png',multiplier:1}); const r=await fetch('/api/ai/review-design',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageBase64:d,boxType:panelId||'package',dimensions:{width:widthMM,height:heightMM},material:'standard'})}); const data=await r.json(); if(data.error) throw new Error(data.error); setReviewResult(data); } catch(e:any) { alert('AI Review: '+e.message); }
     setReviewLoading(false);
   }, []);
 
