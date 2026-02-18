@@ -1,0 +1,1 @@
+const lines=require("fs").readFileSync("src/components/editor/panel-editor.tsx","utf8").split("\n");for(let i=0;i<lines.length;i++){if(lines[i].includes("handleAiInspire")||lines[i].includes("inspirePrompt")||lines[i].includes("inspireResult")||lines[i].includes("applyInspireToCanvas")){console.log((i+1).toString().padStart(4,"0"),lines[i].substring(0,180));}}

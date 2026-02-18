@@ -1,0 +1,176 @@
+﻿
+      {/* ═══ CENTER ═══ */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top bar */}
+        <div className="h-12 bg-white border-b border-gray-200 flex items-center px-3 gap-2 shrink-0">
+          <button onClick={onBack} className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">← {t('back') || '뒤로'}</button>
+          <div className="ml-2">
+            <div className="font-bold text-sm text-gray-800">{panelName}</div>
+            <div className="text-[10px] text-gray-400">{widthMM} × {heightMM} mm · Blue dashed line = 5 mm safe zone</div>
+          </div>
+          <div className="flex-1" />
+          {onNextPanel && <button onClick={() => { handleSavePanel(); onNextPanel(); }} className="px-4 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium">{t('next') || '다음'} →</button>}
+          {onPrevPanel && <button onClick={() => { handleSavePanel(); onPrevPanel(); }} className="px-3 py-1.5 text-sm bg-orange-400 text-white rounded-lg hover:bg-orange-500">{t('savePrev') || '저장 후 뒤로'}</button>}
+          <button onClick={handleSaveDesign} className="px-3 py-1.5 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600">{t('saveDesign') || '디자인 저장'}</button>
+          <button onClick={handleLoadDesign} className="px-3 py-1.5 text-sm bg-purple-500 text-white rounded-lg hover:bg-purple-600">{t('loadDesign') || '디자인 불러오기'}</button>
+          <select className="text-xs border rounded px-1 py-1 bg-white">{['한국어','English','日本語'].map(l => <option key={l}>{l}</option>)}</select>
+          <button onClick={() => setShowGrid(!showGrid)} className={`px-2 py-1 rounded ${showGrid ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'}`} title="Grid">⊞</button>
+          <div className="h-6 w-px bg-gray-200" />
+          <select value={exportScale} onChange={e => setExportScale(Number(e.target.value))} className="text-xs border rounded px-1 py-1"><option value={1}>1x</option><option value={2}>2x</option><option value={3}>3x</option><option value={4}>4x</option></select>
+          <button onClick={() => handleExport('png')} className="px-3 py-1.5 text-xs bg-yellow-500 text-white rounded hover:bg-yellow-600 font-medium">PNG {t('export') || '내보내기'}</button>
+          <button onClick={() => handleExport('svg')} className="px-3 py-1.5 text-xs bg-green-500 text-white rounded hover:bg-green-600 font-medium">SVG {t('export') || '내보내기'}</button>
+          <button onClick={() => handleExport('pdf')} className="px-3 py-1.5 text-xs bg-red-500 text-white rounded hover:bg-red-600 font-medium">PDF {t('export') || '내보내기'}</button>
+        </div>
+
+        {/* Canvas */}
+        <div className="flex-1 overflow-auto bg-gray-200 relative flex items-center justify-center p-4">
+          <div className="relative shadow-lg bg-white">
+            <canvas ref={canvasElRef} />
+            {showGrid && <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 19px,rgba(0,0,0,0.05) 19px,rgba(0,0,0,0.05) 20px),repeating-linear-gradient(90deg,transparent,transparent 19px,rgba(0,0,0,0.05) 19px,rgba(0,0,0,0.05) 20px)', backgroundSize:'20px 20px' }} />}
+          </div>
+          {showMinimap && <div className="absolute bottom-4 right-4 border-2 border-gray-400 rounded-lg overflow-hidden bg-white shadow-lg"><canvas ref={minimapRef} width={180} height={120} /></div>}
+        </div>
+
+        {/* Bottom bar */}
+        <div className="h-8 bg-white border-t border-gray-200 flex items-center px-3 gap-2">
+          <button onClick={() => setShowMinimap(!showMinimap)} className="text-xs text-gray-500 hover:text-gray-700">🗺</button>
+          <button onClick={() => setShowShortcuts(!showShortcuts)} className="text-xs text-gray-500 hover:text-gray-700">⌨</button>
+          <div className="h-4 w-px bg-gray-200" />
+          <span className="text-[10px] text-gray-400">BG</span>
+          <select className="text-[10px] border rounded px-1 py-0.5" value={bgPattern} onChange={e => setBgPattern(e.target.value as any)}>
+            <option value="none">None</option><option value="dots">Dots</option><option value="lines">Lines</option><option value="grid">Grid</option>
+          </select>
+          <div className="flex-1" />
+          <button onClick={() => applyZoom(Math.max(25, zoom - 10))} className="text-xs text-gray-500 hover:text-gray-700 px-1">-</button>
+          <span className="text-xs text-gray-600 w-10 text-center">{zoom}%</span>
+          <button onClick={() => applyZoom(Math.min(400, zoom + 10))} className="text-xs text-gray-500 hover:text-gray-700 px-1">+</button>
+        </div>
+      </div>
+
+      {/* ═══ RIGHT SIDEBAR ═══ */}
+      <div className="w-[280px] bg-white border-l border-gray-200 flex flex-col overflow-hidden">
+        {/* Tabs */}
+        <div className="flex border-b border-gray-200 shrink-0">
+          {(['templates','copy','review','layers','history'] as const).map(tab => (
+            <button key={tab} onClick={() => setAiTab(tab)}
+              className={`flex-1 py-2.5 text-xs font-medium transition-colors ${aiTab === tab ? 'text-blue-600 border-b-2 border-blue-500 bg-blue-50' : 'text-gray-500 hover:text-gray-700'}`}>
+              {tab === 'templates' ? 'Templates' : tab === 'copy' ? 'Copy' : tab === 'review' ? 'Review' : tab === 'layers' ? 'Layers' : 'History'}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-3">
+          {/* Templates */}
+          {aiTab === 'templates' && (
+            <div>
+              <div className="flex flex-wrap gap-1 mb-3">
+                {categories.map(cat => (
+                  <button key={cat} onClick={() => setSelectedCategory(cat)}
+                    className={`px-2 py-1 text-xs rounded-full transition-colors ${selectedCategory === cat ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{cat}</button>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {filteredTemplates.map(tpl => (
+                  <button key={tpl.id} onClick={() => applyTemplate(tpl)} disabled={templateLoading === tpl.id}
+                    className="relative overflow-hidden rounded-lg border border-gray-200 hover:border-blue-400 hover:shadow-md transition-all text-left group">
+                    <div className="aspect-[3/4] bg-gradient-to-br from-gray-100 to-gray-50 flex items-center justify-center text-4xl">{tpl.thumbnail}</div>
+                    <div className="p-1.5 bg-white">
+                      <div className="text-xs font-medium text-gray-700 truncate">{tpl.name}</div>
+                      <div className="text-[10px] text-gray-400">{tpl.category}</div>
+                    </div>
+                    {templateLoading === tpl.id && <div className="absolute inset-0 bg-white/70 flex items-center justify-center"><div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Copy */}
+          {aiTab === 'copy' && (
+            <div className="space-y-3">
+              <div><label className="text-xs font-medium text-gray-600">{t('copy.product') || '제품명'}</label><input value={copyProduct} onChange={e => setCopyProduct(e.target.value)} className="w-full mt-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg" placeholder="e.g. Green Tea Extract" /></div>
+              <div><label className="text-xs font-medium text-gray-600">{t('copy.brand') || '브랜드'}</label><input value={copyBrand} onChange={e => setCopyBrand(e.target.value)} className="w-full mt-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg" placeholder="e.g. EcoPure" /></div>
+              <button onClick={handleAiCopy} disabled={copyLoading || !copyProduct.trim()} className="w-full py-2 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 disabled:opacity-50">{copyLoading ? '생성 중...' : 'AI 카피 생성'}</button>
+              {copyResult && <div className="space-y-2 mt-3">{Object.entries(copyResult).filter(([k]) => ['headline','description','slogan','features','backPanel'].includes(k)).map(([key, val]) => (
+                <div key={key} className="p-2 bg-gray-50 rounded-lg"><div className="flex justify-between items-center mb-1"><span className="text-xs font-semibold text-gray-500 uppercase">{key}</span><button onClick={() => applyCopyToCanvas(key, String(val))} className="text-xs text-blue-500 hover:text-blue-700">+ 캔버스에 추가</button></div><p className="text-sm text-gray-700">{String(val)}</p></div>
+              ))}</div>}
+            </div>
+          )}
+
+          {/* Review */}
+          {aiTab === 'review' && (
+            <div className="space-y-3">
+              <button onClick={handleAiReview} disabled={reviewLoading} className="w-full py-2 bg-green-500 text-white text-sm font-medium rounded-lg hover:bg-green-600 disabled:opacity-50">{reviewLoading ? '분석 중...' : 'AI 디자인 리뷰'}</button>
+              {reviewResult && <div className="space-y-2 mt-3"><div className="flex items-center gap-2"><span className="text-2xl font-bold text-blue-600">{reviewResult.score}</span><span className="text-sm text-gray-500">/ 100</span></div><p className="text-sm text-gray-700">{reviewResult.summary}</p>{reviewResult.issues?.length > 0 && <div className="space-y-1"><span className="text-xs font-semibold text-red-500">Issues:</span>{reviewResult.issues.map((issue: string, i: number) => <p key={i} className="text-xs text-red-600 pl-2">• {issue}</p>)}</div>}</div>}
+            </div>
+          )}
+
+          {/* Layers */}
+          {aiTab === 'layers' && (
+            <div className="space-y-1">
+              {layersList.length === 0 && <p className="text-xs text-gray-400 text-center py-4">No layers</p>}
+              {layersList.map((layer, i) => (
+                <div key={layer.id} className="flex items-center gap-2 p-1.5 rounded hover:bg-gray-50 text-xs">
+                  <button onClick={() => { const c = fcRef.current; if (!c) return; const obj = c.getObjects().filter((o:any) => o.selectable !== false)[i]; if (obj) { c.setActiveObject(obj); c.renderAll(); } }} className="flex-1 text-left truncate text-gray-700">{layer.type === 'image' ? '🖼' : layer.type === 'i-text' ? '📝' : '◼'} {layer.name}</button>
+                  <button onClick={() => { const c = fcRef.current; if (!c) return; const obj = c.getObjects().filter((o:any) => o.selectable !== false)[i]; if (obj) { obj.visible = !obj.visible; c.renderAll(); refreshLayers(); } }} className="text-gray-400 hover:text-gray-600">{layer.visible ? '👁' : '👁‍🗨'}</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* History */}
+          {aiTab === 'history' && (
+            <div className="space-y-1">
+              {historyThumbs.length === 0 && <p className="text-xs text-gray-400 text-center py-4">No history</p>}
+              {historyThumbs.map((h, i) => (
+                <button key={i} onClick={() => { const c = fcRef.current; if (!c) return; historyIdxRef.current = h.idx; loadingRef.current = true; const json = JSON.parse(historyRef.current[h.idx]); c.loadFromJSON(json).then(() => { c.getObjects().forEach((o:any) => { if (o.name==='__bgImage__') { o._isBgImage=true; o.set({selectable:false,evented:false}); } }); c.renderAll(); loadingRef.current = false; refreshLayers(); setHistoryIdx(h.idx); }); }}
+                  className={`w-full text-left p-2 rounded text-xs ${h.idx === historyIdx ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-50 text-gray-600'}`}>#{h.idx + 1}</button>
+              ))}
+            </div>
+          )}
+
+          {/* AI Inspire */}
+          <div className="mt-4 pt-3 border-t border-gray-200">
+            <h3 className="text-xs font-semibold text-gray-500 mb-2">AI Inspire</h3>
+            <textarea value={inspirePrompt} onChange={e => setInspirePrompt(e.target.value)} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg resize-none h-16" placeholder="Describe your design..." />
+            <button onClick={handleAiInspire} disabled={inspireLoading || !inspirePrompt.trim()} className="w-full mt-2 py-1.5 bg-purple-500 text-white text-xs font-medium rounded-lg hover:bg-purple-600 disabled:opacity-50">{inspireLoading ? '생성 중...' : 'AI 디자인 생성'}</button>
+            {inspireImage && <div className="mt-2"><img src={inspireImage} alt="AI" className="w-full rounded-lg border" /><button onClick={applyInspireToCanvas} className="w-full mt-1 py-1 bg-purple-100 text-purple-700 text-xs rounded-lg hover:bg-purple-200">+ 캔버스에 적용</button></div>}
+          </div>
+        </div>
+      </div>
+
+      {/* ═══ Context Menu ═══ */}
+      {ctxMenu && (
+        <div className="fixed bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 min-w-[160px]" style={{ left: ctxMenu.x + (wrapperRef.current?.getBoundingClientRect().left || 0), top: ctxMenu.y + (wrapperRef.current?.getBoundingClientRect().top || 0) }}>
+          <button className="w-full text-left px-3 py-1.5 hover:bg-blue-50 text-sm" onClick={() => { const c = fcRef.current; if (!c || !ctxMenu.target) return; if (ctxMenu.target.type === 'activeselection') { const ch = (ctxMenu.target as any)._objects || []; c.discardActiveObject(); ch.forEach((o:any) => { if (o.selectable !== false) c.remove(o); }); } else { c.remove(ctxMenu.target); c.discardActiveObject(); } c.renderAll(); refreshLayers(); setCtxMenu(null); }}>🗑 {t('ctx.delete') || '삭제'}</button>
+          <button className="w-full text-left px-3 py-1.5 hover:bg-blue-50 text-sm" onClick={() => { const c = fcRef.current; if (!c || !ctxMenu.target) return; const tgt = ctxMenu.target; const isLocked = !!tgt.lockMovementX; tgt.set({ lockMovementX: !isLocked, lockMovementY: !isLocked, lockRotation: !isLocked, lockScalingX: !isLocked, lockScalingY: !isLocked, hasControls: isLocked }); c.renderAll(); setCtxMenu(null); }}>{ctxMenu.target?.lockMovementX ? '🔓 잠금해제' : '🔒 잠금'}</button>
+          <button className="w-full text-left px-3 py-1.5 hover:bg-blue-50 text-sm" onClick={() => { const c = fcRef.current; if (!c || !ctxMenu.target) return; c.bringObjectForward(ctxMenu.target); c.renderAll(); refreshLayers(); setCtxMenu(null); }}>⬆ 앞으로</button>
+          <button className="w-full text-left px-3 py-1.5 hover:bg-blue-50 text-sm" onClick={() => { const c = fcRef.current; if (!c || !ctxMenu.target) return; c.sendObjectBackwards(ctxMenu.target); c.renderAll(); refreshLayers(); setCtxMenu(null); }}>⬇ 뒤로</button>
+        </div>
+      )}
+
+      {/* ═══ Shortcuts Modal ═══ */}
+      {showShortcuts && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={() => setShowShortcuts(false)}>
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-gray-800 mb-4">⌨ 단축키</h2>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><span>실행취소</span><span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">Ctrl+Z</span></div>
+              <div className="flex justify-between"><span>다시실행</span><span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">Ctrl+Shift+Z</span></div>
+              <div className="flex justify-between"><span>복사</span><span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">Ctrl+C</span></div>
+              <div className="flex justify-between"><span>붙여넣기</span><span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">Ctrl+V</span></div>
+              <div className="flex justify-between"><span>잘라내기</span><span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">Ctrl+X</span></div>
+              <div className="flex justify-between"><span>복제</span><span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">Ctrl+D</span></div>
+              <div className="flex justify-between"><span>삭제</span><span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">Del</span></div>
+              <div className="flex justify-between"><span>전체선택</span><span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">Ctrl+A</span></div>
+              <div className="flex justify-between"><span>줌</span><span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">Ctrl+Wheel</span></div>
+              <div className="flex justify-between"><span>패닝</span><span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">Space+Drag</span></div>
+              <div className="flex justify-between"><span>그리드</span><span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">Ctrl+G</span></div>
+            </div>
+            <button onClick={() => setShowShortcuts(false)} className="mt-4 w-full py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200">닫기</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

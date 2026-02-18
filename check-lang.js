@@ -1,0 +1,1 @@
+const fs=require("fs");const code=fs.readFileSync("src/components/i18n-context.tsx","utf8");const lines=code.split("\n");let found=false;for(let i=0;i<lines.length;i++){if(lines[i].includes("LanguageSelector")){found=true;}if(found){console.log((i+1).toString().padStart(4,"0"),lines[i]);}}if(!found)console.log("LanguageSelector NOT FOUND in i18n-context.tsx");

@@ -2,9 +2,12 @@
 
 // Hero 섹션 - Early Access 랜딩 페이지 메인 영역
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Play, Package, Layers, Eye, Download } from "lucide-react"
+import { ArrowRight, Play, Package, Layers, Eye, Download, Scissors } from "lucide-react"
+import Link from "next/link"
+import { useI18n } from "@/components/i18n-context";
 
 export function Hero() {
+  const { t } = useI18n();
   // Early Access 섹션으로 스크롤
   const scrollToEarlyAccess = () => {
     document.getElementById('early-access')?.scrollIntoView({ behavior: 'smooth' })
@@ -20,22 +23,24 @@ export function Hero() {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#2563EB]/60 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-[#2563EB]" />
             </span>
-            Early Access Now Open
+            {t("m.hero.badge")}
           </div>
 
           {/* 메인 헤드라인 */}
           <h1 className="mb-6 text-5xl font-bold tracking-tight text-gray-900 sm:text-6xl lg:text-7xl">
-            Design Your Packaging{" "}
+            {t("m.hero.title1")}{" "}
             <span className="bg-gradient-to-r from-[#2563EB] to-[#7C3AED] bg-clip-text text-transparent">
-              in Minutes
+              {t("m.hero.title2")}
             </span>
-            , Not Weeks
+            {t("m.hero.title3")}
           </h1>
 
           {/* 서브헤드 */}
           <p className="mb-10 text-lg text-gray-600 sm:text-xl max-w-2xl mx-auto leading-relaxed">
-            Packive auto-generates die-cut templates, lets you design on top,
-            preview in 3D, and export print-ready files. No Illustrator needed.
+            {t("m.hero.subtitle")}
+            <span className="block mt-2 text-sm font-medium text-[#7C3AED]">
+              {t("m.hero.aiTag")}
+            </span>
           </p>
 
           {/* CTA 버튼 그룹 */}
@@ -45,26 +50,37 @@ export function Hero() {
               className="gap-2 text-base px-8 py-6 bg-[#2563EB] hover:bg-[#1d4ed8] hover:shadow-lg hover:shadow-[#2563EB]/25 transition-all duration-200"
               onClick={scrollToEarlyAccess}
             >
-              Get Early Access — Free
+              {t("m.hero.ctaFree")}
               <ArrowRight className="h-4 w-4" />
             </Button>
             <Button
               size="lg"
               variant="outline"
-              className="gap-2 text-base px-8 py-6"
+              className="gap-2 text-base px-8 py-6 border-[#7C3AED]/30 text-[#7C3AED] hover:bg-[#7C3AED]/5"
+              asChild
+            >
+              <Link href="/editor/new">
+                <Scissors className="h-4 w-4" />
+                {t("m.hero.ctaGenerator")}
+              </Link>
+            </Button>
+            <Button
+              size="lg"
+              variant="ghost"
+              className="gap-2 text-base px-8 py-6 text-gray-500"
             >
               <Play className="h-4 w-4" />
-              Watch Demo
+              {t("m.hero.ctaDemo")}
             </Button>
           </div>
 
           {/* 핵심 기능 아이콘 그리드 */}
           <div className="mt-16 grid grid-cols-2 sm:grid-cols-4 gap-8 max-w-2xl mx-auto">
             {[
-              { icon: Package, label: "Choose Box Style" },
-              { icon: Layers, label: "Auto Die-Cut" },
-              { icon: Eye, label: "3D Preview" },
-              { icon: Download, label: "Print-Ready Export" },
+              { icon: Package, label: t("m.hero.step1") },
+              { icon: Layers, label: t("m.hero.step2") },
+              { icon: Eye, label: t("m.hero.step3") },
+              { icon: Download, label: t("m.hero.step4") },
             ].map((item) => (
               <div key={item.label} className="flex flex-col items-center gap-2">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#2563EB]/10 text-[#2563EB]">

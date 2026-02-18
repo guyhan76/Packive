@@ -6,8 +6,10 @@ import { Input } from '@/components/ui/input'
 import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
 import { Rocket, CheckCircle, Users, Globe, Zap, AlertCircle } from 'lucide-react'
+import { useI18n } from "@/components/i18n-context";
 
 export function EarlyAccessForm() {
+  const { t } = useI18n();
   const [email, setEmail] = useState('')
   const [companyName, setCompanyName] = useState('')
   const [boxDescription, setBoxDescription] = useState('')
@@ -52,8 +54,8 @@ export function EarlyAccessForm() {
       if (insertError) {
         // 이메일 중복 체크
         if (insertError.code === '23505') {
-          setError('This email is already on the waitlist!')
-          toast.error('You\'re already on the list!')
+          setError(t("m.ea.errDuplicate"))
+          toast.error(t("m.ea.errDuplicate"))
           setIsSubmitting(false)
           return
         }
@@ -67,10 +69,10 @@ export function EarlyAccessForm() {
       }
 
       setIsSubmitted(true)
-      toast.success('Welcome to Packive! You\'re on the list.')
+      toast.success(t("m.ea.successToast"))
     } catch (err) {
-      setError('Something went wrong. Please try again.')
-      toast.error('Please try again.')
+      setError(t("m.ea.errGeneric"))
+      toast.error(t("m.ea.errGeneric"))
     } finally {
       setIsSubmitting(false)
     }
@@ -84,7 +86,7 @@ export function EarlyAccessForm() {
             <CheckCircle className="w-10 h-10 text-green-600" />
           </div>
           <h3 className="text-3xl font-bold text-gray-900 mb-4">
-            You&apos;re in!
+            {t("m.ea.success.title")}
           </h3>
           <p className="text-lg text-gray-600 mb-2">
             You&apos;re <span className="font-bold text-[#2563EB]">#{signupCount}</span> on the early access list.
@@ -103,29 +105,28 @@ export function EarlyAccessForm() {
         <div className="text-center mb-12">
           <div className="inline-flex items-center gap-2 bg-[#F59E0B]/10 text-[#F59E0B] px-4 py-2 rounded-full text-sm font-semibold mb-6">
             <Rocket className="w-4 h-4" />
-            Early Access — Limited Spots
+            {t("m.ea.badge")}
           </div>
           <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-            Be the first to design<br />
-            <span className="text-[#2563EB]">your packaging</span>
+            {t("m.ea.title1")}<br />
+            <span className="text-[#2563EB]">{t("m.ea.title2")}</span>
           </h2>
           <p className="text-lg text-gray-600 max-w-2xl mx-auto mb-6">
-            Join {signupCount > 0 ? `${signupCount}+` : ''} brands already on the waitlist.
-            Get early access to the platform that turns your box idea into a print-ready file in 30 minutes.
+            {t("m.ea.joinText1")} {signupCount > 0 ? `${signupCount}+` : ''} {t("m.ea.joinText2")}
           </p>
 
           <div className="flex flex-wrap justify-center gap-6 text-sm text-gray-500">
             <div className="flex items-center gap-1.5">
               <Users className="w-4 h-4 text-[#2563EB]" />
-              <span>{signupCount > 0 ? `${signupCount}+ waitlisted` : 'Be the first!'}</span>
+              <span>{signupCount > 0 ? `${signupCount}+ ${t("m.ea.waitlisted")}` : t("m.ea.beFirst")}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <Globe className="w-4 h-4 text-[#7C3AED]" />
-              <span>Available worldwide</span>
+              <span>{t("m.ea.worldwide")}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <Zap className="w-4 h-4 text-[#F59E0B]" />
-              <span>Launching Q2 2026</span>
+              <span>{t("m.ea.launching")}</span>
             </div>
           </div>
         </div>
@@ -134,11 +135,11 @@ export function EarlyAccessForm() {
           <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8 space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Work email *
+                {t("m.ea.emailLabel")}
               </label>
               <Input
                 type="email"
-                placeholder="you@company.com"
+                placeholder={t("m.ea.emailPh")}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -148,11 +149,11 @@ export function EarlyAccessForm() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Company / Brand name
+                {t("m.ea.companyLabel")}
               </label>
               <Input
                 type="text"
-                placeholder="Your brand name"
+                placeholder={t("m.ea.companyPh")}
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
                 className="h-12"
@@ -161,11 +162,11 @@ export function EarlyAccessForm() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                What packaging do you need?
+                {t("m.ea.needLabel")}
               </label>
               <Input
                 type="text"
-                placeholder="e.g., Cosmetic box, food packaging, shipping box..."
+                placeholder={t("m.ea.needPh")}
                 value={boxDescription}
                 onChange={(e) => setBoxDescription(e.target.value)}
                 className="h-12"
@@ -184,27 +185,27 @@ export function EarlyAccessForm() {
               disabled={isSubmitting || !email}
               className="w-full h-12 bg-[#2563EB] hover:bg-[#1d4ed8] text-white font-semibold text-base rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-[#2563EB]/25"
             >
-              {isSubmitting ? 'Joining...' : 'Get Early Access — It\'s Free'}
+              {isSubmitting ? t("m.ea.joining") : t("m.ea.ctaFree")}
             </Button>
 
             <p className="text-xs text-center text-gray-400">
-              No credit card required. We&apos;ll only email you about Packive launch updates.
+              {t("m.ea.noCard")}
             </p>
           </form>
         </div>
 
         <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
           <div>
-            <div className="text-3xl font-bold text-[#2563EB]">30 min</div>
-            <p className="text-sm text-gray-600 mt-1">From idea to print-ready file</p>
+            <div className="text-3xl font-bold text-[#2563EB]">{t("m.ea.stat1.value")}</div>
+            <p className="text-sm text-gray-600 mt-1">{t("m.ea.stat1.label")}</p>
           </div>
           <div>
-            <div className="text-3xl font-bold text-[#7C3AED]">90% less</div>
-            <p className="text-sm text-gray-600 mt-1">Cost vs. design agency</p>
+            <div className="text-3xl font-bold text-[#7C3AED]">{t("m.ea.stat2.value")}</div>
+            <p className="text-sm text-gray-600 mt-1">{t("m.ea.stat2.label")}</p>
           </div>
           <div>
-            <div className="text-3xl font-bold text-[#F59E0B]">$29/mo</div>
-            <p className="text-sm text-gray-600 mt-1">Starting price for full access</p>
+            <div className="text-3xl font-bold text-[#F59E0B]">{t("m.ea.stat3.value")}</div>
+            <p className="text-sm text-gray-600 mt-1">{t("m.ea.stat3.label")}</p>
           </div>
         </div>
       </div>

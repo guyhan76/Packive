@@ -1,0 +1,1 @@
+const lines=require("fs").readFileSync("src/components/editor/panel-editor.tsx","utf8").split("\n");for(let i=0;i<lines.length;i++){if(lines[i].includes("handleAiInspire")){for(let j=i;j<i+8;j++) console.log((j+1).toString().padStart(4,"0"),lines[j]);break;}}

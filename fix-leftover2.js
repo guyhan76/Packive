@@ -1,0 +1,1 @@
+const fs=require("fs");const file="src/components/editor/panel-editor.tsx";let lines=fs.readFileSync(file,"utf8").split("\n");for(let i=1548;i<1560;i++) console.log((i+1).toString().padStart(4,"0"),lines[i]);

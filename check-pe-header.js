@@ -1,0 +1,1 @@
+const lines=require("fs").readFileSync("src/components/editor/panel-editor.tsx","utf8").split("\n");for(let i=0;i<lines.length;i++){if(lines[i].includes("Back")||lines[i].includes("Next")||lines[i].includes("PNG")||lines[i].includes("Save")||lines[i].includes("topbar")||lines[i].includes("header")){console.log((i+1).toString().padStart(4,"0"),lines[i].substring(0,180));}}

@@ -1,0 +1,371 @@
+﻿
+  /* ────── JSX Return ────── */
+  return (
+    <div ref={wrapperRef} className="flex h-screen bg-gray-100 overflow-hidden" tabIndex={0}
+      onContextMenu={(e) => e.preventDefault()}>
+      {/* Hidden file input */}
+      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
+
+      {/* ═══ LEFT SIDEBAR ═══ */}
+      <div className="w-72 bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
+        {/* Panel info header */}
+        <div className="p-3 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-white">
+          <h2 className="font-bold text-sm text-blue-800">{panelName}</h2>
+          <p className="text-xs text-gray-500">{widthMM} × {heightMM} mm</p>
+        </div>
+
+        {/* Tab navigation */}
+        <div className="flex border-b border-gray-200">
+          {(['templates','copy','review','layers','history'] as const).map(tab => (
+            <button key={tab} onClick={() => setAiTab(tab)}
+              className={`flex-1 py-2 text-xs font-medium border-b-2 transition-colors ${aiTab === tab ? 'border-blue-500 text-blue-600 bg-blue-50' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              {tab === 'templates' ? t('tab.templates') : tab === 'copy' ? t('tab.copy') : tab === 'review' ? t('tab.review') : tab === 'layers' ? t('tab.layers') : t('tab.history')}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-3">
+          {/* ── Templates Tab ── */}
+          {aiTab === 'templates' && (
+            <div>
+              <div className="flex flex-wrap gap-1 mb-3">
+                {categories.map(cat => (
+                  <button key={cat} onClick={() => setSelectedCategory(cat)}
+                    className={`px-2 py-1 text-xs rounded-full ${selectedCategory === cat ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                    {cat}
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {filteredTemplates.map(tpl => (
+                  <button key={tpl.id} onClick={() => applyTemplate(tpl)}
+                    className="p-2 border border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors text-left"
+                    disabled={templateLoading === tpl.id}>
+                    <div className="text-2xl mb-1">{tpl.thumbnail}</div>
+                    <div className="text-xs font-medium text-gray-700">{tpl.name}</div>
+                    <div className="text-[10px] text-gray-400">{tpl.category}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Copy Tab ── */}
+          {aiTab === 'copy' && (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-gray-600">{t('copy.product')}</label>
+                <input value={copyProduct} onChange={e => setCopyProduct(e.target.value)}
+                  className="w-full mt-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500" placeholder="e.g. Green Tea Extract" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">{t('copy.brand')}</label>
+                <input value={copyBrand} onChange={e => setCopyBrand(e.target.value)}
+                  className="w-full mt-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500" placeholder="e.g. EcoPure" />
+              </div>
+              <button onClick={handleAiCopy} disabled={copyLoading || !copyProduct.trim()}
+                className="w-full py-2 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed">
+                {copyLoading ? t('generating') : t('copy.generate')}
+              </button>
+              {copyResult && (
+                <div className="space-y-2 mt-3">
+                  {Object.entries(copyResult).filter(([k]) => ['headline','description','slogan','features','backPanel'].includes(k)).map(([key, val]) => (
+                    <div key={key} className="p-2 bg-gray-50 rounded-lg">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-xs font-semibold text-gray-500 uppercase">{key}</span>
+                        <button onClick={() => applyCopyToCanvas(key, String(val))}
+                          className="text-xs text-blue-500 hover:text-blue-700">+ {t('copy.addToCanvas')}</button>
+                      </div>
+                      <p className="text-sm text-gray-700">{String(val)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Review Tab ── */}
+          {aiTab === 'review' && (
+            <div className="space-y-3">
+              <button onClick={handleAiReview} disabled={reviewLoading}
+                className="w-full py-2 bg-green-500 text-white text-sm font-medium rounded-lg hover:bg-green-600 disabled:opacity-50">
+                {reviewLoading ? t('reviewing') : t('review.start')}
+              </button>
+              {reviewResult && (
+                <div className="space-y-2 mt-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl font-bold text-blue-600">{reviewResult.score}</span>
+                    <span className="text-sm text-gray-500">/ 100</span>
+                  </div>
+                  <p className="text-sm text-gray-700">{reviewResult.summary}</p>
+                  {reviewResult.issues && reviewResult.issues.length > 0 && (
+                    <div className="space-y-1">
+                      <span className="text-xs font-semibold text-red-500">{t('review.issues')}:</span>
+                      {reviewResult.issues.map((issue: string, i: number) => (
+                        <p key={i} className="text-xs text-red-600 pl-2">• {issue}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Layers Tab ── */}
+          {aiTab === 'layers' && (
+            <div className="space-y-1">
+              {layersList.length === 0 && <p className="text-xs text-gray-400 text-center py-4">{t('layers.empty')}</p>}
+              {layersList.map((layer, i) => (
+                <div key={layer.id} className="flex items-center gap-2 p-1.5 rounded hover:bg-gray-50 text-xs">
+                  <button onClick={() => {
+                    const c = fcRef.current; if (!c) return;
+                    const obj = c.getObjects().filter((o: any) => o.selectable !== false)[i];
+                    if (obj) { c.setActiveObject(obj); c.renderAll(); }
+                  }} className="flex-1 text-left truncate text-gray-700">
+                    {layer.type === 'image' ? '🖼' : layer.type === 'i-text' ? '📝' : '◼'} {layer.name}
+                  </button>
+                  <button onClick={() => {
+                    const c = fcRef.current; if (!c) return;
+                    const obj = c.getObjects().filter((o: any) => o.selectable !== false)[i];
+                    if (obj) { obj.visible = !obj.visible; c.renderAll(); refreshLayers(); }
+                  }} className="text-gray-400 hover:text-gray-600">
+                    {layer.visible ? '👁' : '👁‍🗨'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── History Tab ── */}
+          {aiTab === 'history' && (
+            <div className="space-y-1">
+              {historyThumbs.length === 0 && <p className="text-xs text-gray-400 text-center py-4">{t('history.empty')}</p>}
+              {historyThumbs.map((h, i) => (
+                <button key={i} onClick={() => {
+                  const c = fcRef.current; if (!c) return;
+                  historyIdxRef.current = h.idx;
+                  loadingRef.current = true;
+                  const json = JSON.parse(historyRef.current[h.idx]);
+                  c.loadFromJSON(json).then(() => {
+                    c.getObjects().forEach((o: any) => { if (o.name === '__bgImage__') { o._isBgImage = true; o.set({ selectable: false, evented: false }); } });
+                    c.renderAll(); loadingRef.current = false; refreshLayers(); setHistoryIdx(h.idx);
+                  });
+                }}
+                  className={`w-full text-left p-2 rounded text-xs ${h.idx === historyIdx ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-50 text-gray-600'}`}>
+                  #{h.idx + 1} - {h.time}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* ── AI Inspire ── */}
+          <div className="mt-4 pt-3 border-t border-gray-200">
+            <h3 className="text-xs font-semibold text-gray-500 mb-2">{t('inspire.title')}</h3>
+            <textarea value={inspirePrompt} onChange={e => setInspirePrompt(e.target.value)}
+              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg resize-none h-16" placeholder={t('inspire.placeholder')} />
+            <button onClick={handleAiInspire} disabled={inspireLoading || !inspirePrompt.trim()}
+              className="w-full mt-2 py-1.5 bg-purple-500 text-white text-xs font-medium rounded-lg hover:bg-purple-600 disabled:opacity-50">
+              {inspireLoading ? t('generating') : t('inspire.generate')}
+            </button>
+            {inspireImage && (
+              <div className="mt-2">
+                <img src={inspireImage} alt="AI generated" className="w-full rounded-lg border" />
+                <button onClick={applyInspireToCanvas}
+                  className="w-full mt-1 py-1 bg-purple-100 text-purple-700 text-xs rounded-lg hover:bg-purple-200">
+                  + {t('inspire.apply')}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ═══ CENTER - Canvas Area ═══ */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top toolbar */}
+        <div className="h-12 bg-white border-b border-gray-200 flex items-center px-3 gap-2">
+          <button onClick={onBack} className="px-3 py-1.5 text-sm bg-gray-100 rounded-lg hover:bg-gray-200">{t('back')}</button>
+          {onPrevPanel && <button onClick={() => { handleSavePanel(); onPrevPanel(); }} className="px-3 py-1.5 text-sm bg-gray-100 rounded-lg hover:bg-gray-200">← {t('prev')}</button>}
+          {onNextPanel && <button onClick={() => { handleSavePanel(); onNextPanel(); }} className="px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600">{t('next')} →</button>}
+          <div className="flex-1" />
+          <button onClick={undo} className="px-2 py-1.5 text-sm bg-gray-100 rounded hover:bg-gray-200" title="Undo (Ctrl+Z)">↩</button>
+          <button onClick={redo} className="px-2 py-1.5 text-sm bg-gray-100 rounded hover:bg-gray-200" title="Redo (Ctrl+Shift+Z)">↪</button>
+          <div className="h-6 w-px bg-gray-300" />
+          <span className="text-xs text-gray-500">{zoom}%</span>
+          <input type="range" min={25} max={400} value={zoom} onChange={e => applyZoom(Number(e.target.value))} className="w-20 h-1" />
+          <button onClick={() => setShowMinimap(!showMinimap)} className={`px-2 py-1 text-xs rounded ${showMinimap ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'}`}>🗺</button>
+          <button onClick={() => setShowGrid(!showGrid)} className={`px-2 py-1 text-xs rounded ${showGrid ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'}`}>⊞</button>
+          <div className="h-6 w-px bg-gray-300" />
+          <select value={exportScale} onChange={e => setExportScale(Number(e.target.value))} className="text-xs border rounded px-1 py-1">
+            <option value={1}>1x</option><option value={2}>2x</option><option value={3}>3x</option><option value={4}>4x</option>
+          </select>
+          <button onClick={() => handleExport('png')} className="px-2 py-1.5 text-xs bg-green-500 text-white rounded hover:bg-green-600">PNG</button>
+          <button onClick={() => handleExport('svg')} className="px-2 py-1.5 text-xs bg-green-500 text-white rounded hover:bg-green-600">SVG</button>
+          <button onClick={() => handleExport('pdf')} className="px-2 py-1.5 text-xs bg-green-500 text-white rounded hover:bg-green-600">PDF</button>
+          <button onClick={handleSavePanel} className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">{t('save')}</button>
+        </div>
+
+        {/* Canvas container */}
+        <div className="flex-1 overflow-auto bg-gray-200 relative flex items-center justify-center p-8">
+          <div className="relative shadow-xl">
+            <canvas ref={canvasElRef} />
+            {showGrid && (
+              <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 19px, rgba(0,0,0,0.05) 19px, rgba(0,0,0,0.05) 20px), repeating-linear-gradient(90deg, transparent, transparent 19px, rgba(0,0,0,0.05) 19px, rgba(0,0,0,0.05) 20px)', backgroundSize: '20px 20px' }} />
+            )}
+          </div>
+          {showMinimap && (
+            <div className="absolute bottom-4 right-4 border-2 border-gray-400 rounded-lg overflow-hidden bg-white shadow-lg">
+              <canvas ref={minimapRef} width={180} height={120} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ═══ RIGHT SIDEBAR ═══ */}
+      <div className="w-64 bg-white border-l border-gray-200 overflow-y-auto p-3">
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">{t('tools')}</h3>
+
+        {/* Tool buttons */}
+        <div className="grid grid-cols-3 gap-1 mb-3">
+          <ToolButton label={t("tool.text")} icon="T" onClick={addText} />
+          <ToolButton label={t("tool.image")} icon="🖼" onClick={addImage} />
+          <ToolButton label={t("tool.rect")} icon="▭" onClick={() => addShape('rect')} />
+          <ToolButton label={t("tool.circle")} icon="○" onClick={() => addShape('circle')} />
+          <ToolButton label={t("tool.triangle")} icon="△" onClick={() => addShape('triangle')} />
+          <ToolButton label={t("tool.line")} icon="─" onClick={() => addShape('line')} />
+          <ToolButton label={t("tool.star")} icon="☆" onClick={() => addShape('star')} />
+          <ToolButton label={drawMode ? t("tool.drawing") : t("tool.draw")} icon="✏" onClick={toggleDraw} />
+          <ToolButton label={t("tool.eraser")} icon="🧹" onClick={toggleEraser} />
+          <ToolButton label={t("delete")} icon="🗑" onClick={del} />
+        </div>
+
+        <hr className="my-3 border-gray-300" />
+
+        {/* Color & Font */}
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-gray-600">{t('prop.color')}</label>
+            <div className="flex items-center gap-2 mt-1">
+              <input type="color" value={color} onChange={e => {
+                setColor(e.target.value);
+                const c = fcRef.current; if (!c) return;
+                const obj = c.getActiveObject();
+                if (obj) { if (obj.type === 'i-text' || obj.type === 'text') obj.set('fill', e.target.value); else obj.set('fill', e.target.value); c.renderAll(); }
+              }} className="w-8 h-8 rounded border cursor-pointer" />
+              <input type="text" value={color} onChange={e => setColor(e.target.value)} className="flex-1 text-xs border rounded px-2 py-1" />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600">{t('prop.fontSize')}</label>
+            <input type="number" value={fSize} onChange={e => {
+              const v = Number(e.target.value); setFSize(v);
+              const c = fcRef.current; if (!c) return;
+              const obj = c.getActiveObject();
+              if (obj && (obj.type === 'i-text' || obj.type === 'text')) { obj.set('fontSize', v); c.renderAll(); }
+            }} className="w-full mt-1 text-sm border rounded px-2 py-1" min={8} max={200} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600">{t('prop.font')}</label>
+            <select value={selectedFont} onChange={e => {
+              setSelectedFont(e.target.value);
+              const c = fcRef.current; if (!c) return;
+              const obj = c.getActiveObject();
+              if (obj && (obj.type === 'i-text' || obj.type === 'text')) { obj.set('fontFamily', e.target.value); c.renderAll(); }
+            }} className="w-full mt-1 text-sm border rounded px-2 py-1">
+              {FONT_LIST.map(f => <option key={f.family} value={f.family}>{f.name}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <hr className="my-3 border-gray-300" />
+
+        {/* Background */}
+        <div className="space-y-2">
+          <h3 className="text-xs font-semibold text-gray-400 uppercase">{t('prop.background')}</h3>
+          <label className="block w-full py-1.5 text-center text-xs bg-gray-100 rounded-lg cursor-pointer hover:bg-gray-200">
+            {t('bg.upload')}
+            <input type="file" accept="image/*" className="hidden" onChange={handleBgUpload} />
+          </label>
+          <button onClick={removeBg} className="w-full py-1.5 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100">{t('bg.remove')}</button>
+        </div>
+
+        <hr className="my-3 border-gray-300" />
+
+        {/* Shortcuts info */}
+        <button onClick={() => setShowShortcuts(!showShortcuts)} className="w-full py-1.5 text-xs bg-gray-50 rounded-lg hover:bg-gray-100 text-gray-600">
+          ⌨ {t('shortcut.title')} (F1)
+        </button>
+      </div>
+
+      {/* ═══ Context Menu ═══ */}
+      {ctxMenu && (
+        <div className="fixed bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 min-w-[160px]"
+          style={{ left: ctxMenu.x + (canvasElRef.current?.getBoundingClientRect().left || 0), top: ctxMenu.y + (canvasElRef.current?.getBoundingClientRect().top || 0) }}>
+          <button className="w-full text-left px-3 py-1.5 hover:bg-blue-50 text-sm" onClick={() => {
+            const c = fcRef.current; if (!c || !ctxMenu.target) return;
+            if (ctxMenu.target.type === 'activeselection') {
+              const children = (ctxMenu.target as any)._objects || [];
+              c.discardActiveObject();
+              children.forEach((o: any) => { if (o.selectable !== false) c.remove(o); });
+            } else { c.remove(ctxMenu.target); c.discardActiveObject(); }
+            c.renderAll(); refreshLayers(); setCtxMenu(null);
+          }}>🗑 {t("ctx.delete")}</button>
+          <hr className="my-1 border-gray-100" />
+          <button className="w-full text-left px-3 py-1.5 hover:bg-blue-50 text-sm" onClick={() => {
+            const c = fcRef.current; if (!c || !ctxMenu.target) return;
+            const t = ctxMenu.target;
+            const isLocked = !!t.lockMovementX;
+            t.set({ lockMovementX: !isLocked, lockMovementY: !isLocked, lockRotation: !isLocked, lockScalingX: !isLocked, lockScalingY: !isLocked, hasControls: isLocked });
+            c.renderAll(); setCtxMenu(null);
+          }}>{ctxMenu.target?.lockMovementX ? '🔓' : '🔒'} {ctxMenu.target?.lockMovementX ? t("ctx.unlock") : t("ctx.lock")}</button>
+          <button className="w-full text-left px-3 py-1.5 hover:bg-blue-50 text-sm" onClick={() => {
+            const c = fcRef.current; if (!c || !ctxMenu.target) return;
+            c.bringObjectForward(ctxMenu.target); c.renderAll(); refreshLayers(); setCtxMenu(null);
+          }}>⬆ {t("ctx.bringForward")}</button>
+          <button className="w-full text-left px-3 py-1.5 hover:bg-blue-50 text-sm" onClick={() => {
+            const c = fcRef.current; if (!c || !ctxMenu.target) return;
+            c.sendObjectBackwards(ctxMenu.target); c.renderAll(); refreshLayers(); setCtxMenu(null);
+          }}>⬇ {t("ctx.sendBackward")}</button>
+        </div>
+      )}
+
+      {/* ═══ Shortcuts Modal ═══ */}
+      {showShortcuts && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={() => setShowShortcuts(false)}>
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-gray-800 mb-4">{t('shortcut.title')}</h2>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('shortcut.editing')}</h3>
+                <div className="flex justify-between items-center py-1"><span className="text-sm text-gray-700">{t("shortcut.undo")}</span><span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">Ctrl + Z</span></div>
+                <div className="flex justify-between items-center py-1"><span className="text-sm text-gray-700">{t("shortcut.redo")}</span><span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">Ctrl + Shift + Z</span></div>
+                <div className="flex justify-between items-center py-1"><span className="text-sm text-gray-700">{t("shortcut.copy")}</span><span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">Ctrl + C</span></div>
+                <div className="flex justify-between items-center py-1"><span className="text-sm text-gray-700">{t("shortcut.paste")}</span><span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">Ctrl + V</span></div>
+                <div className="flex justify-between items-center py-1"><span className="text-sm text-gray-700">{t("shortcut.cut")}</span><span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">Ctrl + X</span></div>
+                <div className="flex justify-between items-center py-1"><span className="text-sm text-gray-700">{t("shortcut.duplicate")}</span><span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">Ctrl + D</span></div>
+                <div className="flex justify-between items-center py-1"><span className="text-sm text-gray-700">{t("shortcut.delete")}</span><span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">Delete / Backspace</span></div>
+              </div>
+              <div className="border-t border-gray-100 pt-3">
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('shortcut.moveObject')}</h3>
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center py-1"><span className="text-sm text-gray-700">{t("shortcut.move5px")}</span><span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">Arrow Keys</span></div>
+                  <div className="flex justify-between items-center py-1"><span className="text-sm text-gray-700">{t("shortcut.move1px")}</span><span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">Ctrl + Arrow</span></div>
+                </div>
+              </div>
+              <div className="border-t border-gray-100 pt-3">
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('shortcut.view')}</h3>
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center py-1"><span className="text-sm text-gray-700">{t("shortcut.zoom")}</span><span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">Ctrl + Wheel</span></div>
+                  <div className="flex justify-between items-center py-1"><span className="text-sm text-gray-700">{t("shortcut.pan")}</span><span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">Space + Drag</span></div>
+                  <div className="flex justify-between items-center py-1"><span className="text-sm text-gray-700">{t("shortcut.grid")}</span><span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">Ctrl + G</span></div>
+                  <div className="flex justify-between items-center py-1"><span className="text-sm text-gray-700">{t("shortcut.selectAll")}</span><span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">Ctrl + A</span></div>
+                </div>
+              </div>
+            </div>
+            <button onClick={() => setShowShortcuts(false)} className="mt-4 w-full py-2 bg-gray-100 rounded-lg text-sm text-gray-600 hover:bg-gray-200">{t('close')}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

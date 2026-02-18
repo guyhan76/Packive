@@ -2,6 +2,7 @@
 
 // 4단계 사용 프로세스 섹션
 import { Package, Ruler, Palette, Download } from "lucide-react"
+import { useI18n } from "@/components/i18n-context";
 
 const steps = [
   {
@@ -31,15 +32,22 @@ const steps = [
 ]
 
 export function HowItWorks() {
+  const { t } = useI18n();
+  const steps = [
+    { number: "01", icon: Package, title: t("m.hiw.s1.title"), description: t("m.hiw.s1.desc") },
+    { number: "02", icon: Ruler, title: t("m.hiw.s2.title"), description: t("m.hiw.s2.desc") },
+    { number: "03", icon: Palette, title: t("m.hiw.s3.title"), description: t("m.hiw.s3.desc") },
+    { number: "04", icon: Download, title: t("m.hiw.s4.title"), description: t("m.hiw.s4.desc") },
+  ];
   return (
     <section id="how-it-works" className="py-24 bg-white">
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
           <h2 className="text-3xl font-bold text-gray-900 sm:text-4xl">
-            From idea to print-ready in 4 steps
+            {t("m.hiw.title")}
           </h2>
           <p className="mt-4 text-lg text-gray-600">
-            Packive handles the complex parts so you can focus on your brand
+            {t("m.hiw.subtitle")}
           </p>
         </div>
         <div className="grid md:grid-cols-4 gap-8 max-w-5xl mx-auto">
@@ -53,7 +61,7 @@ export function HowItWorks() {
                 <step.icon className="h-8 w-8" />
               </div>
               <span className="text-xs font-bold text-[#2563EB] tracking-widest">
-                STEP {step.number}
+                {t("m.hiw.step")} {step.number}
               </span>
               <h3 className="mt-2 text-lg font-bold text-gray-900">{step.title}</h3>
               <p className="mt-2 text-sm text-gray-600 leading-relaxed">

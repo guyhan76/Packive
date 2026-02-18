@@ -1,0 +1,170 @@
+﻿
+      {/* ══ RIGHT PANEL ══ */}
+      <div className="w-[280px] bg-[#252536] flex flex-col overflow-hidden shrink-0 border-l border-white/5">
+        {/* Tabs */}
+        <div className="flex shrink-0 border-b border-white/5">
+          {(['templates','copy','review','layers','history'] as const).map(tab => (
+            <button key={tab} onClick={()=>setAiTab(tab)}
+              className={`flex-1 py-2 text-[10px] font-medium transition-all ${aiTab===tab ? 'text-blue-400 border-b-2 border-blue-400 bg-white/5' : 'text-gray-500 hover:text-gray-300'}`}>
+              {tab==='templates'?'🎨':tab==='copy'?'✍':tab==='review'?'🔍':tab==='layers'?'◫':'⏱'}<br/>{tab.charAt(0).toUpperCase()+tab.slice(1)}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {/* ─ Templates ─ */}
+          {aiTab === 'templates' && (
+            <div className="p-2">
+              <div className="flex flex-wrap gap-1 mb-2">{categories.map(cat=>(
+                <button key={cat} onClick={()=>setSelectedCategory(cat)} className={`px-2 py-0.5 text-[10px] rounded-full transition-all ${selectedCategory===cat?'bg-blue-500 text-white shadow-lg shadow-blue-500/25':'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-gray-300'}`}>{cat}</button>
+              ))}</div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {filteredTemplates.map(tpl=>(
+                  <button key={tpl.id} onClick={()=>applyTemplate(tpl)} disabled={templateLoading===tpl.id}
+                    className="relative rounded-lg border border-white/5 hover:border-blue-500/50 transition-all text-left overflow-hidden group hover:shadow-lg hover:shadow-blue-500/10">
+                    <div className="aspect-[3/4] bg-gradient-to-br from-white/5 to-white/[0.02] flex items-center justify-center text-3xl group-hover:scale-105 transition-transform duration-200">{tpl.thumbnail}</div>
+                    <div className="px-1.5 py-1 bg-black/20">
+                      <div className="text-[10px] font-medium text-gray-300 truncate">{tpl.name}</div>
+                      <div className="text-[8px] text-gray-500">{tpl.category}</div>
+                    </div>
+                    {templateLoading===tpl.id && <div className="absolute inset-0 bg-black/50 flex items-center justify-center backdrop-blur-sm"><div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"/></div>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ─ AI Copy ─ */}
+          {aiTab === 'copy' && (
+            <div className="p-3 space-y-2.5">
+              <div><label className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Product Name</label><input value={copyProduct} onChange={e=>setCopyProduct(e.target.value)} className="w-full mt-1 px-2.5 py-2 text-xs bg-white/5 border border-white/10 rounded-lg text-gray-200 placeholder-gray-600 outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25 transition-all" placeholder="e.g. Green Tea Extract"/></div>
+              <div><label className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Brand Name</label><input value={copyBrand} onChange={e=>setCopyBrand(e.target.value)} className="w-full mt-1 px-2.5 py-2 text-xs bg-white/5 border border-white/10 rounded-lg text-gray-200 placeholder-gray-600 outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25 transition-all" placeholder="e.g. EcoPure"/></div>
+              <button onClick={handleAiCopy} disabled={copyLoading||!copyProduct.trim()} className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 text-white text-xs font-semibold rounded-lg hover:from-blue-500 hover:to-blue-400 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-blue-500/25">{copyLoading?'⏳ Generating...':'✨ Generate AI Copy'}</button>
+              {copyResult && <div className="space-y-1.5 mt-2">{Object.entries(copyResult).filter(([k])=>['headline','description','slogan','features','backPanel'].includes(k)).map(([key,val])=>(
+                <div key={key} className="p-2 bg-white/5 rounded-lg border border-white/5">
+                  <div className="flex justify-between items-center mb-0.5"><span className="text-[9px] font-bold text-gray-500 uppercase">{key}</span><button onClick={()=>applyCopyToCanvas(key,String(val))} className="text-[9px] text-blue-400 hover:text-blue-300 font-medium">+ Canvas</button></div>
+                  <p className="text-[11px] text-gray-300 leading-relaxed">{String(val)}</p>
+                </div>
+              ))}</div>}
+            </div>
+          )}
+
+          {/* ─ AI Review ─ */}
+          {aiTab === 'review' && (
+            <div className="p-3 space-y-2.5">
+              <button onClick={handleAiReview} disabled={reviewLoading} className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-xs font-semibold rounded-lg hover:from-emerald-500 hover:to-emerald-400 disabled:opacity-40 transition-all shadow-lg shadow-emerald-500/25">{reviewLoading?'⏳ Analyzing...':'🔍 AI Design Review'}</button>
+              {reviewResult && (
+                <div className="space-y-2 mt-2">
+                  <div className="flex items-baseline gap-2"><span className="text-4xl font-black bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">{reviewResult.score}</span><span className="text-xs text-gray-500">/ 100</span></div>
+                  <p className="text-[11px] text-gray-300 leading-relaxed">{reviewResult.summary}</p>
+                  {reviewResult.issues?.length>0 && <div className="mt-1.5 space-y-1 p-2 bg-red-500/10 rounded-lg border border-red-500/20"><div className="text-[10px] font-bold text-red-400 mb-1">Issues Found:</div>{reviewResult.issues.map((issue:string,i:number)=><p key={i} className="text-[10px] text-red-300/80 leading-snug">• {issue}</p>)}</div>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ─ Layers ─ */}
+          {aiTab === 'layers' && (
+            <div className="p-2">
+              {layersList.length===0 && <p className="text-[11px] text-gray-600 text-center py-8">No objects on canvas</p>}
+              {[...layersList].reverse().map((layer,i)=>(
+                <div key={layer.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer group transition-all" onClick={()=>{const c=fcRef.current;if(!c)return;const idx=layersList.length-1-i;const obj=c.getObjects().filter((o:any)=>o.selectable!==false)[idx];if(obj){c.setActiveObject(obj);c.renderAll();}}}>
+                  <span className="text-xs w-5 text-center">{layer.type==='image'?'🖼':layer.type==='i-text'?'T':layer.type==='path'?'✏':'■'}</span>
+                  <span className="flex-1 text-[10px] text-gray-400 truncate group-hover:text-gray-200">{layer.name||layer.type}</span>
+                  <button onClick={e=>{e.stopPropagation();const c=fcRef.current;if(!c)return;const idx=layersList.length-1-i;const obj=c.getObjects().filter((o:any)=>o.selectable!==false)[idx];if(obj){obj.visible=!obj.visible;c.renderAll();refreshLayers();}}} className="text-gray-600 hover:text-gray-300 text-[10px] opacity-0 group-hover:opacity-100 transition-all">{layer.visible?'👁':'ー'}</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ─ History ─ */}
+          {aiTab === 'history' && (
+            <div className="p-2">
+              {historyRef.current.length<=1 && <p className="text-[11px] text-gray-600 text-center py-8">No history yet</p>}
+              {historyRef.current.map((_,i)=>(
+                <button key={i} onClick={()=>{const c=fcRef.current;if(!c)return;historyIdxRef.current=i;loadingRef.current=true;c.loadFromJSON(JSON.parse(historyRef.current[i])).then(()=>{c.getObjects().forEach((o:any)=>{if(o.name==='__bgImage__'){o._isBgImage=true;o.set({selectable:false,evented:false})}});c.renderAll();loadingRef.current=false;refreshLayers();setHistoryIdx(i);});}}
+                  className={`w-full text-left px-3 py-1.5 rounded-lg text-[10px] mb-0.5 transition-all ${i===historyIdx?'bg-blue-500/20 text-blue-300 font-medium':'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}>
+                  Step #{i+1} {i===historyRef.current.length-1 && <span className="text-[8px] text-blue-500 ml-1">● current</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── Properties Panel (bottom of right sidebar) ── */}
+        <div className="shrink-0 border-t border-white/5 p-3 space-y-2.5 max-h-[280px] overflow-y-auto">
+          <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Properties</div>
+
+          {/* Color */}
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <input type="color" value={color} onChange={e=>{setColor(e.target.value);const c=fcRef.current;const obj=c?.getActiveObject();if(obj){obj.set('fill',e.target.value);c?.renderAll();}}} className="w-7 h-7 rounded-lg border border-white/10 cursor-pointer bg-transparent p-0 appearance-none" />
+            </div>
+            <input type="text" value={color} onChange={e=>setColor(e.target.value)} className="flex-1 text-[10px] bg-white/5 border border-white/10 rounded px-2 py-1 text-gray-300 outline-none focus:border-blue-500/50" />
+          </div>
+
+          {/* Font size */}
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] text-gray-500 w-8">Size</span>
+            <input type="number" value={fSize} onChange={e=>{const v=Number(e.target.value);setFSize(v);const c=fcRef.current;const obj=c?.getActiveObject();if(obj&&(obj.type==='i-text'||obj.type==='text')){obj.set('fontSize',v);c?.renderAll();}}} className="flex-1 text-[10px] bg-white/5 border border-white/10 rounded px-2 py-1 text-gray-300 outline-none focus:border-blue-500/50" min={8} max={200} />
+          </div>
+
+          {/* Font family */}
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] text-gray-500 w-8">Font</span>
+            <select value={selectedFont} onChange={e=>{setSelectedFont(e.target.value);const c=fcRef.current;const obj=c?.getActiveObject();if(obj&&(obj.type==='i-text'||obj.type==='text')){obj.set('fontFamily',e.target.value);c?.renderAll();}}} className="flex-1 text-[10px] bg-white/5 border border-white/10 rounded px-2 py-1 text-gray-300 outline-none focus:border-blue-500/50 appearance-none">
+              {FONT_LIST.map(f=><option key={f.family} value={f.family} className="bg-[#252536]">{f.name}</option>)}
+            </select>
+          </div>
+
+          {/* Background */}
+          <div className="pt-1 border-t border-white/5">
+            <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Background</div>
+            <div className="flex gap-1.5">
+              <label className="flex-1 py-1.5 text-center text-[9px] text-gray-400 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 hover:text-gray-300 transition-all border border-white/5">
+                Upload<input type="file" accept="image/*" className="hidden" onChange={handleBgUpload} />
+              </label>
+              <button onClick={removeBg} className="flex-1 py-1.5 text-[9px] text-red-400 bg-red-500/10 rounded-lg hover:bg-red-500/20 transition-all border border-red-500/10">Remove</button>
+            </div>
+          </div>
+
+          {/* AI Inspire */}
+          <div className="pt-1 border-t border-white/5">
+            <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">AI Inspire</div>
+            <textarea value={inspirePrompt} onChange={e=>setInspirePrompt(e.target.value)} className="w-full px-2 py-1.5 text-[10px] bg-white/5 border border-white/10 rounded-lg resize-none h-12 text-gray-300 placeholder-gray-600 outline-none focus:border-purple-500/50" placeholder="Describe your design style..." />
+            <button onClick={handleAiInspire} disabled={inspireLoading||!inspirePrompt.trim()} className="w-full mt-1 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-[10px] font-semibold rounded-lg hover:from-purple-500 hover:to-pink-500 disabled:opacity-40 transition-all shadow-lg shadow-purple-500/20">{inspireLoading?'⏳ Creating...':'🎨 Generate Design'}</button>
+            {inspireImage && <div className="mt-1.5"><img src={inspireImage} alt="AI" className="w-full rounded-lg border border-white/10 shadow-lg" /><button onClick={applyInspireToCanvas} className="w-full mt-1 py-1 bg-purple-500/20 text-purple-300 text-[9px] rounded-lg hover:bg-purple-500/30 font-medium transition-all">+ Apply to Canvas</button></div>}
+          </div>
+        </div>
+      </div>
+
+      {/* ══ CONTEXT MENU ══ */}
+      {ctxMenu && (
+        <div className="fixed bg-[#2a2a3d] rounded-xl shadow-2xl border border-white/10 py-1 z-50 min-w-[160px] backdrop-blur-xl" style={{left:ctxMenu.x+(wrapperRef.current?.getBoundingClientRect().left||0),top:ctxMenu.y+(wrapperRef.current?.getBoundingClientRect().top||0)}}>
+          <button className="w-full text-left px-3 py-1.5 hover:bg-white/5 text-[11px] text-gray-300 transition-colors" onClick={()=>{const c=fcRef.current;if(!c||!ctxMenu.target)return;if(ctxMenu.target.type==='activeselection'){const ch=(ctxMenu.target as any)._objects||[];c.discardActiveObject();ch.forEach((o:any)=>{if(o.selectable!==false)c.remove(o)});}else{c.remove(ctxMenu.target);c.discardActiveObject();}c.renderAll();refreshLayers();setCtxMenu(null);}}>🗑 Delete</button>
+          <button className="w-full text-left px-3 py-1.5 hover:bg-white/5 text-[11px] text-gray-300 transition-colors" onClick={()=>{const c=fcRef.current;if(!c||!ctxMenu.target)return;const tgt=ctxMenu.target;const lk=!!tgt.lockMovementX;tgt.set({lockMovementX:!lk,lockMovementY:!lk,lockRotation:!lk,lockScalingX:!lk,lockScalingY:!lk,hasControls:lk});c.renderAll();setCtxMenu(null);}}>{ctxMenu.target?.lockMovementX?'🔓 Unlock':'🔒 Lock'}</button>
+          <div className="h-px bg-white/5 my-0.5" />
+          <button className="w-full text-left px-3 py-1.5 hover:bg-white/5 text-[11px] text-gray-300 transition-colors" onClick={()=>{fcRef.current?.bringObjectToFront(ctxMenu.target);fcRef.current?.renderAll();refreshLayers();setCtxMenu(null);}}>⏫ Bring to Front</button>
+          <button className="w-full text-left px-3 py-1.5 hover:bg-white/5 text-[11px] text-gray-300 transition-colors" onClick={()=>{fcRef.current?.bringObjectForward(ctxMenu.target);fcRef.current?.renderAll();refreshLayers();setCtxMenu(null);}}>⬆ Bring Forward</button>
+          <button className="w-full text-left px-3 py-1.5 hover:bg-white/5 text-[11px] text-gray-300 transition-colors" onClick={()=>{fcRef.current?.sendObjectBackwards(ctxMenu.target);fcRef.current?.renderAll();refreshLayers();setCtxMenu(null);}}>⬇ Send Backward</button>
+          <button className="w-full text-left px-3 py-1.5 hover:bg-white/5 text-[11px] text-gray-300 transition-colors" onClick={()=>{fcRef.current?.sendObjectToBack(ctxMenu.target);fcRef.current?.renderAll();refreshLayers();setCtxMenu(null);}}>⏬ Send to Back</button>
+        </div>
+      )}
+
+      {/* ══ SHORTCUTS MODAL ══ */}
+      {showShortcuts && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center backdrop-blur-sm" onClick={()=>setShowShortcuts(false)}>
+          <div className="bg-[#2a2a3d] rounded-2xl shadow-2xl p-6 max-w-xs w-full mx-4 border border-white/10" onClick={e=>e.stopPropagation()}>
+            <h2 className="text-sm font-bold text-white mb-4">⌨ Keyboard Shortcuts</h2>
+            <div className="space-y-1">
+              {[['Undo','Ctrl+Z'],['Redo','Ctrl+Shift+Z'],['Copy','Ctrl+C'],['Paste','Ctrl+V'],['Cut','Ctrl+X'],['Duplicate','Ctrl+D'],['Delete','Del / Backspace'],['Select All','Ctrl+A'],['Zoom','Ctrl+Scroll'],['Pan','Space+Drag'],['Grid','Ctrl+G'],['Shortcuts','F1']].map(([n,k])=>(
+                <div key={n} className="flex justify-between py-1"><span className="text-[11px] text-gray-400">{n}</span><kbd className="text-[9px] bg-white/5 text-gray-500 px-2 py-0.5 rounded border border-white/10 font-mono">{k}</kbd></div>
+              ))}
+            </div>
+            <button onClick={()=>setShowShortcuts(false)} className="mt-4 w-full py-2 bg-white/5 rounded-xl text-xs text-gray-400 hover:bg-white/10 hover:text-gray-300 transition-all border border-white/5">Close</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

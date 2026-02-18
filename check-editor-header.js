@@ -1,0 +1,1 @@
+const fs=require("fs");const code=fs.readFileSync("src/app/editor/design/page.tsx","utf8");const lines=code.split("\n");for(let i=0;i<lines.length;i++){if(lines[i].includes("Header")||lines[i].includes("header")||lines[i].includes("Back")||lines[i].includes("topbar")||lines[i].includes("LanguageSelector")){console.log((i+1).toString().padStart(4,"0"),lines[i].substring(0,180));}}

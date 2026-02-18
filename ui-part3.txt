@@ -1,0 +1,94 @@
+﻿
+  /* ══════════ JSX ══════════ */
+  const activeObj = fcRef.current?.getActiveObject?.();
+  const isText = activeObj && (activeObj.type === 'i-text' || activeObj.type === 'text');
+
+  return (
+    <div ref={wrapperRef} className="flex h-screen overflow-hidden bg-[#1e1e2e]" tabIndex={0} onContextMenu={e=>e.preventDefault()}>
+      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
+
+      {/* ══ LEFT TOOLBAR — Figma-style dark icon bar ══ */}
+      <div className="w-[52px] bg-[#1e1e2e] flex flex-col items-center py-2 gap-0.5 shrink-0 border-r border-white/5">
+        {/* Logo */}
+        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-black mb-3">P</div>
+
+        {[
+          { icon: '↖', tip: 'Select (V)', fn: () => { const c=fcRef.current; if(c){c.isDrawingMode=false;setDrawMode(false);setEraserMode(false);} } },
+          { icon: 'T', tip: 'Text', fn: () => addText() },
+          { icon: '□', tip: 'Rectangle', fn: () => addShape('rect') },
+          { icon: '○', tip: 'Circle', fn: () => addShape('circle') },
+          { icon: '△', tip: 'Triangle', fn: () => addShape('triangle') },
+          { icon: '◇', tip: 'Diamond', fn: () => addShape('diamond') },
+          { icon: '☆', tip: 'Star', fn: () => addShape('star') },
+          { icon: '─', tip: 'Line', fn: () => addShape('line') },
+          { icon: '⬡', tip: 'Hexagon', fn: () => addShape('hexagon') },
+        ].map((t, i) => (
+          <button key={i} onClick={t.fn} title={t.tip}
+            className="w-9 h-9 flex items-center justify-center rounded-lg text-[15px] text-gray-400 hover:text-white hover:bg-white/10 transition-all duration-150">{t.icon}</button>
+        ))}
+
+        <div className="w-6 h-px bg-white/10 my-1" />
+
+        <button onClick={addImage} title="Image" className="w-9 h-9 flex items-center justify-center rounded-lg text-[15px] text-gray-400 hover:text-white hover:bg-white/10 transition-all">🖼</button>
+        <button onClick={toggleDraw} title="Draw" className={`w-9 h-9 flex items-center justify-center rounded-lg text-[15px] transition-all ${drawMode ? 'text-blue-400 bg-blue-500/20' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}>✏</button>
+        <button onClick={toggleEraser} title="Eraser" className={`w-9 h-9 flex items-center justify-center rounded-lg text-[15px] transition-all ${eraserMode ? 'text-blue-400 bg-blue-500/20' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}>🧹</button>
+
+        <div className="flex-1" />
+
+        <button onClick={del} title="Delete" className="w-9 h-9 flex items-center justify-center rounded-lg text-[15px] text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all">🗑</button>
+        <button onClick={() => setShowShortcuts(true)} title="Shortcuts (F1)" className="w-9 h-9 flex items-center justify-center rounded-lg text-[13px] text-gray-500 hover:text-white hover:bg-white/10 transition-all">⌨</button>
+      </div>
+
+      {/* ══ CENTER AREA ══ */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* ── Top Bar ── */}
+        <div className="h-11 bg-[#252536] flex items-center px-3 gap-2 shrink-0 border-b border-white/5">
+          <button onClick={onBack} className="px-2.5 py-1 text-xs text-gray-300 hover:text-white hover:bg-white/10 rounded transition-colors">← {t('back')||'Back'}</button>
+          <div className="h-5 w-px bg-white/10" />
+          <div>
+            <span className="text-xs font-semibold text-white">{panelName}</span>
+            <span className="text-[10px] text-gray-500 ml-2">{widthMM}×{heightMM}mm</span>
+          </div>
+          <div className="flex-1" />
+          {onPrevPanel && <button onClick={()=>{handleSavePanel();onPrevPanel()}} className="px-2.5 py-1 text-[10px] text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors">← Prev</button>}
+          {onNextPanel && <button onClick={()=>{handleSavePanel();onNextPanel()}} className="px-3 py-1 text-[10px] bg-blue-600 text-white rounded hover:bg-blue-500 font-medium transition-colors">Next →</button>}
+          <div className="h-5 w-px bg-white/10" />
+          <button onClick={handleSaveDesign} title="Save design file" className="px-2 py-1 text-[10px] text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors">💾 Save</button>
+          <button onClick={handleLoadDesign} title="Load design file" className="px-2 py-1 text-[10px] text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors">📂 Load</button>
+          <div className="h-5 w-px bg-white/10" />
+          <button onClick={undo} title="Undo" className="px-1.5 py-1 text-xs text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors">↩</button>
+          <button onClick={redo} title="Redo" className="px-1.5 py-1 text-xs text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors">↪</button>
+          <div className="h-5 w-px bg-white/10" />
+          <div className="flex items-center gap-1 bg-white/5 rounded px-1.5 py-0.5">
+            <button onClick={()=>applyZoom(Math.max(25,zoom-10))} className="text-gray-400 hover:text-white text-[10px] w-4 text-center">−</button>
+            <span className="text-[10px] text-gray-300 w-8 text-center">{zoom}%</span>
+            <button onClick={()=>applyZoom(Math.min(400,zoom+10))} className="text-gray-400 hover:text-white text-[10px] w-4 text-center">+</button>
+          </div>
+          <button onClick={()=>setShowGrid(!showGrid)} className={`px-1.5 py-1 text-[10px] rounded transition-colors ${showGrid?'text-blue-400 bg-blue-500/20':'text-gray-400 hover:text-white hover:bg-white/10'}`}>⊞</button>
+          <div className="h-5 w-px bg-white/10" />
+          <select value={exportScale} onChange={e=>setExportScale(Number(e.target.value))} className="text-[10px] bg-white/5 text-gray-300 border-0 rounded px-1 py-0.5 outline-none"><option value={1}>1x</option><option value={2}>2x</option><option value={3}>3x</option><option value={4}>4x</option></select>
+          <button onClick={()=>handleExport('png')} className="px-2 py-1 text-[10px] bg-emerald-600 text-white rounded hover:bg-emerald-500 font-medium transition-colors">PNG</button>
+          <button onClick={()=>handleExport('svg')} className="px-2 py-1 text-[10px] bg-teal-600 text-white rounded hover:bg-teal-500 font-medium transition-colors">SVG</button>
+          <button onClick={()=>handleExport('pdf')} className="px-2 py-1 text-[10px] bg-rose-600 text-white rounded hover:bg-rose-500 font-medium transition-colors">PDF</button>
+        </div>
+
+        {/* ── Canvas ── */}
+        <div className="flex-1 overflow-auto bg-[#2a2a3d] relative flex items-center justify-center p-8">
+          <div className="relative rounded-sm shadow-2xl ring-1 ring-black/20">
+            <canvas ref={canvasElRef} />
+            {showGrid && <div className="absolute inset-0 pointer-events-none opacity-30" style={{backgroundImage:'repeating-linear-gradient(0deg,transparent,transparent 19px,rgba(255,255,255,0.08) 19px,rgba(255,255,255,0.08) 20px),repeating-linear-gradient(90deg,transparent,transparent 19px,rgba(255,255,255,0.08) 19px,rgba(255,255,255,0.08) 20px)',backgroundSize:'20px 20px'}} />}
+          </div>
+          {showMinimap && <div className="absolute bottom-4 right-[290px] border border-white/10 rounded-lg overflow-hidden bg-black/40 shadow-xl backdrop-blur-sm"><canvas ref={minimapRef} width={160} height={100} /></div>}
+        </div>
+
+        {/* ── Bottom Status ── */}
+        <div className="h-6 bg-[#252536] border-t border-white/5 flex items-center px-3 gap-3 shrink-0">
+          <span className="text-[9px] text-gray-500">{panelId}</span>
+          <span className="text-[9px] text-gray-600">|</span>
+          <span className="text-[9px] text-gray-500">{widthMM}×{heightMM}mm</span>
+          <span className="text-[9px] text-gray-600">|</span>
+          <span className="text-[9px] text-gray-500">Objects: {layersList.length}</span>
+          <div className="flex-1" />
+          <button onClick={()=>setShowMinimap(!showMinimap)} className={`text-[9px] px-1 rounded ${showMinimap?'text-blue-400':'text-gray-500 hover:text-gray-300'}`}>Minimap</button>
+        </div>
+      </div>

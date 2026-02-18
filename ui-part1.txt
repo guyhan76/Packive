@@ -1,0 +1,86 @@
+﻿
+              addSafeZone();
+              didRestore = true;
+            }
+          }
+        }
+      } catch (e) { console.warn('auto-save restore failed', e); }
+
+      if (!didRestore && savedJSON) {
+        try {
+          const parsed = typeof savedJSON === 'string' ? JSON.parse(savedJSON) : savedJSON;
+          if (parsed && parsed.objects) {
+            parsed.objects = parsed.objects.filter((obj: any) => {
+              if (obj._isSafeZone || obj._isGuideLine || obj._isGuideText || obj._isSizeLabel) return false;
+              if (obj.selectable === false && obj.evented === false && !obj._isBgImage && obj.name !== '__bgImage__') return false;
+              if (obj.type === 'image' && obj.src && (obj.src.startsWith('blob:') || obj.src.startsWith('object:'))) return false;
+              return true;
+            });
+            await canvas.loadFromJSON(parsed);
+            canvas.getObjects().forEach((o: any) => { if (o.name === '__bgImage__') { o._isBgImage = true; o.set({ selectable: false, evented: false }); } });
+            canvas.requestRenderAll();
+            canvas.getObjects().filter((o: any) => {
+              if (o._isBgImage || o.name === '__bgImage__') return false;
+              if (o._isSafeZone || o._isGuideLine || o._isGuideText || o._isSizeLabel) return true;
+              return false;
+            }).forEach((o) => canvas.remove(o));
+            addSafeZone();
+            didRestore = true;
+          }
+        } catch (e) { console.warn('savedJSON restore failed', e); }
+      }
+      if (!didRestore) { addSafeZone(); }
+
+      scaleRef.current = canvasW / widthMM;
+      historyRef.current = [JSON.stringify(canvas.toJSON(['_isBgImage','_isSafeZone','_isGuideLine','_isGuideText','_isSizeLabel','_isBgPattern','selectable','evented','name']))];
+      historyIdxRef.current = 0;
+      loadingRef.current = false;
+
+      let vLine: any = null; let hLine: any = null; const snapPx = 8;
+      canvas.on('object:moving', (opt: any) => {
+        if (vLine) { canvas.remove(vLine); vLine = null; } if (hLine) { canvas.remove(hLine); hLine = null; }
+        const obj = opt.target; if (!obj) return;
+        const bound = obj.getBoundingRect(); const cx = bound.left + bound.width/2; const cy = bound.top + bound.height/2;
+        const cw = canvas.getWidth(); const ch = canvas.getHeight(); let snappedV = false, snappedH = false;
+        if (Math.abs(cx - cw/2) < snapPx) { obj.set("left", cw/2 - bound.width/2 + (obj.left - bound.left)); snappedV = true; }
+        if (Math.abs(cy - ch/2) < snapPx) { obj.set("top", ch/2 - bound.height/2 + (obj.top - bound.top)); snappedH = true; }
+        const lc = (snappedV && snappedH) ? "#4CAF50" : "#ff0000";
+        if (snappedV) { const { Line } = require("fabric"); vLine = new Line([cw/2,0,cw/2,ch], { stroke:lc, strokeWidth:1, strokeDashArray:[5,3], selectable:false, evented:false }); (vLine as any)._isGuideLine = true; canvas.add(vLine); }
+        if (snappedH) { const { Line } = require("fabric"); hLine = new Line([0,ch/2,cw,ch/2], { stroke:lc, strokeWidth:1, strokeDashArray:[5,3], selectable:false, evented:false }); (hLine as any)._isGuideLine = true; canvas.add(hLine); }
+        canvas.renderAll();
+      });
+      canvas.on('object:modified', () => { if (vLine) { canvas.remove(vLine); vLine = null; } if (hLine) { canvas.remove(hLine); hLine = null; } canvas.renderAll(); if (!loadingRef.current) { pushHistory(); refreshLayers(); } });
+      canvas.on('object:added', (opt: any) => { if (opt.target?._isGuideLine || opt.target?._isSafeZone || opt.target?._isGuideText || opt.target?._isSizeLabel) return; if (!loadingRef.current) { pushHistory(); refreshLayers(); } });
+      canvas.on('object:removed', () => { if (!loadingRef.current) { pushHistory(); refreshLayers(); } });
+      canvas.on('selection:created', () => refreshLayers()); canvas.on('selection:updated', () => refreshLayers()); canvas.on('selection:cleared', () => refreshLayers());
+
+      keyHandler = (e: KeyboardEvent) => {
+        const canvas = fcRef.current; if (!canvas) return;
+        const tag = (document.activeElement?.tagName || '').toUpperCase();
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if ((e.ctrlKey||e.metaKey) && e.code==='KeyZ' && !e.shiftKey) { e.preventDefault(); if (historyIdxRef.current > 0) { historyIdxRef.current--; loadingRef.current = true; const json = JSON.parse(historyRef.current[historyIdxRef.current]); canvas.loadFromJSON(json).then(() => { canvas.getObjects().forEach((o:any) => { if (o.name==='__bgImage__') { o._isBgImage=true; o.set({selectable:false,evented:false}); } }); canvas.renderAll(); loadingRef.current = false; refreshLayers(); setHistoryIdx(historyIdxRef.current); }); } }
+        if ((e.ctrlKey||e.metaKey) && e.code==='KeyZ' && e.shiftKey) { e.preventDefault(); if (historyIdxRef.current < historyRef.current.length-1) { historyIdxRef.current++; loadingRef.current = true; const json = JSON.parse(historyRef.current[historyIdxRef.current]); canvas.loadFromJSON(json).then(() => { canvas.getObjects().forEach((o:any) => { if (o.name==='__bgImage__') { o._isBgImage=true; o.set({selectable:false,evented:false}); } }); canvas.renderAll(); loadingRef.current = false; refreshLayers(); setHistoryIdx(historyIdxRef.current); }); } }
+        if ((e.ctrlKey||e.metaKey) && e.code==='KeyA') { e.preventDefault(); const { ActiveSelection } = require("fabric"); const objs = canvas.getObjects().filter((o:any) => o.selectable !== false); if (objs.length > 0) { const sel = new ActiveSelection(objs, { canvas }); canvas.setActiveObject(sel); canvas.renderAll(); } }
+        if (e.code==='F1') { e.preventDefault(); setShowShortcuts((p:boolean) => !p); }
+        if (e.key==='Escape') { setShowShortcuts(false); setCropMode(false); }
+        if (e.key==='Delete' || e.key==='Backspace') { const obj = canvas.getActiveObject(); if (obj && obj.selectable !== false) { if (obj.type==='activeselection') { const ch = (obj as any)._objects || []; canvas.discardActiveObject(); ch.forEach((o:any) => { if (o.selectable !== false) canvas.remove(o); }); canvas.renderAll(); refreshLayers(); } else { canvas.remove(obj); canvas.discardActiveObject(); canvas.renderAll(); } } }
+        if ((e.ctrlKey||e.metaKey) && e.code==='KeyC') { e.preventDefault(); const obj = canvas.getActiveObject(); if (!obj) return; (window as any).__clipboardObjects = obj; const ci = async (o:any) => { if ((o.type==='image'||o instanceof (require('fabric').FabricImage)) && o._element) { try { const t = document.createElement('canvas'); t.width = o._element.naturalWidth||o._element.width||200; t.height = o._element.naturalHeight||o._element.height||200; t.getContext('2d')?.drawImage(o._element,0,0); return t.toDataURL('image/png'); } catch { return null; } } return null; }; (async () => { if (obj.type==='activeselection') { const ch = (obj as any)._objects||[]; const items:any[] = []; for (const o of ch) { const d = await ci(o); const j = o.toJSON(['_isBgImage','selectable','evented','name']); if (d) j._dataUrl = d; const m = obj.calcTransformMatrix(); const p = require('fabric').util.transformPoint({x:o.left,y:o.top},m); j._absLeft = p.x; j._absTop = p.y; items.push(j); } (window as any).__clipboardJSON = {type:'activeselection',items}; } else { const d = await ci(obj); const j = obj.toJSON(['_isBgImage','selectable','evented','name']); if (d) j._dataUrl = d; j._absLeft = obj.left; j._absTop = obj.top; (window as any).__clipboardJSON = {type:'single',items:[j]}; } })(); }
+        if ((e.ctrlKey||e.metaKey) && e.code==='KeyV') { e.preventDefault(); canvas.getObjects().slice().forEach((o:any) => { if (o._isGuideLine) canvas.remove(o); }); const src = (window as any).__clipboardObjects; const cj = (window as any).__clipboardJSON; if (src && src.canvas === canvas) { (async () => { const { FabricImage, ActiveSelection } = await import('fabric'); if (src.type==='activeselection') { const ch = (src as any)._objects||[]; const cl:any[] = []; for (const o of ch) { if (o.type==='image'||o instanceof FabricImage) { try { const t = document.createElement('canvas'); t.width=o._element.naturalWidth||o._element.width||200; t.height=o._element.naturalHeight||o._element.height||200; t.getContext('2d')?.drawImage(o._element,0,0); const img = await FabricImage.fromURL(t.toDataURL('image/png')); img.set({left:o.left+15,top:o.top+15,scaleX:o.scaleX,scaleY:o.scaleY,angle:o.angle}); cl.push(img); } catch {} } else { const c = await o.clone(); c.set({left:o.left+15,top:o.top+15}); cl.push(c); } } cl.forEach(c=>canvas.add(c)); if (cl.length>1) { const s = new ActiveSelection(cl,{canvas}); canvas.setActiveObject(s); } else if (cl.length===1) canvas.setActiveObject(cl[0]); } else { if (src.type==='image'||src instanceof FabricImage) { try { const t = document.createElement('canvas'); t.width=src._element.naturalWidth||src._element.width||200; t.height=src._element.naturalHeight||src._element.height||200; t.getContext('2d')?.drawImage(src._element,0,0); const img = await FabricImage.fromURL(t.toDataURL('image/png')); img.set({left:src.left+15,top:src.top+15,scaleX:src.scaleX,scaleY:src.scaleY,angle:src.angle}); canvas.add(img); canvas.setActiveObject(img); } catch {} } else { const c = await src.clone(); c.set({left:src.left+15,top:src.top+15}); canvas.add(c); canvas.setActiveObject(c); } } canvas.renderAll(); refreshLayers(); })(); return; } if (cj && cj.items) { (async () => { const { FabricImage, ActiveSelection, util } = await import('fabric'); const cl:any[] = []; for (const item of cj.items) { if (item._dataUrl) { try { const img = await FabricImage.fromURL(item._dataUrl); img.set({left:(item._absLeft||item.left||50)+15,top:(item._absTop||item.top||50)+15,scaleX:item.scaleX||1,scaleY:item.scaleY||1,angle:item.angle||0}); cl.push(img); } catch {} } else { try { const o = await util.enlivenObjects([item]); if (o[0]) { o[0].set({left:(item._absLeft||item.left||50)+15,top:(item._absTop||item.top||50)+15}); cl.push(o[0]); } } catch {} } } cl.forEach(c=>canvas.add(c)); if (cl.length>1) { const s = new ActiveSelection(cl,{canvas}); canvas.setActiveObject(s); } else if (cl.length===1) canvas.setActiveObject(cl[0]); canvas.renderAll(); refreshLayers(); })(); } }
+        if ((e.ctrlKey||e.metaKey) && e.code==='KeyX') { e.preventDefault(); const obj = canvas.getActiveObject(); if (!obj) return; const ci = async (o:any) => { if ((o.type==='image'||o instanceof (require('fabric').FabricImage)) && o._element) { try { const t = document.createElement('canvas'); t.width=o._element.naturalWidth||o._element.width||200; t.height=o._element.naturalHeight||o._element.height||200; t.getContext('2d')?.drawImage(o._element,0,0); return t.toDataURL('image/png'); } catch { return null; } } return null; }; (async () => { if (obj.type==='activeselection') { const ch = (obj as any)._objects||[]; const items:any[] = []; for (const o of ch) { const d = await ci(o); const j = o.toJSON(['_isBgImage','selectable','evented','name']); if (d) j._dataUrl = d; const m = obj.calcTransformMatrix(); const p = require('fabric').util.transformPoint({x:o.left,y:o.top},m); j._absLeft = p.x; j._absTop = p.y; items.push(j); } (window as any).__clipboardJSON = {type:'activeselection',items}; (window as any).__clipboardObjects = null; const rm = [...ch]; canvas.discardActiveObject(); rm.forEach((o:any)=>canvas.remove(o)); } else { const d = await ci(obj); const j = obj.toJSON(['_isBgImage','selectable','evented','name']); if (d) j._dataUrl = d; j._absLeft = obj.left; j._absTop = obj.top; (window as any).__clipboardJSON = {type:'single',items:[j]}; (window as any).__clipboardObjects = null; canvas.remove(obj); canvas.discardActiveObject(); } canvas.renderAll(); refreshLayers(); })(); }
+        if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) { const obj = canvas.getActiveObject(); if (!obj) return; e.preventDefault(); const s = (e.ctrlKey||e.metaKey) ? 1 : 5; if (e.key==='ArrowUp') obj.set('top',obj.top-s); if (e.key==='ArrowDown') obj.set('top',obj.top+s); if (e.key==='ArrowLeft') obj.set('left',obj.left-s); if (e.key==='ArrowRight') obj.set('left',obj.left+s); obj.setCoords(); canvas.renderAll(); }
+        if ((e.ctrlKey||e.metaKey) && e.code==='KeyD') { e.preventDefault(); const obj = canvas.getActiveObject(); if (!obj || obj.selectable===false) return; if (obj.type==='image'||obj instanceof (require('fabric').FabricImage)) { const t = document.createElement('canvas'); t.width=obj._element?.naturalWidth||obj._element?.width||200; t.height=obj._element?.naturalHeight||obj._element?.height||200; t.getContext('2d')?.drawImage(obj._element,0,0); (require('fabric').FabricImage).fromURL(t.toDataURL('image/png')).then((img:any) => { img.set({left:obj.left+20,top:obj.top+20,scaleX:obj.scaleX,scaleY:obj.scaleY,angle:obj.angle}); canvas.add(img); canvas.setActiveObject(img); canvas.renderAll(); refreshLayers(); }); } else { obj.clone().then((c:any) => { c.set({left:obj.left+20,top:obj.top+20}); canvas.add(c); canvas.setActiveObject(c); canvas.renderAll(); refreshLayers(); }); } }
+        if ((e.ctrlKey||e.metaKey) && e.code==='KeyG') { e.preventDefault(); setShowGrid((p:boolean) => !p); }
+      };
+      document.addEventListener('keydown', keyHandler);
+      const wheelHandler = (opt:any) => { const e = opt.e as WheelEvent; if (e.ctrlKey||e.metaKey) { e.preventDefault(); e.stopPropagation(); const d = e.deltaY > 0 ? -10 : 10; applyZoom(Math.max(25,Math.min(400,zoomRef.current+d))); } };
+      canvas.on('mouse:wheel', wheelHandler);
+      autoSaveRef.current = setInterval(() => { const c = fcRef.current; if (!c) return; try { localStorage.setItem('panelEditor_autoSave_'+panelId, JSON.stringify(c.toJSON(['_isBgImage','_isSafeZone','_isGuideLine','_isGuideText','_isSizeLabel','_isBgPattern','selectable','evented','name']))); } catch {} }, 10000);
+      beforeUnloadRef.current = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+      window.addEventListener('beforeunload', beforeUnloadRef.current);
+      pasteHandlerRef.current = async (e: ClipboardEvent) => { const items = e.clipboardData?.items; if (!items) return; for (let i = 0; i < items.length; i++) { if (items[i].type.indexOf('image')!==-1) { e.preventDefault(); const blob = items[i].getAsFile(); if (!blob) continue; const reader = new FileReader(); reader.onload = async () => { const { FabricImage } = await import('fabric'); const img = await FabricImage.fromURL(reader.result as string); const c = fcRef.current; if (!c) return; const sc = Math.min(c.getWidth()*0.8/(img.width||1),c.getHeight()*0.8/(img.height||1),1); img.set({left:50,top:50,scaleX:sc,scaleY:sc}); c.add(img); c.setActiveObject(img); c.renderAll(); refreshLayers(); }; reader.readAsDataURL(blob); break; } } };
+      wrapperRef.current?.addEventListener('paste', pasteHandlerRef.current);
+      refreshLayers();
+    };
+    boot();
+    return () => { disposed = true; if (keyHandler) document.removeEventListener('keydown', keyHandler); if (autoSaveRef.current) clearInterval(autoSaveRef.current); if (beforeUnloadRef.current) window.removeEventListener('beforeunload', beforeUnloadRef.current); if (pasteHandlerRef.current && wrapperRef.current) wrapperRef.current.removeEventListener('paste', pasteHandlerRef.current); const c = fcRef.current; if (c) { c.dispose(); fcRef.current = null; } };
+  }, [panelId, savedJSON]);

@@ -1,0 +1,145 @@
+﻿
+  const Section = ({ id, title, children }: { id: string; title: string; children: React.ReactNode }) => (
+    <div className="border-b border-gray-100">
+      <button onClick={() => toggleSection(id)} className="w-full flex items-center justify-between px-2 py-1.5 text-[11px] font-medium text-gray-500 hover:bg-gray-50 uppercase tracking-wide">
+        <span>{title}</span><span className="text-[9px] text-gray-300">{openSections.has(id) ? '▼' : '▶'}</span>
+      </button>
+      {openSections.has(id) && <div className="px-2 pb-2">{children}</div>}
+    </div>
+  );
+  const SB = ({ icon, tip, onClick, active }: { icon: string; tip: string; onClick: () => void; active?: boolean }) => (
+    <button onClick={onClick} title={tip} className={`w-[28px] h-[28px] flex items-center justify-center rounded text-sm border transition-colors ${active ? 'bg-blue-100 border-blue-400 text-blue-700' : 'bg-white border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-gray-600'}`}>{icon}</button>
+  );
+
+  return (
+    <div ref={wrapperRef} className="flex h-screen bg-gray-100 overflow-hidden" tabIndex={0} onContextMenu={e => e.preventDefault()}>
+      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
+
+      {/* ══ LEFT SIDEBAR ══ */}
+      <div className="w-[105px] bg-white border-r border-gray-200 flex flex-col overflow-y-auto shrink-0">
+        {/* 객체 추가 */}
+        <div className="px-2 pt-2 pb-1 border-b border-gray-100">
+          <div className="text-[10px] font-semibold text-gray-400 mb-1.5">{t('tool.addObject') || '객체 추가'} <span className="text-gray-300 float-right cursor-pointer">▲</span></div>
+          <div className="grid grid-cols-2 gap-1">
+            <button onClick={() => addText()} className="h-10 flex flex-col items-center justify-center rounded border border-gray-200 hover:bg-blue-50 hover:border-blue-300 transition-colors">
+              <span className="text-lg font-serif leading-none">T</span><span className="text-[8px] text-gray-400 mt-0.5">{t('tool.text') || '텍스트'}</span>
+            </button>
+            <button onClick={addImage} className="h-10 flex flex-col items-center justify-center rounded border border-gray-200 hover:bg-blue-50 hover:border-blue-300 transition-colors">
+              <span className="text-lg leading-none">⌒</span><span className="text-[8px] text-gray-400 mt-0.5">{t('tool.curve') || '곡선'}</span>
+            </button>
+          </div>
+          <button onClick={addImage} className="mt-1 w-full h-6 text-[9px] text-gray-500 bg-gray-50 rounded border border-gray-200 hover:bg-blue-50 hover:border-blue-300 transition-colors">🖼 {t('tool.richText') || '리스 텍스트'}</button>
+        </div>
+
+        {/* 도형 */}
+        <Section id="shapes" title={t('tool.shapes') || '도형'}>
+          <div className="grid grid-cols-4 gap-1">
+            <SB icon="■" tip="사각형" onClick={() => addShape('rect')} />
+            <SB icon="▢" tip="둥근사각" onClick={() => addShape('roundrect')} />
+            <SB icon="─" tip="선" onClick={() => addShape('line')} />
+            <SB icon="●" tip="원" onClick={() => addShape('circle')} />
+          </div>
+        </Section>
+
+        {/* 선 */}
+        <Section id="lines" title={t('tool.lines') || '선'}>
+          <div className="grid grid-cols-4 gap-1">
+            <SB icon="─" tip="실선" onClick={() => addShape('line')} />
+            <SB icon="┅" tip="점선" onClick={() => addShape('dashed')} />
+            <SB icon="╌" tip="파선" onClick={() => addShape('dotted')} />
+            <SB icon="→" tip="화살표" onClick={() => addShape('arrow')} />
+          </div>
+          <div className="grid grid-cols-3 gap-1 mt-1">
+            <SB icon="─" tip="얇은" onClick={() => addShape('line')} />
+            <SB icon="━" tip="보통" onClick={() => addShape('line')} />
+            <SB icon="▬" tip="굵은" onClick={() => addShape('line')} />
+          </div>
+        </Section>
+
+        {/* 화살표 */}
+        <Section id="arrows" title={t('tool.arrows') || '화살표'}>
+          <div className="grid grid-cols-3 gap-1">
+            <SB icon="▲" tip="위" onClick={() => addShape('triangle')} />
+            <SB icon="▶" tip="오른" onClick={() => addShape('arrow')} />
+            <SB icon="◀" tip="왼" onClick={() => addShape('arrow')} />
+          </div>
+        </Section>
+
+        {/* 다이아몬드 */}
+        <Section id="diamonds" title={t('tool.diamonds') || '다이아몬드'}>
+          <div className="grid grid-cols-4 gap-1">
+            <SB icon="◇" tip="다이아" onClick={() => addShape('diamond')} />
+            <SB icon="○" tip="원" onClick={() => addShape('circle')} />
+            <SB icon="◆" tip="채운다이아" onClick={() => addShape('diamond')} />
+          </div>
+        </Section>
+
+        {/* 별 & 특수 */}
+        <Section id="stars" title={t('tool.stars') || '별 & 특수'}>
+          <div className="grid grid-cols-4 gap-1">
+            <SB icon="☆" tip="별" onClick={() => addShape('star')} />
+            <SB icon="★" tip="채운별" onClick={() => addShape('star')} />
+            <SB icon="♦" tip="다이아" onClick={() => addShape('diamond')} />
+            <SB icon="♥" tip="하트" onClick={() => addShape('star')} />
+          </div>
+        </Section>
+
+        {/* 커서 & 도형 */}
+        <Section id="cursorshape" title={t('tool.cursorShape') || '커서 & 도형'}>
+          <div className="grid grid-cols-4 gap-1">
+            <SB icon="▭" tip="사각" onClick={() => addShape('rect')} />
+            <SB icon="▯" tip="둥근" onClick={() => addShape('roundrect')} />
+            <SB icon="○" tip="원" onClick={() => addShape('circle')} />
+            <SB icon="△" tip="삼각" onClick={() => addShape('triangle')} />
+          </div>
+          <div className="grid grid-cols-4 gap-1 mt-1">
+            <SB icon="⬠" tip="오각" onClick={() => addShape('pentagon')} />
+            <SB icon="⬡" tip="육각" onClick={() => addShape('hexagon')} />
+            <SB icon="✚" tip="십자" onClick={() => addShape('cross')} />
+            <SB icon="⬬" tip="타원" onClick={() => addShape('ellipse')} />
+          </div>
+          <div className="grid grid-cols-4 gap-1 mt-1">
+            <SB icon="╋" tip="큰십자" onClick={() => addShape('cross')} />
+            <SB icon="▸" tip="화살" onClick={() => addShape('arrow')} />
+            <SB icon="▹" tip="삼각" onClick={() => addShape('triangle')} />
+            <SB icon="▿" tip="역삼각" onClick={() => addShape('triangle')} />
+          </div>
+        </Section>
+
+        {/* 바코드 & 코드 */}
+        <Section id="barcode" title={t('tool.barcode') || '바코드 & 코드'}>
+          <div className="grid grid-cols-2 gap-1">
+            <button onClick={() => addText('|||||||||||', { fontSize: 32, fontFamily: 'monospace' })} className="h-8 rounded border border-gray-200 hover:bg-blue-50 text-[9px] text-gray-600">바코드</button>
+            <button onClick={() => addText('▣', { fontSize: 36 })} className="h-8 rounded border border-gray-200 hover:bg-blue-50 text-[9px] text-gray-600">QR코드</button>
+          </div>
+        </Section>
+
+        {/* 색상 & 배경 */}
+        <Section id="colorbg" title={t('tool.colorBg') || '색상 & 배경'}>
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-1">
+              <input type="color" value={color} onChange={e => { setColor(e.target.value); const c = fcRef.current; const obj = c?.getActiveObject(); if (obj) { obj.set('fill', e.target.value); c?.renderAll(); } }} className="w-6 h-6 rounded border cursor-pointer p-0" />
+              <input type="text" value={color} onChange={e => setColor(e.target.value)} className="flex-1 text-[9px] border rounded px-1 py-0.5 w-0" />
+            </div>
+            <label className="block w-full py-1 text-center text-[9px] bg-gray-50 rounded border border-gray-200 cursor-pointer hover:bg-blue-50">{t('bg.upload') || '배경 업로드'}<input type="file" accept="image/*" className="hidden" onChange={handleBgUpload} /></label>
+            <button onClick={removeBg} className="w-full py-1 text-[9px] bg-red-50 text-red-500 rounded border border-red-200 hover:bg-red-100">{t('bg.remove') || '배경 제거'}</button>
+          </div>
+        </Section>
+
+        {/* 속성 */}
+        <Section id="props" title={t('tool.properties') || '속성'}>
+          <div className="space-y-1.5">
+            <div><span className="text-[9px] text-gray-400">크기</span><input type="number" value={fSize} onChange={e => { const v = Number(e.target.value); setFSize(v); const c = fcRef.current; const obj = c?.getActiveObject(); if (obj && (obj.type==='i-text'||obj.type==='text')) { obj.set('fontSize',v); c?.renderAll(); } }} className="w-full text-[9px] border rounded px-1 py-0.5 mt-0.5" min={8} max={200} /></div>
+            <div><span className="text-[9px] text-gray-400">폰트</span><select value={selectedFont} onChange={e => { setSelectedFont(e.target.value); const c = fcRef.current; const obj = c?.getActiveObject(); if (obj && (obj.type==='i-text'||obj.type==='text')) { obj.set('fontFamily',e.target.value); c?.renderAll(); } }} className="w-full text-[9px] border rounded px-1 py-0.5 mt-0.5">{FONT_LIST.map(f => <option key={f.family} value={f.family}>{f.name}</option>)}</select></div>
+          </div>
+        </Section>
+
+        {/* 도구 */}
+        <Section id="tools" title={t('tool.tools') || '도구'}>
+          <div className="grid grid-cols-1 gap-1">
+            <button onClick={toggleDraw} className={`py-1 text-[9px] rounded border transition-colors ${drawMode ? 'bg-blue-100 border-blue-400 text-blue-700' : 'border-gray-200 hover:bg-blue-50'}`}>✏ {drawMode ? '그리기 중' : '그리기'}</button>
+            <button onClick={toggleEraser} className={`py-1 text-[9px] rounded border transition-colors ${eraserMode ? 'bg-blue-100 border-blue-400 text-blue-700' : 'border-gray-200 hover:bg-blue-50'}`}>🧹 {eraserMode ? '지우기 중' : '지우개'}</button>
+            <button onClick={del} className="py-1 text-[9px] rounded border border-red-200 bg-red-50 text-red-600 hover:bg-red-100">🗑 삭제</button>
+          </div>
+        </Section>
+      </div>

@@ -3,6 +3,7 @@
 // 6가지 핵심 기능 카드 섹션
 import { Layers, Paintbrush, Eye, Download, Sparkles, ShoppingCart } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
+import { useI18n } from "@/components/i18n-context";
 
 const features = [
   {
@@ -45,15 +46,24 @@ const features = [
 ]
 
 export function Features() {
+  const { t } = useI18n();
+  const features = [
+    { icon: Layers, title: t("m.feat.f1.title"), description: t("m.feat.f1.desc") },
+    { icon: Paintbrush, title: t("m.feat.f2.title"), description: t("m.feat.f2.desc") },
+    { icon: Eye, title: t("m.feat.f3.title"), description: t("m.feat.f3.desc") },
+    { icon: Download, title: t("m.feat.f4.title"), description: t("m.feat.f4.desc") },
+    { icon: ShoppingCart, title: t("m.feat.f5.title"), description: t("m.feat.f5.desc"), badge: t("m.feat.comingSoon") },
+    { icon: Sparkles, title: t("m.feat.f6.title"), description: t("m.feat.f6.desc"), badge: t("m.feat.comingSoon") },
+  ];
   return (
     <section id="features" className="py-24 bg-gray-50">
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
           <h2 className="text-3xl font-bold text-gray-900 sm:text-4xl">
-            Everything you need for packaging design
+            {t("m.feat.title")}
           </h2>
           <p className="mt-4 text-lg text-gray-600">
-            From die-cut templates to print-ready files, all in one platform
+            {t("m.feat.subtitle")}
           </p>
         </div>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">

@@ -1,0 +1,53 @@
+# Packive Project Rules
+
+## 프로젝트 개요
+Packive(패키브)는 패키지 디자인 전문 SaaS 웹앱입니다.
+고객이 박스 형태를 선택하고, 규격을 입력하면 칼선전개도가 자동 생성되고,
+그 위에 직접 디자인한 후, 3D 미리보기를 보고, 인쇄용 파일(EPS/PDF)로
+출력할 수 있는 구독형 서비스입니다.
+
+슬로건: "Package design, made alive."
+URL: https://packive.design
+
+## 타겟 사용자
+- 박스 제조를 의뢰하는 중소기업, D2C 브랜드, 스타트업
+- 디자인 비전문가 (포토샵/일러스트 못 다루는 사람)
+
+## 기술 스택
+- Frontend: Next.js 14 (App Router) + TypeScript
+- 2D Canvas: Fabric.js
+- 3D Rendering: Three.js + @react-three/fiber + @react-three/drei
+- Backend: Next.js API Routes + Prisma ORM
+- Database: PostgreSQL (Supabase)
+- Auth: Supabase Auth
+- Storage: Supabase Storage
+- Styling: Tailwind CSS + shadcn/ui
+- State: Zustand
+- File Export: jsPDF + 커스텀 EPS 생성기
+- Deploy: Vercel
+- Payment: Stripe
+- i18n: next-intl (ko/en/ja)
+
+## 코딩 컨벤션
+- 파일명: kebab-case
+- 컴포넌트: PascalCase
+- 함수/변수: camelCase
+- 모든 컴포넌트에 Props 인터페이스 정의
+- 에러 처리 필수
+- console.log 금지
+
+## 패키지 도메인 용어
+- 칼선(Die Cut Line): 잘리는 선 → 빨간 실선 #FF0000
+- 접선(Fold Line): 접히는 선 → 파란 점선 #0066FF
+- 풀칠면(Glue Flap): 접착면 15~20mm
+- 도련(Bleed): 인쇄 여유 3mm
+- 더스트 플랩(Dust Flap): 뚜껑 양쪽 날개
+- 턱(Tuck): 잠금 날개
+- 단위: mm
+- 인쇄: CMYK 필수
+
+## 브랜드
+- Primary: #2563EB
+- Secondary: #7C3AED
+- Accent: #F59E0B
+- 폰트: Inter

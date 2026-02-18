@@ -1,0 +1,1 @@
+const lines=require("fs").readFileSync("src/components/editor/panel-editor.tsx","utf8").split("\n");for(let i=0;i<lines.length;i++){if(lines[i].includes("inspire")||lines[i].includes("Inspire")||lines[i].includes("AI_INSPIRE")||lines[i].includes("aiInspire")){console.log((i+1).toString().padStart(4,"0"),lines[i].substring(0,180));}}
