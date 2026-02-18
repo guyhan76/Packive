@@ -1,7 +1,7 @@
 ﻿// src/app/editor/design/page.tsx
 "use client";
 
-import React, { useState, useCallback, useMemo, useEffect, Suspense } from "react";
+import React, { useState, useCallback, useMemo, useEffect, useRef, Suspense } from "react";
 import { useI18n, LanguageSelector } from "@/components/i18n-context";
 import { useSearchParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
