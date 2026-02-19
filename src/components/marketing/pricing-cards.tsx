@@ -1,88 +1,64 @@
 "use client"
 
-// 가격 플랜 카드 섹션 - CTA는 Early Access 섹션으로 스크롤
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Check } from "lucide-react"
-import { useI18n } from "@/components/i18n-context";
-
-const plans = [
-  {
-    name: "Free",
-    price: "$0",
-    period: "/mo",
-    description: "Try Packive with basic features",
-    features: [
-      "3 projects",
-      "Watermarked export",
-      "2D preview only",
-      "Basic box types",
-    ],
-    cta: "Get Early Access",
-    popular: false,
-  },
-  {
-    name: "Starter",
-    price: "$29",
-    period: "/mo",
-    description: "For brands designing their own packaging",
-    features: [
-      "Unlimited projects",
-      "Print-ready export (EPS/PDF)",
-      "3D real-time preview",
-      "All 200+ box types",
-      "CMYK & bleed support",
-      "Text outline conversion",
-    ],
-    cta: "Get Early Access",
-    popular: true,
-  },
-  {
-    name: "Pro",
-    price: "$99",
-    period: "/mo",
-    description: "For teams and agencies",
-    features: [
-      "Everything in Starter",
-      "AI Design Assistant",
-      "Team collaboration (5 seats)",
-      "Priority support",
-      "API access",
-      "Custom templates",
-      "Spot color support",
-    ],
-    cta: "Get Early Access",
-    popular: false,
-  },
-]
-
-// Early Access 섹션으로 스크롤하는 핸들러
-const scrollToEarlyAccess = () => {
-  document.getElementById("early-access")?.scrollIntoView({ behavior: "smooth" })
-}
+import { useI18n } from "@/components/i18n-context"
 
 export function PricingCards() {
   const { t } = useI18n();
+  const [loading, setLoading] = useState<string | null>(null);
+
+  const handleSubscribe = async (planId: string) => {
+    if (planId === 'free') {
+      window.location.href = '/editor/new';
+      return;
+    }
+    setLoading(planId);
+    try {
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: planId }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        alert(data.error || 'Payment error');
+      }
+    } catch {
+      alert('Network error. Please try again.');
+    } finally {
+      setLoading(null);
+    }
+  };
+
   const plans = [
     {
+      id: 'free',
       name: t("m.price.free.name"), price: "$0", period: t("m.price.perMonth"),
       description: t("m.price.free.desc"),
       features: [t("m.price.free.f1"), t("m.price.free.f2"), t("m.price.free.f3"), t("m.price.free.f4")],
       cta: t("m.getEarlyAccess"), popular: false,
     },
     {
+      id: 'smart',
       name: t("m.price.smart.name"), price: "$29", period: t("m.price.perMonth"),
       description: t("m.price.smart.desc"),
       features: [t("m.price.smart.f1"), t("m.price.smart.f2"), t("m.price.smart.f3"), t("m.price.smart.f4"), t("m.price.smart.f5"), t("m.price.smart.f6")],
       cta: t("m.getEarlyAccess"), popular: true,
     },
     {
+      id: 'pro',
       name: t("m.price.pro.name"), price: "$99", period: t("m.price.perMonth"),
       description: t("m.price.pro.desc"),
       features: [t("m.price.pro.f1"), t("m.price.pro.f2"), t("m.price.pro.f3"), t("m.price.pro.f4"), t("m.price.pro.f5"), t("m.price.pro.f6"), t("m.price.pro.f7")],
       cta: t("m.getEarlyAccess"), popular: false,
     },
   ];
+
   return (
     <section id="pricing" className="py-24 bg-white">
       <div className="container mx-auto px-4">
@@ -104,7 +80,6 @@ export function PricingCards() {
                   : "border-gray-200"
               }`}
             >
-              {/* 인기 배지 */}
               {plan.popular && (
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full bg-[#2563EB] px-4 py-1 text-xs font-bold text-white">
                   {t("m.price.popular")}
@@ -134,9 +109,10 @@ export function PricingCards() {
                 <Button
                   className="w-full"
                   variant={plan.popular ? "default" : "outline"}
-                  onClick={scrollToEarlyAccess}
+                  disabled={loading === plan.id}
+                  onClick={() => handleSubscribe(plan.id)}
                 >
-                  {plan.cta}
+                  {loading === plan.id ? 'Processing...' : plan.cta}
                 </Button>
               </CardFooter>
             </Card>
