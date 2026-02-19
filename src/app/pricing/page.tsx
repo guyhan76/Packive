@@ -70,7 +70,7 @@ function PricingContent() {
     }
     setLoading(planId);
     try {
-      const res = await fetch('/api/payment/checkout', {
+      const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan: planId }),
