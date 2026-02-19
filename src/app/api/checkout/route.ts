@@ -13,8 +13,8 @@ export async function POST(req: NextRequest) {
     }
 
     const prices: Record<string, { amount: number; name: string }> = {
-      smart: { amount: 1900, name: 'Packive Smart Plan - Monthly' },
-      pro: { amount: 4900, name: 'Packive Pro Plan - Monthly' },
+      smart: { amount: 2900, name: 'Packive Smart Plan - Monthly' },
+      pro: { amount: 9900, name: 'Packive Pro Plan - Monthly' },
     };
 
     const selected = prices[plan];
