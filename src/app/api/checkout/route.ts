@@ -37,8 +37,8 @@ export async function POST(req: NextRequest) {
         },
       ],
       customer_email: email || undefined,
-      success_url: `${process.env.NEXT_PUBLIC_BASE_URL}/pricing?success=true&plan=${plan}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL}/pricing?canceled=true`,
+      success_url: `${baseUrl}/?success=true&plan=${plan}#pricing`,
+cancel_url: `${baseUrl}/?canceled=true#pricing`,
     });
 
     return NextResponse.json({ url: session.url });
