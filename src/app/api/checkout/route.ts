@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
     };
 
     const selected = prices[plan];
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://packive-git-main-guyhan76s-projects.vercel.app';
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
       ],
       customer_email: email || undefined,
       success_url: `${baseUrl}/?success=true&plan=${plan}#pricing`,
-cancel_url: `${baseUrl}/?canceled=true#pricing`,
+      cancel_url: `${baseUrl}/?canceled=true#pricing`,
     });
 
     return NextResponse.json({ url: session.url });
