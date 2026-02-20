@@ -1862,17 +1862,21 @@ export default function PanelEditor({
 
       // 정렬 변경 단축키: Tab으로 순환 (left → center → right → left)
       const handleKey = (e: KeyboardEvent) => {
-        if (e.key === 'Tab') {
-          e.preventDefault();
-          const order: ('left'|'center'|'right')[] = ['left','center','right'];
-          const idx = order.indexOf(tempText.textAlign as any);
-          const next = order[(idx + 1) % 3];
-          tempText.set({ textAlign: next });
-          cell.align = next;
-          cv.requestRenderAll();
+        if (e.ctrlKey || e.metaKey) {
+          let newAlign: 'left'|'center'|'right' | null = null;
+          if (e.key === 'l' || e.key === 'L') newAlign = 'left';
+          if (e.key === 'e' || e.key === 'E') newAlign = 'center';
+          if (e.key === 'r' || e.key === 'R') newAlign = 'right';
+          if (newAlign) {
+            e.preventDefault();
+            tempText.set({ textAlign: newAlign });
+            cell.align = newAlign;
+            cv.requestRenderAll();
+          }
         }
       };
       document.addEventListener('keydown', handleKey);
+
 
       cv.add(tempText);
       cv.setActiveObject(tempText);
