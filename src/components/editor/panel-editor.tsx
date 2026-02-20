@@ -1670,7 +1670,8 @@ export default function PanelEditor({
 
         {/* Text popup */}
         <div className="relative">
-          <button onClick={()=>{addText();setShowTextPanel(p=>!p);setShowShapePanel(false);}} title="Text (T)"
+        <button onClick={()=>{setShowTextPanel(p=>!p);setShowShapePanel(false);}}
+ title="Text (T)"
             className={`w-9 h-9 flex items-center justify-center rounded-lg text-[15px] transition-all ${showTextPanel?"text-blue-400 bg-blue-500/20":"text-gray-400 hover:text-white hover:bg-white/10"}`}>T</button>
           {showTextPanel && (
             <div className="absolute left-[48px] top-0 w-[210px] bg-[#252538] border border-white/10 rounded-xl shadow-2xl z-50 p-3 space-y-2.5 max-h-[80vh] overflow-y-auto">
