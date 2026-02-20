@@ -1765,48 +1765,47 @@ export default function PanelEditor({
     if (!cv) return;
     const F = await import('fabric');
 
-    const cellW = 120;
-    const cellH = 28;
-    const totalW = cellW * tableCols;
-    const totalH = cellH * tableRows;
-    const objects: any[] = [];
+    // 캔버스 크기에 맞게 셀 크기 자동 조정
+    const canvasW = cv.getWidth();
+    const canvasH = cv.getHeight();
+    const maxTableW = canvasW * 0.7;
+    const maxTableH = canvasH * 0.5;
+    const cellW = Math.floor(Math.min(maxTableW / tableCols, 150));
+    const cellH = Math.floor(Math.min(maxTableH / tableRows, 32));
+
+    // 테이블을 그룹이 아닌 개별 객체로 추가 (더블클릭 편집 가능)
+    const startX = (canvasW - cellW * tableCols) / 2;
+    const startY = (canvasH - cellH * tableRows) / 2;
 
     for (let r = 0; r < tableRows; r++) {
       for (let c = 0; c < tableCols; c++) {
-        const x = c * cellW;
-        const y = r * cellH;
+        const x = startX + c * cellW;
+        const y = startY + r * cellH;
 
-        // 셀 테두리
-        objects.push(new F.Rect({
+        // 셀 테두리 (배경 없음, 흰색 통일)
+        const rect = new F.Rect({
           left: x, top: y, width: cellW, height: cellH,
-          fill: r === 0 ? '#e8e8e8' : '#ffffff',
-          stroke: '#888888', strokeWidth: 0.5,
+          fill: '#ffffff',
+          stroke: '#999999', strokeWidth: 0.5,
           selectable: false, evented: false,
-        }));
+          name: `__table_cell_bg_${r}_${c}__`,
+        });
+        cv.add(rect);
 
-        // 빈 텍스트 (사용자가 더블클릭으로 편집)
-        objects.push(new F.IText(' ', {
-          left: x + 6, top: y + 6,
-          fontSize: 10,
+        // 편집 가능한 빈 텍스트
+        const text = new F.IText(' ', {
+          left: x + 4, top: y + (cellH - 12) / 2,
+          fontSize: 11,
           fontFamily: 'Noto Sans KR, Arial, sans-serif',
-          fontWeight: r === 0 ? '700' : '400',
+          fontWeight: '400',
           fill: '#222222',
-          width: cellW - 12,
           editable: true,
-        }));
+          name: `__table_cell_text_${r}_${c}__`,
+        });
+        cv.add(text);
       }
     }
 
-    const group = new F.Group(objects, {
-      left: cv.getWidth() / 2,
-      top: cv.getHeight() / 2,
-      originX: 'center',
-      originY: 'center',
-      subTargetCheck: true,
-    });
-
-    cv.add(group);
-    cv.setActiveObject(group);
     cv.renderAll();
     pushHistory();
 
