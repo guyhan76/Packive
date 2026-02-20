@@ -42,6 +42,62 @@ const FONT_LIST = [
   { name: 'Georgia', family: 'Georgia, serif', category: 'System' },
   { name: 'Times New Roman', family: "'Times New Roman', serif", category: 'System' },
 ];
+// ─── Google Fonts 목록 (패키징 디자인에 최적화) ───
+const GOOGLE_FONTS = [
+  // 한국어
+  { name: 'Noto Sans KR', family: 'Noto+Sans+KR', category: '한국어' },
+  { name: 'Noto Serif KR', family: 'Noto+Serif+KR', category: '한국어' },
+  { name: 'Black Han Sans', family: 'Black+Han+Sans', category: '한국어' },
+  { name: 'Jua', family: 'Jua', category: '한국어' },
+  { name: 'Do Hyeon', family: 'Do+Hyeon', category: '한국어' },
+  { name: 'Gamja Flower', family: 'Gamja+Flower', category: '한국어' },
+  { name: 'Gothic A1', family: 'Gothic+A1', category: '한국어' },
+  { name: 'Sunflower', family: 'Sunflower', category: '한국어' },
+  // 일본어
+  { name: 'Noto Sans JP', family: 'Noto+Sans+JP', category: '日本語' },
+  { name: 'Noto Serif JP', family: 'Noto+Serif+JP', category: '日本語' },
+  { name: 'M PLUS Rounded 1c', family: 'M+PLUS+Rounded+1c', category: '日本語' },
+  { name: 'Kosugi Maru', family: 'Kosugi+Maru', category: '日本語' },
+  // Sans Serif (모던/클린)
+  { name: 'Inter', family: 'Inter', category: 'Sans Serif' },
+  { name: 'Montserrat', family: 'Montserrat', category: 'Sans Serif' },
+  { name: 'Poppins', family: 'Poppins', category: 'Sans Serif' },
+  { name: 'Lato', family: 'Lato', category: 'Sans Serif' },
+  { name: 'Open Sans', family: 'Open+Sans', category: 'Sans Serif' },
+  { name: 'Roboto', family: 'Roboto', category: 'Sans Serif' },
+  { name: 'DM Sans', family: 'DM+Sans', category: 'Sans Serif' },
+  { name: 'Work Sans', family: 'Work+Sans', category: 'Sans Serif' },
+  // Serif (럭셔리/클래식)
+  { name: 'Playfair Display', family: 'Playfair+Display', category: 'Serif' },
+  { name: 'Lora', family: 'Lora', category: 'Serif' },
+  { name: 'Merriweather', family: 'Merriweather', category: 'Serif' },
+  { name: 'EB Garamond', family: 'EB+Garamond', category: 'Serif' },
+  { name: 'Cormorant Garamond', family: 'Cormorant+Garamond', category: 'Serif' },
+  // Bold / Display (강렬한 헤드라인)
+  { name: 'Bebas Neue', family: 'Bebas+Neue', category: 'Display' },
+  { name: 'Anton', family: 'Anton', category: 'Display' },
+  { name: 'Oswald', family: 'Oswald', category: 'Display' },
+  { name: 'Archivo Black', family: 'Archivo+Black', category: 'Display' },
+  { name: 'Russo One', family: 'Russo+One', category: 'Display' },
+  // 손글씨 / 스크립트 (자연/수제품)
+  { name: 'Pacifico', family: 'Pacifico', category: 'Script' },
+  { name: 'Great Vibes', family: 'Great+Vibes', category: 'Script' },
+  { name: 'Dancing Script', family: 'Dancing+Script', category: 'Script' },
+  { name: 'Caveat', family: 'Caveat', category: 'Script' },
+  { name: 'Satisfy', family: 'Satisfy', category: 'Script' },
+];
+
+// Google Font 동적 로딩 함수
+const loadGoogleFont = (fontFamily: string, fontUrl: string) => {
+  const linkId = `gf-${fontFamily.replace(/\s/g, '-')}`;
+  if (document.getElementById(linkId)) return; // 이미 로드됨
+  const link = document.createElement('link');
+  link.id = linkId;
+  link.rel = 'stylesheet';
+  link.href = `https://fonts.googleapis.com/css2?family=${fontUrl}:wght@100;300;400;500;600;700;800;900&display=swap`;
+  document.head.appendChild(link);
+};
+
 interface PanelEditorProps {
   panelId: string;
   panelName: string;
@@ -1696,7 +1752,43 @@ export default function PanelEditor({
                 <button onClick={()=>{const cv=fcRef.current;const obj=cv?.getActiveObject();if(obj&&obj.type==="i-text"){const cur=(obj as any).linethrough;(obj as any).set("linethrough",!cur);cv?.renderAll();}}} className="flex-1 py-1.5 text-[11px] rounded text-gray-400 hover:bg-white/10 hover:text-white transition-all line-through" title="Strikethrough">S</button>
               </div>
               <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1">Font</div>
-              <select value={selectedFont} onChange={e=>{setSelectedFont(e.target.value);const cv=fcRef.current;const obj=cv?.getActiveObject();if(obj&&obj.type==="i-text"){(obj as any).set("fontFamily",e.target.value);cv?.renderAll();}}} className="w-full text-[10px] bg-white border border-white/10 rounded-lg px-2 py-1.5 text-black outline-none">{["Arial, sans-serif","Helvetica, sans-serif","Georgia, serif","Times New Roman, serif","Courier New, monospace","Verdana, sans-serif","Impact, sans-serif","Trebuchet MS, sans-serif","Palatino, serif","Garamond, serif"].map(f=>(<option key={f} value={f} style={{fontFamily:f,color:"#000"}}>{f.split(",")[0]}</option>))}</select>
+<select
+  value={selectedFont}
+  onChange={e => {
+    const fontName = e.target.value;
+    setSelectedFont(fontName);
+    // Google Font 동적 로딩
+    const gf = GOOGLE_FONTS.find(f => f.name === fontName);
+    if (gf) loadGoogleFont(gf.name, gf.family);
+    // 캔버스 적용 (폰트 로딩 후 약간의 딜레이)
+    setTimeout(() => {
+      const cv = fcRef.current;
+      const obj = cv?.getActiveObject();
+      if (obj && obj.type === 'i-text') {
+        (obj as any).set('fontFamily', fontName);
+        cv?.renderAll();
+      }
+    }, 300);
+  }}
+  className="w-full text-[10px] bg-white/10 border border-white/10 rounded-lg px-2 py-1.5 text-gray-200 outline-none"
+>
+  {/* 기본 시스템 폰트 */}
+  <optgroup label="System">
+    {['Arial','Helvetica','Georgia','Times New Roman','Courier New','Verdana'].map(f => (
+      <option key={f} value={f} style={{ fontFamily: f, color: '#000' }}>{f}</option>
+    ))}
+  </optgroup>
+  {/* Google Fonts - 카테고리별 */}
+  {['한국어', '日本語', 'Sans Serif', 'Serif', 'Display', 'Script'].map(cat => (
+    <optgroup key={cat} label={cat}>
+      {GOOGLE_FONTS.filter(f => f.category === cat).map(f => (
+        <option key={f.name} value={f.name} style={{ color: '#000' }}>{f.name}</option>
+      ))}
+    </optgroup>
+  ))}
+</select>
+
+              
             </div>
           )}
         </div>
