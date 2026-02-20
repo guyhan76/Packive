@@ -1675,6 +1675,7 @@ export default function PanelEditor({
             className={`w-9 h-9 flex items-center justify-center rounded-lg text-[15px] transition-all ${showTextPanel?"text-blue-400 bg-blue-500/20":"text-gray-400 hover:text-white hover:bg-white/10"}`}>T</button>
           {showTextPanel && (
             <div className="absolute left-[48px] top-0 w-[210px] bg-[#252538] border border-white/10 rounded-xl shadow-2xl z-50 p-3 space-y-2.5 max-h-[80vh] overflow-y-auto">
+                <button onClick={()=>{addText();}} className="w-full py-2 mb-1 text-[11px] font-bold text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-all">+ Add Text</button>
               <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Size</div>
               <div className="flex items-center gap-2">
                 <input type="range" min="8" max="120" value={fSize} onChange={e=>{const s=Number(e.target.value);setFSize(s);const cv=fcRef.current;const obj=cv?.getActiveObject();if(obj&&obj.type==="i-text"){(obj as any).set("fontSize",s);cv?.renderAll();}}} className="flex-1" />
