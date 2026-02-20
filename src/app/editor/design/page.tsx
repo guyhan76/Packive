@@ -858,6 +858,13 @@ function FullNetPreview({ L, W, D, T, tuckH, dustH, glueW, bottomH, bottomDustH,
   onClickPanel: (pid: PanelId) => void;
   previewUrl?: string;
 }) {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = React.useState(100);
+  const [pan, setPan] = React.useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = React.useState(false);
+  const [panStart, setPanStart] = React.useState({ x: 0, y: 0 });
+  const [hoveredPanel, setHoveredPanel] = React.useState<string | null>(null);
+
   const frontX = glueW + T;
   const leftX = frontX + L + T;
   const backX = leftX + W + T;
@@ -868,44 +875,27 @@ function FullNetPreview({ L, W, D, T, tuckH, dustH, glueW, bottomH, bottomDustH,
   const bodyY = topLidY + W;
   const bottomY = bodyY + D + T;
   const totalH = bottomY + Math.max(bottomH, bottomDustH);
-  var tuckInset = Math.min(tuckH * 0.35, L * 0.12);
-  var tuckNotch = tuckH * 0.18;
-  var dustTaper = Math.min(dustH * 0.4, 6);
-  var dustRad = Math.min(dustH * 0.35, 5);
-  var glueTaper = Math.min(glueW * 0.3, D * 0.12);
-  var bottomTaper = Math.min(bottomH * 0.25, 5);
-  var bottomDustTaper = Math.min(bottomDustH * 0.4, 6);
+  const tuckInset = Math.min(tuckH * 0.35, L * 0.12);
+  const tuckNotch = tuckH * 0.18;
+  const dustTaper = Math.min(dustH * 0.4, 6);
+  const dustRad = Math.min(dustH * 0.35, 5);
+  const glueTaper = Math.min(glueW * 0.3, D * 0.12);
+  const bottomTaper = Math.min(bottomH * 0.25, 5);
+  const bottomDustTaper = Math.min(bottomDustH * 0.4, 6);
+
   function pp(pid: string, p: { x: number; y: number; w: number; h: number }): string {
-    var x = p.x, y = p.y, w = p.w, h = p.h;
+    const x = p.x, y = p.y, w = p.w, h = p.h;
     switch (pid) {
-      case "topTuck": {
-        var ins = tuckInset, nt = tuckNotch;
-        return "M "+(x+nt)+" "+(y+h)+" L "+x+" "+(y+h-nt)+" L "+(x+ins)+" "+y+" Q "+(x+w/2)+" "+(y-h*0.08)+" "+(x+w-ins)+" "+y+" L "+(x+w)+" "+(y+h-nt)+" L "+(x+w-nt)+" "+(y+h)+" Z";
-      }
-      case "topDustL":
-      case "topDustR": {
-        var tp2 = dustTaper, r2 = dustRad;
-        return "M "+x+" "+(y+h)+" L "+x+" "+(y+tp2)+" Q "+x+" "+y+" "+(x+r2)+" "+y+" L "+(x+w-r2)+" "+y+" Q "+(x+w)+" "+y+" "+(x+w)+" "+(y+tp2)+" L "+(x+w)+" "+(y+h)+" Z";
-      }
-      case "glueFlap": {
-        var tp3 = glueTaper;
-        return "M "+(x+w)+" "+y+" L "+x+" "+(y+tp3)+" L "+x+" "+(y+h-tp3)+" L "+(x+w)+" "+(y+h)+" Z";
-      }
-      case "bottomFlapFront":
-      case "bottomFlapBack": {
-        var tp4 = bottomTaper;
-        return "M "+x+" "+y+" L "+(x+w)+" "+y+" L "+(x+w)+" "+(y+h-tp4)+" L "+(x+w-tp4)+" "+(y+h)+" L "+(x+tp4)+" "+(y+h)+" L "+x+" "+(y+h-tp4)+" Z";
-      }
-      case "bottomDustL":
-      case "bottomDustR": {
-        var tp5 = bottomDustTaper, r5 = Math.min(tp5 * 0.8, 4);
-        return "M "+x+" "+y+" L "+(x+w)+" "+y+" L "+(x+w)+" "+(y+h-tp5)+" Q "+(x+w)+" "+(y+h)+" "+(x+w-r5)+" "+(y+h)+" L "+(x+r5)+" "+(y+h)+" Q "+x+" "+(y+h)+" "+x+" "+(y+h-tp5)+" Z";
-      }
-      default:
-        return "M "+x+" "+y+" L "+(x+w)+" "+y+" L "+(x+w)+" "+(y+h)+" L "+x+" "+(y+h)+" Z";
+      case "topTuck": return "M "+(x+tuckNotch)+" "+(y+h)+" L "+x+" "+(y+h-tuckNotch)+" L "+(x+tuckInset)+" "+y+" Q "+(x+w/2)+" "+(y-h*0.08)+" "+(x+w-tuckInset)+" "+y+" L "+(x+w)+" "+(y+h-tuckNotch)+" L "+(x+w-tuckNotch)+" "+(y+h)+" Z";
+      case "topDustL": case "topDustR": return "M "+x+" "+(y+h)+" L "+x+" "+(y+dustTaper)+" Q "+x+" "+y+" "+(x+dustRad)+" "+y+" L "+(x+w-dustRad)+" "+y+" Q "+(x+w)+" "+y+" "+(x+w)+" "+(y+dustTaper)+" L "+(x+w)+" "+(y+h)+" Z";
+      case "glueFlap": return "M "+(x+w)+" "+y+" L "+x+" "+(y+glueTaper)+" L "+x+" "+(y+h-glueTaper)+" L "+(x+w)+" "+(y+h)+" Z";
+      case "bottomFlapFront": case "bottomFlapBack": return "M "+x+" "+y+" L "+(x+w)+" "+y+" L "+(x+w)+" "+(y+h-bottomTaper)+" L "+(x+w-bottomTaper)+" "+(y+h)+" L "+(x+bottomTaper)+" "+(y+h)+" L "+x+" "+(y+h-bottomTaper)+" Z";
+      case "bottomDustL": case "bottomDustR": { const r5 = Math.min(bottomDustTaper * 0.8, 4); return "M "+x+" "+y+" L "+(x+w)+" "+y+" L "+(x+w)+" "+(y+h-bottomDustTaper)+" Q "+(x+w)+" "+(y+h)+" "+(x+w-r5)+" "+(y+h)+" L "+(x+r5)+" "+(y+h)+" Q "+x+" "+(y+h)+" "+x+" "+(y+h-bottomDustTaper)+" Z"; }
+      default: return "M "+x+" "+y+" L "+(x+w)+" "+y+" L "+(x+w)+" "+(y+h)+" L "+x+" "+(y+h)+" Z";
     }
   }
-  var pos: Record<string, { x: number; y: number; w: number; h: number }> = {
+
+  const pos: Record<string, { x: number; y: number; w: number; h: number }> = {
     topTuck: { x: frontX, y: tuckY, w: L, h: tuckH },
     topLid: { x: frontX, y: topLidY, w: L, h: W },
     topDustL: { x: leftX, y: bodyY - dustH, w: W, h: dustH },
@@ -920,68 +910,163 @@ function FullNetPreview({ L, W, D, T, tuckH, dustH, glueW, bottomH, bottomDustH,
     bottomFlapBack: { x: backX, y: bottomY, w: L, h: bottomH },
     bottomDustR: { x: rightX, y: bottomY, w: W, h: bottomDustH },
   };
-  var pad = 4;
-  var anyDesigned = Object.values(panels).some(function(p) { return p.designed; });
+
+  const pad = 4;
+  const anyDesigned = Object.values(panels).some((p) => p.designed);
+
+  // 줌 프리셋
+  const ZOOM_PRESETS = [25, 33, 50, 66, 100, 150, 200, 300, 400];
+
+  const handleWheel = React.useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -10 : 10;
+    setZoom(prev => Math.max(10, Math.min(800, prev + delta)));
+  }, []);
+
+  const handleMouseDown = React.useCallback((e: React.MouseEvent) => {
+    if (e.button === 1 || (e.button === 0 && e.altKey)) {
+      e.preventDefault();
+      setIsPanning(true);
+      setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+    }
+  }, [pan]);
+
+  const handleMouseMove = React.useCallback((e: React.MouseEvent) => {
+    if (isPanning) {
+      setPan({ x: e.clientX - panStart.x, y: e.clientY - panStart.y });
+    }
+  }, [isPanning, panStart]);
+
+  const handleMouseUp = React.useCallback(() => {
+    setIsPanning(false);
+  }, []);
+
+  const fitToScreen = React.useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const cw = container.clientWidth - 20;
+    const ch = container.clientHeight - 20;
+    const scaleX = cw / (totalW + pad * 2);
+    const scaleY = ch / (totalH + pad * 2);
+    const fitZoom = Math.floor(Math.min(scaleX, scaleY) * 100);
+    setZoom(Math.max(10, Math.min(800, fitZoom)));
+    setPan({ x: 0, y: 0 });
+  }, [totalW, totalH]);
+
+  // 초기 fit
+  React.useEffect(() => { fitToScreen(); }, [fitToScreen]);
+
   return (
-    <div className="w-full flex justify-center relative">
-      {!anyDesigned && previewUrl ? (
-        <img src={previewUrl} alt="Die-cut net" className="w-full" style={{ maxHeight: "280px", objectFit: "contain" }} />
-      ) : (
-        <svg data-export-net viewBox={(-pad)+" "+(-pad)+" "+(totalW+pad*2)+" "+(totalH+pad*2)} className="w-full" style={{ maxHeight: "280px" }}>
-          <defs>
-            {Object.entries(pos).map(function(entry) {
-              var pid = entry[0], p = entry[1];
-              if (p.w <= 0 || p.h <= 0) return null;
-              return <clipPath key={"clip-"+pid} id={"clip-"+pid}><path d={pp(pid, p)} /></clipPath>;
-            })}
-          </defs>
-          <rect x={-pad} y={-pad} width={totalW+pad*2} height={totalH+pad*2} fill="#f9fafb" rx={1} />
-          {[
-            [frontX, bodyY, frontX+L, bodyY],
-            [frontX+L, bodyY, frontX+L, bodyY+D],
-            [leftX+W, bodyY, leftX+W, bodyY+D],
-            [backX+L, bodyY, backX+L, bodyY+D],
-            [frontX, bottomY, frontX+L, bottomY],
-            [leftX, bottomY, leftX+W, bottomY],
-            [backX, bottomY, backX+L, bottomY],
-            [rightX, bottomY, rightX+W, bottomY],
-            [frontX, topLidY, frontX+L, topLidY],
-            [frontX, tuckY+tuckH, frontX+L, tuckY+tuckH],
-            [leftX, bodyY, leftX+W, bodyY],
-            [rightX, bodyY, rightX+W, bodyY],
-            [glueW, bodyY, glueW, bodyY+D],
-          ].map(function(ln, i) {
-            return <line key={"fl"+i} x1={ln[0]} y1={ln[1]} x2={ln[2]} y2={ln[3]} stroke="#00AA00" strokeWidth={0.3} strokeDasharray="2 1" />;
-          })}
-          {Object.entries(pos).map(function(entry) {
-            var pid = entry[0], p = entry[1];
-            var pc = panelConfig[pid as PanelId];
-            var d = panels[pid];
-            if (!pc || p.w <= 0 || p.h <= 0) return null;
-            var pathD = pp(pid, p);
-            return (
-              <g key={pid} className="cursor-pointer" onClick={function() { onClickPanel(pid as PanelId); }}>
-                <path d={pathD} fill={d && d.designed ? "#FAFAFA" : pc.color} stroke={d && d.designed ? "#22C55E" : "#D1483B"} strokeWidth={d && d.designed ? 0.8 : 0.5} />
-                {d && d.thumbnail && (
-                  <image href={d.thumbnail} x={p.x} y={p.y} width={p.w} height={p.h} preserveAspectRatio="none" clipPath={"url(#clip-"+pid+")"} />
-                )}
-                {!(d && d.thumbnail) && p.w > 10 && p.h > 6 && (
-                  <text x={p.x+p.w/2} y={p.y+p.h/2} textAnchor="middle" dominantBaseline="middle" fontSize={Math.max(Math.min(p.w*0.06, p.h*0.08, 6), 2)} fill="#9CA3AF" className="pointer-events-none select-none">{pc.name.replace(" (Main)","")}</text>
-                )}
-                {d && d.designed && p.w > 6 && (
-                  <React.Fragment>
-                    <circle cx={p.x+p.w-3} cy={p.y+3} r={2} fill="#22C55E" />
-                    <text x={p.x+p.w-3} y={p.y+3} textAnchor="middle" dominantBaseline="central" fontSize={2} fill="white" fontWeight="bold" className="pointer-events-none">V</text>
-                  </React.Fragment>
-                )}
-              </g>
-            );
-          })}
-        </svg>
-      )}
+    <div className="relative">
+      {/* 줌 컨트롤 바 */}
+      <div className="flex items-center justify-between bg-gray-100 border border-gray-200 rounded-t-lg px-3 py-1.5">
+        <div className="flex items-center gap-1">
+          <button onClick={() => setZoom(prev => Math.max(10, prev - 25))} className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-200 text-gray-600 text-sm font-bold">−</button>
+          <select value={ZOOM_PRESETS.includes(zoom) ? zoom : ''} onChange={e => { if (e.target.value === 'fit') { fitToScreen(); } else { setZoom(Number(e.target.value)); } }}
+            className="text-xs bg-white border border-gray-300 rounded px-1 py-0.5 w-20 text-center outline-none">
+            {ZOOM_PRESETS.map(z => <option key={z} value={z}>{z}%</option>)}
+            <option value="fit">Fit</option>
+            {!ZOOM_PRESETS.includes(zoom) && <option value={zoom}>{zoom}%</option>}
+          </select>
+          <button onClick={() => setZoom(prev => Math.min(800, prev + 25))} className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-200 text-gray-600 text-sm font-bold">+</button>
+          <span className="text-[10px] text-gray-400 ml-2">Scroll to zoom · Alt+drag to pan</span>
+        </div>
+        <button onClick={fitToScreen} className="text-[10px] text-blue-600 hover:text-blue-800 font-medium">Fit to Screen</button>
+      </div>
+
+      {/* 캔버스 영역 */}
+      <div ref={containerRef}
+        className="bg-gray-200 border border-t-0 border-gray-200 rounded-b-lg overflow-hidden relative"
+        style={{ height: '400px', cursor: isPanning ? 'grabbing' : 'grab' }}
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+      >
+        {/* 체크 패턴 배경 */}
+        <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(45deg, #e5e7eb 25%, transparent 25%), linear-gradient(-45deg, #e5e7eb 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e5e7eb 75%), linear-gradient(-45deg, transparent 75%, #e5e7eb 75%)', backgroundSize: '20px 20px', backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0px' }} />
+
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom / 100})`, transformOrigin: 'center center', transition: isPanning ? 'none' : 'transform 0.15s ease' }}>
+            {!anyDesigned && previewUrl ? (
+              <img src={previewUrl} alt="Die-cut net" style={{ maxWidth: totalW + 'px', maxHeight: totalH + 'px' }} />
+            ) : (
+              <svg data-export-net viewBox={(-pad)+" "+(-pad)+" "+(totalW+pad*2)+" "+(totalH+pad*2)} width={totalW + pad * 2} height={totalH + pad * 2}>
+                <defs>
+                  {Object.entries(pos).map(([pid, p]) => {
+                    if (p.w <= 0 || p.h <= 0) return null;
+                    return <clipPath key={"clip-"+pid} id={"clip-"+pid}><path d={pp(pid, p)} /></clipPath>;
+                  })}
+                </defs>
+                <rect x={-pad} y={-pad} width={totalW+pad*2} height={totalH+pad*2} fill="#ffffff" rx={1} />
+                {/* 접힘선 */}
+                {[
+                  [frontX, bodyY, frontX+L, bodyY], [frontX+L, bodyY, frontX+L, bodyY+D],
+                  [leftX+W, bodyY, leftX+W, bodyY+D], [backX+L, bodyY, backX+L, bodyY+D],
+                  [frontX, bottomY, frontX+L, bottomY], [leftX, bottomY, leftX+W, bottomY],
+                  [backX, bottomY, backX+L, bottomY], [rightX, bottomY, rightX+W, bottomY],
+                  [frontX, topLidY, frontX+L, topLidY], [frontX, tuckY+tuckH, frontX+L, tuckY+tuckH],
+                  [leftX, bodyY, leftX+W, bodyY], [rightX, bodyY, rightX+W, bodyY],
+                  [glueW, bodyY, glueW, bodyY+D],
+                ].map((ln, i) => (
+                  <line key={"fl"+i} x1={ln[0]} y1={ln[1]} x2={ln[2]} y2={ln[3]} stroke="#00AA00" strokeWidth={0.3} strokeDasharray="2 1" />
+                ))}
+                {/* 패널들 */}
+                {Object.entries(pos).map(([pid, p]) => {
+                  const pc = panelConfig[pid as PanelId];
+                  const d = panels[pid];
+                  if (!pc || p.w <= 0 || p.h <= 0) return null;
+                  const isHovered = hoveredPanel === pid;
+                  return (
+                    <g key={pid} className="cursor-pointer"
+                      onClick={() => onClickPanel(pid as PanelId)}
+                      onMouseEnter={() => setHoveredPanel(pid)}
+                      onMouseLeave={() => setHoveredPanel(null)}>
+                      <path d={pp(pid, p)}
+                        fill={d?.designed ? "#FAFAFA" : pc.color}
+                        stroke={isHovered ? "#2563EB" : d?.designed ? "#22C55E" : "#D1483B"}
+                        strokeWidth={isHovered ? 1.2 : d?.designed ? 0.8 : 0.5}
+                        style={{ transition: 'stroke 0.15s, stroke-width 0.15s' }} />
+                      {d?.thumbnail && (
+                        <image href={d.thumbnail} x={p.x} y={p.y} width={p.w} height={p.h} preserveAspectRatio="none" clipPath={"url(#clip-"+pid+")"} />
+                      )}
+                      {!d?.thumbnail && p.w > 10 && p.h > 6 && (
+                        <text x={p.x+p.w/2} y={p.y+p.h/2} textAnchor="middle" dominantBaseline="middle"
+                          fontSize={Math.max(Math.min(p.w*0.06, p.h*0.08, 6), 2)} fill={isHovered ? "#2563EB" : "#9CA3AF"}
+                          className="pointer-events-none select-none">{pc.name.replace(" (Main)","")}</text>
+                      )}
+                      {d?.designed && p.w > 6 && (
+                        <React.Fragment>
+                          <circle cx={p.x+p.w-3} cy={p.y+3} r={2} fill="#22C55E" />
+                          <text x={p.x+p.w-3} y={p.y+3} textAnchor="middle" dominantBaseline="central" fontSize={2} fill="white" fontWeight="bold" className="pointer-events-none">✓</text>
+                        </React.Fragment>
+                      )}
+                      {/* 호버 시 패널 이름 툴팁 */}
+                      {isHovered && (
+                        <React.Fragment>
+                          <rect x={p.x + p.w/2 - 20} y={p.y - 8} width={40} height={7} rx={1} fill="rgba(0,0,0,0.75)" />
+                          <text x={p.x + p.w/2} y={p.y - 4.5} textAnchor="middle" dominantBaseline="middle"
+                            fontSize={3.5} fill="white" className="pointer-events-none select-none">{pc.name}</text>
+                        </React.Fragment>
+                      )}
+                    </g>
+                  );
+                })}
+              </svg>
+            )}
+          </div>
+        </div>
+
+        {/* 줌 표시 */}
+        <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded">
+          {zoom}%
+        </div>
+      </div>
     </div>
   );
 }
+
 
 export default function DesignPage() {
   return (
