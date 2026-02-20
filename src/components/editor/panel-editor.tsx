@@ -1776,10 +1776,13 @@ export default function PanelEditor({
     const totalH = cellH * tableRows;
 
     // Canvas 2D로 테이블 직접 그리기
+    const scale = 3;
     const offscreen = document.createElement('canvas');
-    offscreen.width = totalW + 1;
-    offscreen.height = totalH + 1;
+    offscreen.width = (totalW + 1) * scale;
+    offscreen.height = (totalH + 1) * scale;
     const ctx = offscreen.getContext('2d')!;
+    ctx.scale(scale, scale);
+
 
     // 흰색 배경
     ctx.fillStyle = '#ffffff';
@@ -1817,9 +1820,10 @@ export default function PanelEditor({
     (fabricImg as any)._tableCols = tableCols;
     (fabricImg as any)._cellW = cellW;
     (fabricImg as any)._cellH = cellH;
-    (fabricImg as any)._cellTexts = Array.from({ length: tableRows }, () =>
-      Array.from({ length: tableCols }, () => '')
+    (fabricImg as any)._cellData = Array.from({ length: tableRows }, () =>
+      Array.from({ length: tableCols }, () => ({ text: '', align: 'left' as 'left'|'center'|'right' }))
     );
+
 
     // 더블클릭 → 셀 편집
     fabricImg.on('mousedblclick', (opt: any) => {
@@ -1831,12 +1835,12 @@ export default function PanelEditor({
       const col = Math.floor(localX / cellW);
       const row = Math.floor(localY / cellH);
       if (row < 0 || row >= tableRows || col < 0 || col >= tableCols) return;
-
-      const texts = (fabricImg as any)._cellTexts;
+      const cellData = (fabricImg as any)._cellData;
+      const cell = cellData[row][col];
       const absX = imgLeft + col * cellW * fabricImg.scaleX!;
       const absY = imgTop + row * cellH * fabricImg.scaleY!;
 
-      const tempText = new F.Textbox(texts[row][col] || '', {
+      const tempText = new F.Textbox(cell.text || '', {
         left: absX + 2,
         top: absY + 1,
         width: cellW * fabricImg.scaleX! - 4,
@@ -1848,32 +1852,64 @@ export default function PanelEditor({
         editingBorderColor: '#f97316',
         padding: 2,
         splitByGrapheme: true,
+        textAlign: cell.align || 'left',
       });
+
+      // 정렬 변경 단축키: Tab으로 순환 (left → center → right → left)
+      const handleKey = (e: KeyboardEvent) => {
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          const order: ('left'|'center'|'right')[] = ['left','center','right'];
+          const idx = order.indexOf(tempText.textAlign as any);
+          const next = order[(idx + 1) % 3];
+          tempText.set({ textAlign: next });
+          cell.align = next;
+          cv.requestRenderAll();
+        }
+      };
+      document.addEventListener('keydown', handleKey);
 
       cv.add(tempText);
       cv.setActiveObject(tempText);
       tempText.enterEditing();
 
+
       tempText.on('editing:exited', () => {
-        texts[row][col] = tempText.text || '';
+        document.removeEventListener('keydown', handleKey);
+        cell.text = tempText.text || '';
+        cell.align = tempText.textAlign as 'left'|'center'|'right';
         cv.remove(tempText);
 
-        // 테이블 이미지 다시 그리기 (입력한 텍스트 반영)
+        // 테이블 이미지 다시 그리기
         const off2 = document.createElement('canvas');
-        off2.width = totalW + 1;
-        off2.height = totalH + 1;
+        off2.width = (totalW + 1) * scale;
+        off2.height = (totalH + 1) * scale;
         const ctx2 = off2.getContext('2d')!;
+        ctx2.scale(scale, scale);
         ctx2.fillStyle = '#ffffff';
         ctx2.fillRect(0, 0, off2.width, off2.height);
 
-        // 텍스트 그리기
+        // 텍스트 그리기 (정렬 반영)
         ctx2.fillStyle = '#222222';
         ctx2.font = '11px Arial, sans-serif';
         ctx2.textBaseline = 'middle';
         for (let rr = 0; rr < tableRows; rr++) {
           for (let cc = 0; cc < tableCols; cc++) {
-            if (texts[rr][cc]) {
-              ctx2.fillText(texts[rr][cc], cc * cellW + 4, rr * cellH + cellH / 2, cellW - 8);
+            const d = cellData[rr][cc];
+            if (d.text) {
+              const align = d.align || 'left';
+              let tx = cc * cellW + 4;
+              if (align === 'center') {
+                ctx2.textAlign = 'center';
+                tx = cc * cellW + cellW / 2;
+              } else if (align === 'right') {
+                ctx2.textAlign = 'right';
+                tx = cc * cellW + cellW - 4;
+              } else {
+                ctx2.textAlign = 'left';
+                tx = cc * cellW + 4;
+              }
+              ctx2.fillText(d.text, tx, rr * cellH + cellH / 2, cellW - 8);
             }
           }
         }
