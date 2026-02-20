@@ -979,6 +979,10 @@ export default function PanelEditor({
   const [aiImgTransparent, setAiImgTransparent] = useState(true);
   const [aiImgLoading, setAiImgLoading] = useState(false);
   const [aiImgResults, setAiImgResults] = useState<string[]>([]);
+    // Barcode Generator
+    const [showBarcodePanel, setShowBarcodePanel] = useState(false);
+    const [barcodeType, setBarcodeType] = useState<'qrcode'|'ean13'|'upca'|'code128'|'code39'|'itf14'>('qrcode');
+    const [barcodeValue, setBarcodeValue] = useState('');
   // ── Space bar panning handler (capture phase to prevent scroll) ──
   useEffect(() => {
     const handleSpaceDown = (e: KeyboardEvent) => {
@@ -1659,6 +1663,35 @@ export default function PanelEditor({
     cv.renderAll();
     pushHistory();
   }, []);
+  const addBarcodeToCanvas = useCallback(async () => {
+    const cv = fcRef.current;
+    if (!cv || !barcodeValue.trim()) return;
+    try {
+      const bwipjs = (await import(/* webpackIgnore: true */ 'bwip-js' as any)).default;
+      const canvas = document.createElement('canvas');
+      bwipjs.toCanvas(canvas, {
+        bcid: barcodeType,
+        text: barcodeValue.trim(),
+        scale: 3,
+        height: barcodeType === 'qrcode' ? 30 : 12,
+        width: barcodeType === 'qrcode' ? 30 : undefined,
+        includetext: barcodeType !== 'qrcode',
+        textxalign: 'center',
+      });
+      const dataUrl = canvas.toDataURL('image/png');
+      const { FabricImage } = await import('fabric');
+      const img = await FabricImage.fromURL(dataUrl);
+      const maxSize = Math.min(cv.getWidth(), cv.getHeight()) * 0.3;
+      const scale = Math.min(maxSize / (img.width || 200), maxSize / (img.height || 200));
+      img.set({ left: cv.getWidth() / 2, top: cv.getHeight() / 2, originX: 'center', originY: 'center', scaleX: scale, scaleY: scale });
+      cv.add(img);
+      cv.setActiveObject(img);
+      cv.renderAll();
+      pushHistory();
+    } catch (e: any) {
+      alert('Barcode generation failed: ' + (e.message || 'Invalid input'));
+    }
+  }, [barcodeType, barcodeValue]);
 
 
   const applyCopyToCanvas = useCallback((field:string, value:string) => {
@@ -1853,6 +1886,44 @@ export default function PanelEditor({
         <div className="w-6 h-px bg-white/10 my-1" />
 
         <button onClick={addImage} title="Image" className="w-9 h-9 flex items-center justify-center rounded-lg text-[15px] text-gray-400 hover:text-white hover:bg-white/10 transition-all">🖼</button>
+           {/* Barcode popup */}
+           <div className="relative">
+          <button onClick={() => { setShowBarcodePanel(p => !p); setShowTextPanel(false); setShowShapePanel(false); }} title="Barcode"
+            className={`w-9 h-9 flex items-center justify-center rounded-lg text-[15px] transition-all ${showBarcodePanel ? 'text-green-400 bg-green-500/20' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M2 4h2v16H2M6 4h1v16H6M10 4h2v16h-2M15 4h1v16h-1M19 4h1v16h-1M22 4h1v16h-1"/></svg>
+          </button>
+          {showBarcodePanel && (
+            <div className="absolute left-[48px] top-0 w-[220px] bg-[#252538] border border-white/10 rounded-xl shadow-2xl z-50 p-3 space-y-2.5 max-h-[80vh] overflow-y-auto">
+              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Barcode Type</div>
+              <div className="grid grid-cols-2 gap-1">
+                {([
+                  { id: 'qrcode', label: 'QR Code' },
+                  { id: 'ean13', label: 'EAN-13' },
+                  { id: 'upca', label: 'UPC-A' },
+                  { id: 'code128', label: 'Code 128' },
+                  { id: 'code39', label: 'Code 39' },
+                  { id: 'itf14', label: 'ITF-14' },
+                ] as const).map(bt => (
+                  <button key={bt.id} onClick={() => setBarcodeType(bt.id)}
+                    className={`py-1.5 text-[9px] rounded-lg border transition-all ${barcodeType === bt.id ? 'border-green-500/50 bg-green-500/20 text-green-300 font-medium' : 'border-white/5 text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}>
+                    {bt.label}
+                  </button>
+                ))}
+              </div>
+              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Value</div>
+              <input
+                value={barcodeValue}
+                onChange={e => setBarcodeValue(e.target.value)}
+                placeholder={barcodeType === 'qrcode' ? 'URL or text' : barcodeType === 'ean13' ? '13 digits (e.g. 4901234567890)' : barcodeType === 'upca' ? '12 digits (e.g. 012345678905)' : barcodeType === 'itf14' ? '14 digits' : 'Alphanumeric value'}
+                className="w-full px-2.5 py-2 text-xs bg-white/5 border border-white/10 rounded-lg text-gray-200 placeholder-gray-600 outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/25 transition-all"
+              />
+              <button onClick={addBarcodeToCanvas} disabled={!barcodeValue.trim()}
+                className="w-full py-2 bg-gradient-to-r from-green-600 to-emerald-500 text-white text-[11px] font-semibold rounded-lg hover:from-green-500 hover:to-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-green-500/25">
+                + Add to Canvas
+              </button>
+            </div>
+          )}
+        </div>
         <button onClick={()=>{setShowRuler(r=>!r)}} title="Ruler" className={`w-9 h-9 flex items-center justify-center rounded-lg text-[15px] transition-all ${showRuler ? 'text-yellow-400 bg-yellow-500/20' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}>📏</button>
         <button onClick={toggleDraw} title="Draw" className={`w-9 h-9 flex items-center justify-center rounded-lg text-[15px] transition-all ${drawMode ? 'text-blue-400 bg-blue-500/20' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}>✏</button>
             {drawMode && (
