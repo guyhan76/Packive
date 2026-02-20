@@ -1669,15 +1669,34 @@ export default function PanelEditor({
     try {
       const bwipjs = await import('@bwip-js/browser' as any);
       const canvas = document.createElement('canvas');
-      bwipjs.toCanvas(canvas, {
+      
+      // EAN-13: 13자리면 체크디짓 제거하고 12자리만 전달 (자동 계산)
+      let val = barcodeValue.trim();
+      if (barcodeType === 'ean13' && val.length === 13) {
+        val = val.slice(0, 12);
+      }
+      if (barcodeType === 'upca' && val.length === 12) {
+        val = val.slice(0, 11);
+      }
+
+      const opts: any = {
         bcid: barcodeType,
-        text: barcodeValue.trim(),
+        text: val,
         scale: 3,
-        height: barcodeType === 'qrcode' ? 30 : 12,
-        width: barcodeType === 'qrcode' ? 30 : undefined,
         includetext: barcodeType !== 'qrcode',
         textxalign: 'center',
-      });
+      };
+      
+      // QR코드만 width/height 정사각형 설정
+      if (barcodeType === 'qrcode') {
+        opts.height = 30;
+        opts.width = 30;
+      } else {
+        opts.height = 12;
+      }
+
+      bwipjs.toCanvas(canvas, opts);
+
       const dataUrl = canvas.toDataURL('image/png');
       const { FabricImage } = await import('fabric');
       const img = await FabricImage.fromURL(dataUrl);
