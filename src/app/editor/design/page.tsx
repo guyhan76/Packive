@@ -790,11 +790,13 @@ function DesignPageInner() {
   }
 
   const cfg = panelConfig[currentView as PanelId];
+  if (!cfg) { setCurrentView("overview"); return null; }
   const currentIdx = fullOrder.indexOf(currentView as PanelId);
   return (
     <PanelEditor
       panelId={currentView}
       panelName={cfg.name}
+
       widthMM={cfg.widthMM}
       heightMM={cfg.heightMM}
       guideText={cfg.guide}
