@@ -1683,8 +1683,9 @@ export default function PanelEditor({
       if (barcodeType === 'upca' && val.length === 12) {
         val = val.slice(0, 11);
       }
-      if (barcodeType === 'itf14' && val.length === 14) {
-        val = val.slice(0, 13);
+      if (barcodeType === 'itf14') {
+        if (val.length === 14) val = val.slice(0, 13);
+        if (val.length > 13) val = val.slice(0, 13);
       }
 
       const opts: any = {
@@ -1693,6 +1694,7 @@ export default function PanelEditor({
         scale: 3,
         includetext: barcodeType !== 'qrcode',
         textxalign: 'center',
+        includecheck: true,
       };
       
       // QR코드만 width/height 정사각형 설정
