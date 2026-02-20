@@ -976,7 +976,7 @@ function FullNetPreview({ L, W, D, T, tuckH, dustH, glueW, bottomH, bottomDustH,
 
       {/* 캔버스 영역 */}
       <div ref={containerRef}
-        className="bg-gray-200 border border-t-0 border-gray-200 rounded-b-lg overflow-hidden relative"
+        className="bg-white border border-t-0 border-gray-200 rounded-b-lg overflow-hidden relative"
         style={{ height: '400px', cursor: isPanning ? 'grabbing' : 'grab' }}
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
@@ -985,7 +985,7 @@ function FullNetPreview({ L, W, D, T, tuckH, dustH, glueW, bottomH, bottomDustH,
         onMouseLeave={handleMouseUp}
       >
         {/* 체크 패턴 배경 */}
-        <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(45deg, #e5e7eb 25%, transparent 25%), linear-gradient(-45deg, #e5e7eb 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e5e7eb 75%), linear-gradient(-45deg, transparent 75%, #e5e7eb 75%)', backgroundSize: '20px 20px', backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0px' }} />
+        <div className="absolute inset-0 bg-white" />
 
         <div className="absolute inset-0 flex items-center justify-center">
           <div style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom / 100})`, transformOrigin: 'center center', transition: isPanning ? 'none' : 'transform 0.15s ease' }}>
