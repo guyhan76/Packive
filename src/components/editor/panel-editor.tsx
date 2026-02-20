@@ -1667,7 +1667,7 @@ export default function PanelEditor({
     const cv = fcRef.current;
     if (!cv || !barcodeValue.trim()) return;
     try {
-      const bwipjs = (await import(/* webpackIgnore: true */ 'bwip-js' as any)).default;
+      const bwipjs = await import('@bwip-js/browser' as any);
       const canvas = document.createElement('canvas');
       bwipjs.toCanvas(canvas, {
         bcid: barcodeType,
