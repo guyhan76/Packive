@@ -1765,51 +1765,84 @@ export default function PanelEditor({
     if (!cv) return;
     const F = await import('fabric');
 
-    // 캔버스 크기에 맞게 셀 크기 자동 조정
     const canvasW = cv.getWidth();
     const canvasH = cv.getHeight();
-    const maxTableW = canvasW * 0.7;
-    const maxTableH = canvasH * 0.5;
-    const cellW = Math.floor(Math.min(maxTableW / tableCols, 150));
-    const cellH = Math.floor(Math.min(maxTableH / tableRows, 32));
 
-    // 테이블을 그룹이 아닌 개별 객체로 추가 (더블클릭 편집 가능)
-    const startX = (canvasW - cellW * tableCols) / 2;
-    const startY = (canvasH - cellH * tableRows) / 2;
+    // 셀 크기 계산 (캔버스의 60% 이내로)
+    const maxTableW = canvasW * 0.6;
+    const maxTableH = canvasH * 0.5;
+    const cellW = Math.min(130, Math.floor(maxTableW / tableCols));
+    const cellH = Math.min(30, Math.floor(maxTableH / tableRows));
+    const totalW = cellW * tableCols;
+    const totalH = cellH * tableRows;
+
+    // 테이블 시작 좌표 (캔버스 중앙)
+    const startX = Math.round((canvasW - totalW) / 2);
+    const startY = Math.round((canvasH - totalH) / 2);
+
+    // 고유 테이블 ID (이동 시 연결용)
+    const tableId = 'table_' + Date.now();
+
+    const cellRects: any[] = [];
+    const cellTexts: any[] = [];
 
     for (let r = 0; r < tableRows; r++) {
       for (let c = 0; c < tableCols; c++) {
         const x = startX + c * cellW;
         const y = startY + r * cellH;
 
-        // 셀 테두리 (배경 없음, 흰색 통일)
+        // 셀 배경 Rect
         const rect = new F.Rect({
-          left: x, top: y, width: cellW, height: cellH,
+          left: x,
+          top: y,
+          width: cellW,
+          height: cellH,
           fill: '#ffffff',
-          stroke: '#999999', strokeWidth: 0.5,
-          selectable: false, evented: false,
-          name: `__table_cell_bg_${r}_${c}__`,
+          stroke: '#999999',
+          strokeWidth: 0.5,
+          selectable: false,
+          evented: false,
+          hoverCursor: 'default',
         });
+        (rect as any).tableId = tableId;
+        (rect as any).cellRow = r;
+        (rect as any).cellCol = c;
+        (rect as any).isTableRect = true;
         cv.add(rect);
+        cellRects.push(rect);
 
-        // 편집 가능한 빈 텍스트
-        const text = new F.IText(' ', {
-          left: x + 4, top: y + (cellH - 12) / 2,
+        // 셀 텍스트 IText
+        const txt = new F.IText(' ', {
+          left: x + 4,
+          top: y + (cellH - 12) / 2,
           fontSize: 11,
           fontFamily: 'Noto Sans KR, Arial, sans-serif',
-          fontWeight: '400',
           fill: '#222222',
           editable: true,
-          name: `__table_cell_text_${r}_${c}__`,
+          selectable: true,
+          hasControls: false,
+          hasBorders: true,
+          borderColor: '#f97316',
+          lockMovementX: true,
+          lockMovementY: true,
+          lockScalingX: true,
+          lockScalingY: true,
+          lockRotation: true,
+          width: cellW - 8,
         });
-        cv.add(text);
+        (txt as any).tableId = tableId;
+        (txt as any).cellRow = r;
+        (txt as any).cellCol = c;
+        (txt as any).isTableCell = true;
+        cv.add(txt);
+        cellTexts.push(txt);
       }
     }
 
     cv.renderAll();
     pushHistory();
 
-    // Noto Sans KR 폰트 로딩
+    // Google Fonts 로드
     const linkId = 'gf-Noto-Sans-KR';
     if (!document.getElementById(linkId)) {
       const link = document.createElement('link');
@@ -1820,6 +1853,7 @@ export default function PanelEditor({
       document.fonts.ready.then(() => cv.requestRenderAll());
     }
   }, [tableRows, tableCols]);
+
 
   /* ══════════ JSX ══════════ */
   const activeObj = fcRef.current?.getActiveObject?.();
