@@ -1023,11 +1023,15 @@ function FullNetPreview({ L, W, D, T, tuckH, dustH, glueW, bottomH, bottomDustH,
                       onClick={() => onClickPanel(pid as PanelId)}
                       onMouseEnter={() => setHoveredPanel(pid)}
                       onMouseLeave={() => setHoveredPanel(null)}>
-                      <path d={pp(pid, p)}
+                        {/* 투명 히트 영역 - 클릭/호버 감지용 */}
+                        <rect x={p.x} y={p.y} width={p.w} height={p.h} fill="transparent" />
+                        <path d={pp(pid, p)}
                         fill={d?.designed ? "#FAFAFA" : pc.color}
-                        stroke={isHovered ? "#2563EB" : d?.designed ? "#22C55E" : "#D1483B"}
-                        strokeWidth={isHovered ? 1.2 : d?.designed ? 0.8 : 0.5}
-                        style={{ transition: 'stroke 0.15s, stroke-width 0.15s' }} />
+                        fillOpacity={1}
+                        stroke={isHovered ? "#2563EB" : d?.designed ? "#22C55E" : pc.border}
+                        strokeWidth={isHovered ? 1.5 : d?.designed ? 0.8 : 0.5}
+                        style={{ transition: 'stroke 0.15s, stroke-width 0.15s', pointerEvents: 'all' }} />
+
                       {d?.thumbnail && (
                         <image href={d.thumbnail} x={p.x} y={p.y} width={p.w} height={p.h} preserveAspectRatio="none" clipPath={"url(#clip-"+pid+")"} />
                       )}
