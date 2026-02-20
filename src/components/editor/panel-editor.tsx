@@ -2092,9 +2092,31 @@ export default function PanelEditor({
               <textarea
                 value={aiImgPrompt}
                 onChange={e => setAiImgPrompt(e.target.value)}
-                placeholder={aiImgCategory === 'logo' ? 'e.g. 커피숍 로고, 미니멀 스타일' : aiImgCategory === 'product' ? 'e.g. 꿀고구마 3개, 스튜디오 촬영' : aiImgCategory === 'background' ? 'e.g. 파스텔톤 꽃 패턴' : aiImgCategory === 'icon' ? 'e.g. 유기농 인증 뱃지' : 'Describe what you want...'}
+                placeholder={
+                  locale === 'ko'
+                    ? aiImgCategory === 'logo' ? 'e.g. 커피숍 로고, 미니멀 스타일'
+                      : aiImgCategory === 'product' ? 'e.g. 꿀고구마 3개, 스튜디오 촬영'
+                      : aiImgCategory === 'background' ? 'e.g. 파스텔톤 꽃 패턴'
+                      : aiImgCategory === 'icon' ? 'e.g. 유기농 인증 뱃지'
+                      : aiImgCategory === 'illustration' ? 'e.g. 손그림 스타일 나뭇잎'
+                      : '원하는 이미지를 설명하세요...'
+                  : locale === 'ja'
+                    ? aiImgCategory === 'logo' ? 'e.g. カフェのロゴ、ミニマルスタイル'
+                      : aiImgCategory === 'product' ? 'e.g. 焼き芋3個、スタジオ撮影'
+                      : aiImgCategory === 'background' ? 'e.g. パステル調の花柄パターン'
+                      : aiImgCategory === 'icon' ? 'e.g. オーガニック認証バッジ'
+                      : aiImgCategory === 'illustration' ? 'e.g. 手描きスタイルの葉'
+                      : '欲しい画像を説明してください...'
+                  : aiImgCategory === 'logo' ? 'e.g. Coffee shop logo, minimal style'
+                      : aiImgCategory === 'product' ? 'e.g. 3 fresh apples, studio shot'
+                      : aiImgCategory === 'background' ? 'e.g. Pastel floral pattern'
+                      : aiImgCategory === 'icon' ? 'e.g. Organic certification badge'
+                      : aiImgCategory === 'illustration' ? 'e.g. Hand-drawn leaf illustration'
+                      : 'Describe what you want...'
+                }
                 className="w-full h-16 px-2.5 py-2 text-xs bg-white/5 border border-white/10 rounded-lg text-gray-200 placeholder-gray-600 outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25 transition-all resize-none"
               />
+
 
               {/* Options */}
               <label className="flex items-center gap-2 cursor-pointer">
