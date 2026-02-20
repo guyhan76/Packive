@@ -10,6 +10,12 @@ const PanelEditor = dynamic(
   () => import("@/components/editor/panel-editor"),
   { ssr: false }
 );
+
+const FullNetEditor = dynamic(
+  () => import('@/components/editor/full-net-editor'),
+  { ssr: false }
+);
+
 const Box3DPreview = dynamic(
   () => import("@/components/editor/box-3d-preview"),
   {
@@ -33,7 +39,7 @@ type PanelId =
   | "bottomFlapFront" | "bottomFlapBack"
   | "bottomDustL" | "bottomDustR"
   | "glueFlap";
-type ViewMode = "overview" | PanelId;
+  type ViewMode = "overview" | "fullNetEdit" | PanelId;
 interface PanelConfig {
   name: string;
   widthMM: number;
@@ -586,6 +592,19 @@ function DesignPageInner() {
   const topDesigned = topPanelOrder.filter((id: PanelId) => panels[id].designed).length;
   const bottomDesigned = [...bottomPanelOrder, ...extraPanelOrder].filter((id: PanelId) => panels[id].designed).length;
   const totalDesigned = bodyDesigned + topDesigned + bottomDesigned;
+  if (currentView === "fullNetEdit") {
+    return (
+      <FullNetEditor
+        L={L} W={W} D={D} T={T}
+        tuckH={tuckH} dustH={dustH} glueW={glueW}
+        bottomH={bottomH} bottomDustH={bottomDustH}
+        panels={panels} panelConfig={panelConfig}
+        onBack={() => setCurrentView("overview")}
+        onSave={handleSave}
+      />
+    );
+  }
+
   if (currentView === "overview") {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -711,6 +730,10 @@ function DesignPageInner() {
                   </div>
                 ))}
               </div>
+              <button onClick={() => setCurrentView("fullNetEdit")} className="px-4 py-2 text-sm rounded-lg font-medium bg-purple-600 text-white hover:bg-purple-700 transition shrink-0">
+                Full Net Edit
+              </button>
+
               <button onClick={() => setCurrentView("front")} className="px-4 py-2 text-sm rounded-lg font-medium bg-blue-600 text-white hover:bg-blue-700 transition shrink-0">
                 {totalDesigned === 0 ? t("ov.startDesigning") : totalDesigned < 13 ? t("ov.continue") : t("ov.reviewExport")}
               </button>
