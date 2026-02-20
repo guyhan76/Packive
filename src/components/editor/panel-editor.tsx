@@ -1775,99 +1775,139 @@ export default function PanelEditor({
     const totalW = cellW * tableCols;
     const totalH = cellH * tableRows;
 
-    // HTML 테이블 → SVG → 이미지로 변환
-    let tableHTML = `<table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:11px;">`;
-    for (let r = 0; r < tableRows; r++) {
-      tableHTML += '<tr>';
-      for (let c = 0; c < tableCols; c++) {
-        tableHTML += `<td style="width:${cellW}px;height:${cellH}px;border:1px solid #aaa;padding:2px 4px;background:#fff;">&nbsp;</td>`;
-      }
-      tableHTML += '</tr>';
+    // Canvas 2D로 테이블 직접 그리기
+    const offscreen = document.createElement('canvas');
+    offscreen.width = totalW + 1;
+    offscreen.height = totalH + 1;
+    const ctx = offscreen.getContext('2d')!;
+
+    // 흰색 배경
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, offscreen.width, offscreen.height);
+
+    // 셀 테두리
+    ctx.strokeStyle = '#aaaaaa';
+    ctx.lineWidth = 1;
+    for (let r = 0; r <= tableRows; r++) {
+      const y = r * cellH + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(totalW, y);
+      ctx.stroke();
     }
-    tableHTML += '</table>';
+    for (let c = 0; c <= tableCols; c++) {
+      const x = c * cellW + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, totalH);
+      ctx.stroke();
+    }
 
-    const svgData = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="${totalW + 2}" height="${totalH + 2}">
-        <foreignObject width="100%" height="100%">
-          <div xmlns="http://www.w3.org/1999/xhtml">${tableHTML}</div>
-        </foreignObject>
-      </svg>`;
+    const dataUrl = offscreen.toDataURL('image/png');
 
-    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(svgBlob);
+    const fabricImg = await F.FabricImage.fromURL(dataUrl);
+    fabricImg.set({
+      left: canvasW / 2,
+      top: canvasH / 2,
+      originX: 'center',
+      originY: 'center',
+    });
+    (fabricImg as any)._isTable = true;
+    (fabricImg as any)._tableRows = tableRows;
+    (fabricImg as any)._tableCols = tableCols;
+    (fabricImg as any)._cellW = cellW;
+    (fabricImg as any)._cellH = cellH;
+    (fabricImg as any)._cellTexts = Array.from({ length: tableRows }, () =>
+      Array.from({ length: tableCols }, () => '')
+    );
 
-    const img = new Image();
-    img.onload = () => {
-      const canvas2d = document.createElement('canvas');
-      canvas2d.width = totalW + 2;
-      canvas2d.height = totalH + 2;
-      const ctx2d = canvas2d.getContext('2d')!;
-      ctx2d.drawImage(img, 0, 0);
-      URL.revokeObjectURL(url);
+    // 더블클릭 → 셀 편집
+    fabricImg.on('mousedblclick', (opt: any) => {
+      const pointer = cv.getScenePoint(opt.e);
+      const imgLeft = fabricImg.left! - (fabricImg.width! * fabricImg.scaleX!) / 2;
+      const imgTop = fabricImg.top! - (fabricImg.height! * fabricImg.scaleY!) / 2;
+      const localX = (pointer.x - imgLeft) / fabricImg.scaleX!;
+      const localY = (pointer.y - imgTop) / fabricImg.scaleY!;
+      const col = Math.floor(localX / cellW);
+      const row = Math.floor(localY / cellH);
+      if (row < 0 || row >= tableRows || col < 0 || col >= tableCols) return;
 
-      const dataUrl = canvas2d.toDataURL('image/png');
+      const texts = (fabricImg as any)._cellTexts;
+      const absX = imgLeft + col * cellW * fabricImg.scaleX!;
+      const absY = imgTop + row * cellH * fabricImg.scaleY!;
 
-      F.FabricImage.fromURL(dataUrl).then((fabricImg: any) => {
-        fabricImg.set({
-          left: canvasW / 2,
-          top: canvasH / 2,
-          originX: 'center',
-          originY: 'center',
-        });
-        (fabricImg as any)._isTable = true;
-        (fabricImg as any)._tableRows = tableRows;
-        (fabricImg as any)._tableCols = tableCols;
-        (fabricImg as any)._cellW = cellW;
-        (fabricImg as any)._cellH = cellH;
-
-        // 더블클릭 → 셀 편집
-        fabricImg.on('mousedblclick', (opt: any) => {
-          const pointer = cv.getScenePoint(opt.e);
-          const imgLeft = fabricImg.left - (fabricImg.width * fabricImg.scaleX) / 2;
-          const imgTop = fabricImg.top - (fabricImg.height * fabricImg.scaleY) / 2;
-          const localX = (pointer.x - imgLeft) / fabricImg.scaleX;
-          const localY = (pointer.y - imgTop) / fabricImg.scaleY;
-          const col = Math.floor(localX / cellW);
-          const row = Math.floor(localY / cellH);
-          if (row < 0 || row >= tableRows || col < 0 || col >= tableCols) return;
-
-          const absX = imgLeft + col * cellW * fabricImg.scaleX;
-          const absY = imgTop + row * cellH * fabricImg.scaleY;
-
-          const tempText = new F.Textbox('', {
-            left: absX + 4,
-            top: absY + 2,
-            width: cellW * fabricImg.scaleX - 8,
-            fontSize: Math.round(11 * fabricImg.scaleY),
-            fontFamily: 'Arial, sans-serif',
-            fill: '#222222',
-            backgroundColor: '#fffde7',
-            borderColor: '#f97316',
-            editingBorderColor: '#f97316',
-            padding: 2,
-            splitByGrapheme: true,
-          });
-
-          cv.add(tempText);
-          cv.setActiveObject(tempText);
-          tempText.enterEditing();
-
-          tempText.on('editing:exited', () => {
-            cv.remove(tempText);
-            cv.setActiveObject(fabricImg);
-            cv.requestRenderAll();
-            pushHistory();
-          });
-        });
-
-        cv.add(fabricImg);
-        cv.setActiveObject(fabricImg);
-        cv.renderAll();
-        pushHistory();
+      const tempText = new F.Textbox(texts[row][col] || '', {
+        left: absX + 2,
+        top: absY + 1,
+        width: cellW * fabricImg.scaleX! - 4,
+        fontSize: Math.round(11 * fabricImg.scaleY!),
+        fontFamily: 'Arial, sans-serif',
+        fill: '#222222',
+        backgroundColor: '#fffde7',
+        borderColor: '#f97316',
+        editingBorderColor: '#f97316',
+        padding: 2,
+        splitByGrapheme: true,
       });
-    };
-    img.src = url;
+
+      cv.add(tempText);
+      cv.setActiveObject(tempText);
+      tempText.enterEditing();
+
+      tempText.on('editing:exited', () => {
+        texts[row][col] = tempText.text || '';
+        cv.remove(tempText);
+
+        // 테이블 이미지 다시 그리기 (입력한 텍스트 반영)
+        const off2 = document.createElement('canvas');
+        off2.width = totalW + 1;
+        off2.height = totalH + 1;
+        const ctx2 = off2.getContext('2d')!;
+        ctx2.fillStyle = '#ffffff';
+        ctx2.fillRect(0, 0, off2.width, off2.height);
+
+        // 텍스트 그리기
+        ctx2.fillStyle = '#222222';
+        ctx2.font = '11px Arial, sans-serif';
+        ctx2.textBaseline = 'middle';
+        for (let rr = 0; rr < tableRows; rr++) {
+          for (let cc = 0; cc < tableCols; cc++) {
+            if (texts[rr][cc]) {
+              ctx2.fillText(texts[rr][cc], cc * cellW + 4, rr * cellH + cellH / 2, cellW - 8);
+            }
+          }
+        }
+
+        // 테두리 그리기
+        ctx2.strokeStyle = '#aaaaaa';
+        ctx2.lineWidth = 1;
+        for (let rr = 0; rr <= tableRows; rr++) {
+          const yy = rr * cellH + 0.5;
+          ctx2.beginPath(); ctx2.moveTo(0, yy); ctx2.lineTo(totalW, yy); ctx2.stroke();
+        }
+        for (let cc = 0; cc <= tableCols; cc++) {
+          const xx = cc * cellW + 0.5;
+          ctx2.beginPath(); ctx2.moveTo(xx, 0); ctx2.lineTo(xx, totalH); ctx2.stroke();
+        }
+
+        const newUrl = off2.toDataURL('image/png');
+        const htmlImg = new Image();
+        htmlImg.onload = () => {
+          fabricImg.setElement(htmlImg);
+          cv.setActiveObject(fabricImg);
+          cv.requestRenderAll();
+          pushHistory();
+        };
+        htmlImg.src = newUrl;
+      });
+    });
+
+    cv.add(fabricImg);
+    cv.setActiveObject(fabricImg);
+    cv.renderAll();
+    pushHistory();
   }, [tableRows, tableCols]);
+
 
   // Draw rulers matching canvas pixel size to physical mm
   const drawRulers = useCallback(() => {
