@@ -964,7 +964,7 @@ export default function PanelEditor({
   const [color, setColor] = useState('#000000');
   const [fSize, setFSize] = useState(24);
   const [selectedFont, setSelectedFont] = useState('Arial, sans-serif');
-  const [aiTab, setAiTab] = useState<'templates' | 'copy' | 'review' | 'layers' | 'history'>('templates');
+  const [aiTab, setAiTab] = useState<'templates' | 'copy' | 'review' | 'image' | 'layers' | 'history'>('templates');
   const [layersList, setLayersList] = useState<{id:string;type:string;name:string;visible:boolean;locked:boolean}[]>([]);
   const [historyThumbs, setHistoryThumbs] = useState<{idx:number;thumb:string;time:string}[]>([]);
   const [historyIdx, setHistoryIdx] = useState(0);
@@ -973,7 +973,12 @@ export default function PanelEditor({
   const zoomRef = useRef(100);
   const [showMinimap, setShowMinimap] = useState(false);
   const isPanningRef = useRef(false);
-
+  // AI Image Generation
+  const [aiImgCategory, setAiImgCategory] = useState<'logo'|'product'|'background'|'illustration'|'icon'|'free'>('product');
+  const [aiImgPrompt, setAiImgPrompt] = useState('');
+  const [aiImgTransparent, setAiImgTransparent] = useState(true);
+  const [aiImgLoading, setAiImgLoading] = useState(false);
+  const [aiImgResults, setAiImgResults] = useState<string[]>([]);
   // ── Space bar panning handler (capture phase to prevent scroll) ──
   useEffect(() => {
     const handleSpaceDown = (e: KeyboardEvent) => {
@@ -1620,6 +1625,40 @@ export default function PanelEditor({
     setReviewLoading(false);
   }, []);
 
+  const handleAiImage = useCallback(async () => {
+    if (!aiImgPrompt.trim() || aiImgLoading) return;
+    setAiImgLoading(true);
+    try {
+      const r = await fetch('/api/ai/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: aiImgCategory, prompt: aiImgPrompt, transparent: aiImgTransparent }),
+      });
+      const data = await r.json();
+      if (data.error) throw new Error(data.error);
+      if (data.image) {
+        setAiImgResults(prev => [data.image, ...prev].slice(0, 12));
+      }
+    } catch (e: any) {
+      alert('Image generation failed: ' + (e.message || 'Unknown error'));
+    } finally {
+      setAiImgLoading(false);
+    }
+  }, [aiImgPrompt, aiImgCategory, aiImgTransparent, aiImgLoading]);
+
+  const addAiImageToCanvas = useCallback(async (src: string) => {
+    const cv = fcRef.current;
+    if (!cv) return;
+    const { FabricImage } = await import('fabric');
+    const img = await FabricImage.fromURL(src);
+    const maxSize = Math.min(cv.getWidth(), cv.getHeight()) * 0.5;
+    const scale = Math.min(maxSize / (img.width || 300), maxSize / (img.height || 300));
+    img.set({ left: cv.getWidth() / 2, top: cv.getHeight() / 2, originX: 'center', originY: 'center', scaleX: scale, scaleY: scale });
+    cv.add(img);
+    cv.setActiveObject(img);
+    cv.renderAll();
+    pushHistory();
+  }, []);
 
 
   const applyCopyToCanvas = useCallback((field:string, value:string) => {
@@ -1962,10 +2001,12 @@ export default function PanelEditor({
       <div className="w-[280px] bg-[#252536] flex flex-col overflow-hidden shrink-0 border-l border-white/5">
         {/* Tabs */}
         <div className="flex shrink-0 border-b border-white/5">
-          {(['templates','copy','review','layers','history'] as const).map(tab => (
+        {(['templates','copy','review','image','layers','history'] as const).map(tab => (
+
             <button key={tab} onClick={()=>setAiTab(tab)}
               className={`flex-1 py-2 text-[10px] font-medium transition-all ${aiTab===tab ? 'text-blue-400 border-b-2 border-blue-400 bg-white/5' : 'text-gray-500 hover:text-gray-300'}`}>
-              {tab==='templates'?'🎨':tab==='copy'?'✍':tab==='review'?'🔍':tab==='layers'?'◫':'⏱'}<br/>{t('tab.'+tab)}
+                            {tab==='templates'?'🎨':tab==='copy'?'✍️':tab==='review'?'🔍':tab==='image'?'🖼️':tab==='layers'?'📑':'⏱️'}<br/>{tab==='image'?'AI Image':t('tab.'+tab)}
+
             </button>
           ))}
         </div>
@@ -2024,6 +2065,75 @@ export default function PanelEditor({
               )}
             </div>
           )}
+
+          {/* 🖼️ AI Image 🖼️ */}
+          {aiTab === 'image' && (
+            <div className="p-3 space-y-2.5">
+              {/* Category */}
+              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Category</div>
+              <div className="grid grid-cols-3 gap-1">
+                {([
+                  { id: 'logo', icon: '✦', label: 'Logo' },
+                  { id: 'product', icon: '📦', label: 'Product' },
+                  { id: 'background', icon: '🎨', label: 'Background' },
+                  { id: 'illustration', icon: '🖌️', label: 'Illustration' },
+                  { id: 'icon', icon: '⭐', label: 'Icon' },
+                  { id: 'free', icon: '✨', label: 'Free' },
+                ] as const).map(cat => (
+                  <button key={cat.id} onClick={() => setAiImgCategory(cat.id)}
+                    className={`py-1.5 text-[9px] rounded-lg border transition-all ${aiImgCategory === cat.id ? 'border-blue-500/50 bg-blue-500/20 text-blue-300' : 'border-white/5 text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}>
+                    <span className="block text-sm">{cat.icon}</span>{cat.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Prompt */}
+              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Describe Image</div>
+              <textarea
+                value={aiImgPrompt}
+                onChange={e => setAiImgPrompt(e.target.value)}
+                placeholder={aiImgCategory === 'logo' ? 'e.g. 커피숍 로고, 미니멀 스타일' : aiImgCategory === 'product' ? 'e.g. 꿀고구마 3개, 스튜디오 촬영' : aiImgCategory === 'background' ? 'e.g. 파스텔톤 꽃 패턴' : aiImgCategory === 'icon' ? 'e.g. 유기농 인증 뱃지' : 'Describe what you want...'}
+                className="w-full h-16 px-2.5 py-2 text-xs bg-white/5 border border-white/10 rounded-lg text-gray-200 placeholder-gray-600 outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25 transition-all resize-none"
+              />
+
+              {/* Options */}
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={aiImgTransparent} onChange={e => setAiImgTransparent(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded border-white/20 bg-white/5 text-blue-500 focus:ring-blue-500/25" />
+                <span className="text-[10px] text-gray-400">Transparent background (PNG)</span>
+              </label>
+
+              {/* Generate Button */}
+              <button onClick={handleAiImage} disabled={aiImgLoading || !aiImgPrompt.trim()}
+                className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-blue-500 text-white text-xs font-semibold rounded-lg hover:from-purple-500 hover:to-blue-400 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-purple-500/25">
+                {aiImgLoading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Generating...
+                  </span>
+                ) : '🖼️ Generate AI Image'}
+              </button>
+
+              {/* Results */}
+              {aiImgResults.length > 0 && (
+                <div>
+                  <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Results (click to add)</div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {aiImgResults.map((src, i) => (
+                      <button key={i} onClick={() => addAiImageToCanvas(src)}
+                        className="relative rounded-lg border border-white/10 hover:border-blue-500/50 overflow-hidden group transition-all hover:shadow-lg hover:shadow-blue-500/10">
+                        <img src={src} alt={`AI ${i}`} className="w-full aspect-square object-contain bg-[#1a1a2e]" />
+                        <div className="absolute inset-0 bg-blue-500/0 group-hover:bg-blue-500/10 flex items-center justify-center transition-all">
+                          <span className="text-white text-[10px] font-medium opacity-0 group-hover:opacity-100 bg-black/50 px-2 py-0.5 rounded">+ Add</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
 
           {/* ─ Layers ─ */}
           {aiTab === 'layers' && (
