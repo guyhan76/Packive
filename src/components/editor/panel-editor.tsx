@@ -983,7 +983,12 @@ export default function PanelEditor({
     const [showBarcodePanel, setShowBarcodePanel] = useState(false);
     const [barcodeType, setBarcodeType] = useState<'qrcode'|'ean13'|'upca'|'code128'|'code39'|'itf14'>('qrcode');
     const [barcodeValue, setBarcodeValue] = useState('');
-  // ── Space bar panning handler (capture phase to prevent scroll) ──
+     // Table Generator
+  const [showTablePanel, setShowTablePanel] = useState(false);
+  const [tableRows, setTableRows] = useState(4);
+  const [tableCols, setTableCols] = useState(2);
+
+    // ── Space bar panning handler (capture phase to prevent scroll) ──
   useEffect(() => {
     const handleSpaceDown = (e: KeyboardEvent) => {
       if (e.code !== "Space") return;
@@ -1750,6 +1755,67 @@ export default function PanelEditor({
     inp.onchange = async (e:any) => { const file=e.target.files?.[0]; if(!file) return; const reader=new FileReader(); reader.onload=async()=>{ try { const json=JSON.parse(reader.result as string); const c=fcRef.current; if(!c) return; await c.loadFromJSON(json); c.getObjects().forEach((o:any)=>{if(o.name==='__bgImage__'){o._isBgImage=true;o.set({selectable:false,evented:false})}}); c.renderAll(); refreshLayers(); pushHistory(); } catch{alert('Load failed')} }; reader.readAsText(file); };
     inp.click();
   }, [refreshLayers]);
+  const addTableToCanvas = useCallback(async () => {
+    const cv = fcRef.current;
+    if (!cv) return;
+    const F = await import('fabric');
+
+    const cellW = 120;
+    const cellH = 28;
+    const totalW = cellW * tableCols;
+    const totalH = cellH * tableRows;
+    const objects: any[] = [];
+
+    for (let r = 0; r < tableRows; r++) {
+      for (let c = 0; c < tableCols; c++) {
+        const x = c * cellW;
+        const y = r * cellH;
+
+        // 셀 테두리
+        objects.push(new F.Rect({
+          left: x, top: y, width: cellW, height: cellH,
+          fill: r === 0 ? '#e8e8e8' : '#ffffff',
+          stroke: '#888888', strokeWidth: 0.5,
+          selectable: false, evented: false,
+        }));
+
+        // 빈 텍스트 (사용자가 더블클릭으로 편집)
+        objects.push(new F.IText(' ', {
+          left: x + 6, top: y + 6,
+          fontSize: 10,
+          fontFamily: 'Noto Sans KR, Arial, sans-serif',
+          fontWeight: r === 0 ? '700' : '400',
+          fill: '#222222',
+          width: cellW - 12,
+          editable: true,
+        }));
+      }
+    }
+
+    const group = new F.Group(objects, {
+      left: cv.getWidth() / 2,
+      top: cv.getHeight() / 2,
+      originX: 'center',
+      originY: 'center',
+      subTargetCheck: true,
+    });
+
+    cv.add(group);
+    cv.setActiveObject(group);
+    cv.renderAll();
+    pushHistory();
+
+    // Noto Sans KR 폰트 로딩
+    const linkId = 'gf-Noto-Sans-KR';
+    if (!document.getElementById(linkId)) {
+      const link = document.createElement('link');
+      link.id = linkId;
+      link.rel = 'stylesheet';
+      link.href = 'https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700&display=swap';
+      document.head.appendChild(link);
+      document.fonts.ready.then(() => cv.requestRenderAll());
+    }
+  }, [tableRows, tableCols]);
 
   /* ══════════ JSX ══════════ */
   const activeObj = fcRef.current?.getActiveObject?.();
@@ -1943,6 +2009,58 @@ export default function PanelEditor({
             </div>
           )}
         </div>
+                {/* Table popup */}
+                <div className="relative">
+          <button onClick={() => { setShowTablePanel(p => !p); setShowTextPanel(false); setShowShapePanel(false); setShowBarcodePanel(false); }} title="Table"
+            className={`w-9 h-9 flex items-center justify-center rounded-lg text-[15px] transition-all ${showTablePanel ? 'text-orange-400 bg-orange-500/20' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="1"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+          </button>
+          {showTablePanel && (
+            <div className="absolute left-[48px] top-0 w-[220px] bg-[#252538] border border-white/10 rounded-xl shadow-2xl z-50 p-3 space-y-3 max-h-[80vh] overflow-y-auto">
+              <div className="text-[10px] font-bold text-gray-300">Insert Table</div>
+
+              {/* Grid Selector */}
+              <div className="text-[9px] text-gray-400 mb-1">{tableRows} × {tableCols}</div>
+              <div className="inline-grid gap-[3px]" style={{ gridTemplateColumns: `repeat(6, 1fr)` }}>
+                {Array.from({ length: 48 }, (_, i) => {
+                  const r = Math.floor(i / 6) + 1;
+                  const c = (i % 6) + 1;
+                  const active = r <= tableRows && c <= tableCols;
+                  return (
+                    <div key={i}
+                      onMouseEnter={() => { setTableRows(r); setTableCols(c); }}
+                      onClick={() => { addTableToCanvas(); setShowTablePanel(false); }}
+                      className={`w-5 h-5 rounded-[3px] border cursor-pointer transition-all ${active ? 'bg-orange-500/40 border-orange-400/60' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+                    />
+                  );
+                })}
+              </div>
+
+              {/* Manual input */}
+              <div className="border-t border-white/10 pt-2">
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Or set manually</div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <label className="text-[8px] text-gray-500">Rows</label>
+                    <input type="number" min="1" max="20" value={tableRows} onChange={e => setTableRows(Math.max(1, Math.min(20, Number(e.target.value))))}
+                      className="w-full px-2 py-1 text-xs bg-white/5 border border-white/10 rounded text-gray-200 outline-none focus:border-orange-500/50" />
+                  </div>
+                  <span className="text-gray-600 mt-3">×</span>
+                  <div className="flex-1">
+                    <label className="text-[8px] text-gray-500">Cols</label>
+                    <input type="number" min="1" max="8" value={tableCols} onChange={e => setTableCols(Math.max(1, Math.min(8, Number(e.target.value))))}
+                      className="w-full px-2 py-1 text-xs bg-white/5 border border-white/10 rounded text-gray-200 outline-none focus:border-orange-500/50" />
+                  </div>
+                </div>
+                <button onClick={() => { addTableToCanvas(); setShowTablePanel(false); }}
+                  className="w-full mt-2 py-2 bg-gradient-to-r from-orange-600 to-amber-500 text-white text-[11px] font-semibold rounded-lg hover:from-orange-500 hover:to-amber-400 transition-all shadow-lg shadow-orange-500/25">
+                  + Insert Table
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         <button onClick={()=>{setShowRuler(r=>!r)}} title="Ruler" className={`w-9 h-9 flex items-center justify-center rounded-lg text-[15px] transition-all ${showRuler ? 'text-yellow-400 bg-yellow-500/20' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}>📏</button>
         <button onClick={toggleDraw} title="Draw" className={`w-9 h-9 flex items-center justify-center rounded-lg text-[15px] transition-all ${drawMode ? 'text-blue-400 bg-blue-500/20' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}>✏</button>
             {drawMode && (
