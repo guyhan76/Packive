@@ -1291,7 +1291,9 @@ export default function PanelEditor({
         height: canvasH,
         backgroundColor: '#FFFFFF',
         selection: true,
+        perPixelTargetFind: false,
       });
+
       fcRef.current = canvas;
       scaleRef.current = canvasW / widthMM;
 
@@ -1810,14 +1812,15 @@ export default function PanelEditor({
         (rect as any).isTableRect = true;
         cv.add(rect);
         cellRects.push(rect);
-
-        // 셀 텍스트 IText
-        const txt = new F.IText(' ', {
-          left: x + 4,
-          top: y + (cellH - 12) / 2,
+        // 셀 텍스트 Textbox (클릭 영역 확보)
+        const txt = new F.Textbox('  ', {
+          left: x,
+          top: y,
           fontSize: 11,
           fontFamily: 'Noto Sans KR, Arial, sans-serif',
           fill: '#222222',
+          width: cellW,
+          height: cellH,
           editable: true,
           selectable: true,
           hasControls: false,
@@ -1828,8 +1831,11 @@ export default function PanelEditor({
           lockScalingX: true,
           lockScalingY: true,
           lockRotation: true,
-          width: cellW - 8,
+          splitByGrapheme: true,
+          padding: 4,
+          backgroundColor: 'rgba(255,255,255,0.01)',
         });
+
         (txt as any).tableId = tableId;
         (txt as any).cellRow = r;
         (txt as any).cellCol = c;
