@@ -1814,7 +1814,10 @@ export default function PanelEditor({
       top: canvasH / 2,
       originX: 'center',
       originY: 'center',
+      scaleX: 1 / scale,
+      scaleY: 1 / scale,
     });
+
     (fabricImg as any)._isTable = true;
     (fabricImg as any)._tableRows = tableRows;
     (fabricImg as any)._tableCols = tableCols;
@@ -1830,21 +1833,23 @@ export default function PanelEditor({
       const pointer = cv.getScenePoint(opt.e);
       const imgLeft = fabricImg.left! - (fabricImg.width! * fabricImg.scaleX!) / 2;
       const imgTop = fabricImg.top! - (fabricImg.height! * fabricImg.scaleY!) / 2;
-      const localX = (pointer.x - imgLeft) / fabricImg.scaleX!;
-      const localY = (pointer.y - imgTop) / fabricImg.scaleY!;
+      const localX = (pointer.x - imgLeft) / fabricImg.scaleX! / scale;
+      const localY = (pointer.y - imgTop) / fabricImg.scaleY! / scale;
       const col = Math.floor(localX / cellW);
       const row = Math.floor(localY / cellH);
+
       if (row < 0 || row >= tableRows || col < 0 || col >= tableCols) return;
       const cellData = (fabricImg as any)._cellData;
       const cell = cellData[row][col];
-      const absX = imgLeft + col * cellW * fabricImg.scaleX!;
-      const absY = imgTop + row * cellH * fabricImg.scaleY!;
+      const absX = imgLeft + col * cellW * fabricImg.scaleX! * scale;
+      const absY = imgTop + row * cellH * fabricImg.scaleY! * scale;
 
       const tempText = new F.Textbox(cell.text || '', {
         left: absX + 2,
         top: absY + 1,
-        width: cellW * fabricImg.scaleX! - 4,
-        fontSize: Math.round(11 * fabricImg.scaleY!),
+        width: cellW * fabricImg.scaleX! * scale - 4,
+        fontSize: Math.round(11 * fabricImg.scaleY! * scale),
+
         fontFamily: 'Arial, sans-serif',
         fill: '#222222',
         backgroundColor: '#fffde7',
