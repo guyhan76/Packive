@@ -259,199 +259,223 @@ function DesignPageInner() {
     setExporting(null);
   }, [boxType, boxTypeDisplay, L, W, D, T, tuckH, dustH, glueW, bottomH, bottomDustH, matLabel, panels, panelConfig]);
 
-  // ── Enhanced PDF Export: Per-panel pages with bleed ──
-  const exportPDFEnhanced = useCallback(async () => {
-    setExporting("pdf-enhanced");
-    try {
-      const { jsPDF } = await import("jspdf");
-      const BLEED = 5; // mm standard bleed
-      const GLUE_BLEED = 10; // mm for glue flap
-      const DPI = 300;
-      const MM_TO_PT = 72 / 25.4; // 1mm = 2.835pt
-
-      // --- Page 1: Full net layout with bleed ---
-      const fX = glueW + T;
-      const lX = fX + L + T;
-      const bX = lX + W + T;
-      const rX = bX + L + T;
-      const tW = rX + W;
-      const tlY = tuckH + T;
-      const bY = tlY + W;
-      const btY = bY + D + T;
-      const tH = btY + Math.max(bottomH, bottomDustH);
-      const mg = BLEED + 5; // bleed + safety margin
-      const pW = tW + mg * 2;
-      const pH = tH + mg * 2;
-
-      const doc = new jsPDF({
-        orientation: pW > pH ? "landscape" : "portrait",
-        unit: "mm",
-        format: [Math.max(pW, pH), Math.min(pW, pH)],
-      });
-
-      // White background
-      doc.setFillColor(255, 255, 255);
-      doc.rect(0, 0, pW, pH, "F");
-
-      const positions: Record<string, { x: number; y: number; w: number; h: number }> = {
-        topTuck: { x: fX, y: 0, w: L, h: tuckH },
-        topLid: { x: fX, y: tlY, w: L, h: W },
-        topDustL: { x: lX, y: bY - dustH, w: W, h: dustH },
-        topDustR: { x: rX, y: bY - dustH, w: W, h: dustH },
-        glueFlap: { x: 0, y: bY, w: glueW, h: D },
-        front: { x: fX, y: bY, w: L, h: D },
-        left: { x: lX, y: bY, w: W, h: D },
-        back: { x: bX, y: bY, w: L, h: D },
-        right: { x: rX, y: bY, w: W, h: D },
-        bottomFlapFront: { x: fX, y: btY, w: L, h: bottomH },
-        bottomDustL: { x: lX, y: btY, w: W, h: bottomDustH },
-        bottomFlapBack: { x: bX, y: btY, w: L, h: bottomH },
-        bottomDustR: { x: rX, y: btY, w: W, h: bottomDustH },
-      };
-
-      for (const [pid, p] of Object.entries(positions)) {
-        const px = mg + p.x;
-        const py = mg + p.y;
-        const pnl = panels[pid];
-        const pc = panelConfig[pid as PanelId];
-        if (p.w <= 0 || p.h <= 0) continue;
-
-        // Draw bleed area (light red dashed)
-        const bl = pid === "glueFlap" ? GLUE_BLEED : BLEED;
-        doc.setDrawColor(255, 200, 200);
-        doc.setLineWidth(0.15);
-        doc.setLineDashPattern([1, 1], 0);
-        doc.rect(px - bl, py - bl, p.w + bl * 2, p.h + bl * 2);
-
-        // Draw panel border
-        doc.setDrawColor(200, 200, 200);
+    // ── Enhanced PDF Export: High-res with die lines, fold lines, bleed ──
+    const exportPDFEnhanced = useCallback(async () => {
+      setExporting("pdf-enhanced");
+      try {
+        const { jsPDF } = await import("jspdf");
+        const { Canvas: FabricCanvas } = await import("fabric");
+        const BLEED = 3; // mm
+        const GLUE_BLEED = 5;
+        const MULTIPLIER = 3; // 3x resolution for high quality
+  
+        const fX = glueW + T;
+        const lX = fX + L + T;
+        const bX = lX + W + T;
+        const rX = bX + L + T;
+        const tW = rX + W;
+        const tlY = tuckH + T;
+        const bY = tlY + W;
+        const btY = bY + D + T;
+        const tH = btY + Math.max(bottomH, bottomDustH);
+        const mg = BLEED + 8;
+        const pW = tW + mg * 2;
+        const pH = tH + mg * 2 + 12; // extra for footer
+  
+        const doc = new jsPDF({
+          orientation: pW > pH ? "landscape" : "portrait",
+          unit: "mm",
+          format: [Math.max(pW, pH), Math.min(pW, pH)],
+        });
+  
+        doc.setFillColor(255, 255, 255);
+        doc.rect(0, 0, pW + 50, pH + 50, "F");
+  
+        const positions: Record<string, { x: number; y: number; w: number; h: number }> = {
+          topTuck: { x: fX, y: 0, w: L, h: tuckH },
+          topLid: { x: fX, y: tlY, w: L, h: W },
+          topDustL: { x: lX, y: bY - dustH, w: W, h: dustH },
+          topDustR: { x: rX, y: bY - dustH, w: W, h: dustH },
+          glueFlap: { x: 0, y: bY, w: glueW, h: D },
+          front: { x: fX, y: bY, w: L, h: D },
+          left: { x: lX, y: bY, w: W, h: D },
+          back: { x: bX, y: bY, w: L, h: D },
+          right: { x: rX, y: bY, w: W, h: D },
+          bottomFlapFront: { x: fX, y: btY, w: L, h: bottomH },
+          bottomDustL: { x: lX, y: btY, w: W, h: bottomDustH },
+          bottomFlapBack: { x: bX, y: btY, w: L, h: bottomH },
+          bottomDustR: { x: rX, y: btY, w: W, h: bottomDustH },
+        };
+  
+        // Helper: render panel JSON to high-res data URL
+        const renderPanel = async (json: string, wMM: number, hMM: number): Promise<string | null> => {
+          try {
+            const pxW = wMM * MULTIPLIER;
+            const pxH = hMM * MULTIPLIER;
+            const offCanvas = document.createElement("canvas");
+            offCanvas.width = pxW;
+            offCanvas.height = pxH;
+            const fc = new FabricCanvas(offCanvas, { width: pxW, height: pxH, backgroundColor: "#ffffff" });
+            const data = JSON.parse(json);
+            const scaleX = pxW / (data.width || pxW);
+            const scaleY = pxH / (data.height || pxH);
+            await new Promise<void>((resolve) => {
+              fc.loadFromJSON(data).then(() => {
+                fc.getObjects().forEach((obj: any) => {
+                  if (obj._isSafeZone || obj._isGuideLine || obj._isGuideText || obj._isSizeLabel || obj._isBgPattern) {
+                    fc.remove(obj);
+                  }
+                });
+                fc.setDimensions({ width: pxW, height: pxH });
+                fc.getObjects().forEach((obj: any) => {
+                  obj.set({
+                    left: (obj.left || 0) * scaleX,
+                    top: (obj.top || 0) * scaleY,
+                    scaleX: (obj.scaleX || 1) * scaleX,
+                    scaleY: (obj.scaleY || 1) * scaleY,
+                  });
+                  obj.setCoords();
+                });
+                fc.renderAll();
+                resolve();
+              });
+            });
+            const url = fc.toDataURL({ format: "png", multiplier: 1 });
+            fc.dispose();
+            return url;
+          } catch (e) {
+            console.warn("renderPanel failed", e);
+            return null;
+          }
+        };
+  
+        // Render all designed panels at high resolution
+        for (const [pid, p] of Object.entries(positions)) {
+          const px = mg + p.x;
+          const py = mg + p.y;
+          const pnl = panels[pid];
+          const pc = panelConfig[pid as PanelId];
+          if (p.w <= 0 || p.h <= 0) continue;
+  
+          // Panel background white
+          doc.setFillColor(255, 255, 255);
+          doc.rect(px, py, p.w, p.h, "F");
+  
+          // High-res panel image
+          if (pnl?.designed && pnl.json) {
+            const hiRes = await renderPanel(pnl.json, p.w, p.h);
+            if (hiRes) {
+              try { doc.addImage(hiRes, "PNG", px, py, p.w, p.h); } catch (e) { console.warn(e); }
+            } else if (pnl.thumbnail) {
+              try { doc.addImage(pnl.thumbnail, "PNG", px, py, p.w, p.h); } catch (e) { console.warn(e); }
+            }
+          } else if (pnl?.thumbnail) {
+            try { doc.addImage(pnl.thumbnail, "PNG", px, py, p.w, p.h); } catch (e) { console.warn(e); }
+          }
+        }
+  
+        // === BLEED lines (green, solid) ===
+        doc.setDrawColor(0, 180, 0);
+        doc.setLineWidth(0.2);
+        doc.setLineDashPattern([], 0);
+        for (const [pid, p] of Object.entries(positions)) {
+          if (p.w <= 0 || p.h <= 0) continue;
+          const bl = pid === "glueFlap" ? GLUE_BLEED : BLEED;
+          const px = mg + p.x;
+          const py = mg + p.y;
+          doc.rect(px - bl, py - bl, p.w + bl * 2, p.h + bl * 2);
+        }
+  
+        // === DIE CUT lines (red, solid) ===
+        doc.setDrawColor(230, 0, 0);
         doc.setLineWidth(0.3);
         doc.setLineDashPattern([], 0);
-
-        if (pnl?.designed) {
-          doc.setFillColor(250, 250, 250);
-        } else {
-          const hx = (pc?.color || "#f0f0f0").replace("#", "");
-          doc.setFillColor(parseInt(hx.substring(0, 2), 16), parseInt(hx.substring(2, 4), 16), parseInt(hx.substring(4, 6), 16));
+        for (const [pid, p] of Object.entries(positions)) {
+          if (p.w <= 0 || p.h <= 0) continue;
+          const px = mg + p.x;
+          const py = mg + p.y;
+          doc.rect(px, py, p.w, p.h);
         }
-        doc.rect(px, py, p.w, p.h, "FD");
-
-        if (pnl?.thumbnail) {
-          // Extend image to bleed area for print
-          try { doc.addImage(pnl.thumbnail, "PNG", px - bl, py - bl, p.w + bl * 2, p.h + bl * 2); } catch (e) { console.warn(e); }
-        } else if (pc) {
-          doc.setFontSize(Math.min(p.w * 0.15, p.h * 0.15, 8));
-          doc.setTextColor(180, 180, 180);
-          doc.text(pc.name, px + p.w / 2, py + p.h / 2, { align: "center", baseline: "middle" } as any);
-        }
-
-        // Draw trim line (where the panel actually cuts)
+  
+        // === FOLD / CREASE lines (blue, dashed) ===
+        doc.setDrawColor(0, 0, 200);
+        doc.setLineWidth(0.25);
+        doc.setLineDashPattern([2, 1.5], 0);
+        const foldLines: number[][] = [
+          // Body top edge
+          [fX, bY, fX + L, bY], [lX, bY, lX + W, bY], [bX, bY, bX + L, bY], [rX, bY, rX + W, bY],
+          // Body bottom edge
+          [fX, bY + D, fX + L, bY + D], [lX, bY + D, lX + W, bY + D], [bX, bY + D, bX + L, bY + D], [rX, bY + D, rX + W, bY + D],
+          // Vertical folds between panels
+          [fX + L, bY, fX + L, bY + D], [lX + W, bY, lX + W, bY + D], [bX + L, bY, bX + L, bY + D],
+          // Glue flap fold
+          [glueW, bY, glueW, bY + D],
+          // Top lid fold
+          [fX, tlY, fX + L, tlY],
+          // Tuck fold
+          [fX, tuckH, fX + L, tuckH],
+          // Bottom folds
+          [fX, btY, fX + L, btY], [lX, btY, lX + W, btY], [bX, btY, bX + L, btY], [rX, btY, rX + W, btY],
+          // Dust flap top folds
+          [lX, bY - dustH, lX + W, bY - dustH], [rX, bY - dustH, rX + W, bY - dustH],
+        ];
+        foldLines.forEach(([x1, y1, x2, y2]) => {
+          doc.line(mg + x1, mg + y1, mg + x2, mg + y2);
+        });
+        doc.setLineDashPattern([], 0);
+  
+        // === Crop marks ===
         doc.setDrawColor(0, 0, 0);
         doc.setLineWidth(0.15);
-        doc.setLineDashPattern([3, 2], 0);
-        doc.rect(px, py, p.w, p.h);
-        doc.setLineDashPattern([], 0);
-      }
-
-      // Footer info
-      doc.setFontSize(7);
-      doc.setTextColor(150, 150, 150);
-      doc.setLineDashPattern([], 0);
-      doc.text("Packive | " + boxTypeDisplay + " | " + L + "x" + W + "x" + D + "mm | " + matLabel + " | Bleed: 5mm (Glue: 10mm) | 300DPI", mg, tH + mg + 6);
-
-      // --- Pages 2+: Individual panel pages with bleed ---
-      const panelOrder: string[] = ["front","back","left","right","topLid","topTuck","topDustL","topDustR","bottomFlapFront","bottomFlapBack","bottomDustL","bottomDustR","glueFlap"];
-
-      for (const pid of panelOrder) {
-        const pc = panelConfig[pid as PanelId];
-        const pnl = panels[pid];
-        if (!pc || pc.widthMM <= 0 || pc.heightMM <= 0) continue;
-
-        const bl = pid === "glueFlap" ? GLUE_BLEED : BLEED;
-        const pageW = pc.widthMM + bl * 2 + 10; // panel + bleed + margin
-        const pageH = pc.heightMM + bl * 2 + 20; // extra for header/footer
-
-        doc.addPage([Math.max(pageW, pageH), Math.min(pageW, pageH)], pageW > pageH ? "landscape" : "portrait");
-
-        const ox = bl + 5; // offset x
-        const oy = bl + 10; // offset y (leave room for header)
-
-        // Header
-        doc.setFontSize(9);
-        doc.setTextColor(80, 80, 80);
-        doc.text(pc.name + " (" + pc.widthMM + " x " + pc.heightMM + " mm)", ox, 6);
-
-        // Bleed area (pink dashed)
-        doc.setDrawColor(255, 150, 150);
-        doc.setLineWidth(0.2);
-        doc.setLineDashPattern([2, 1], 0);
-        doc.rect(ox - bl, oy - bl, pc.widthMM + bl * 2, pc.heightMM + bl * 2);
-
-        // Bleed label
-        doc.setFontSize(5);
-        doc.setTextColor(255, 150, 150);
-        doc.text("BLEED " + bl + "mm", ox - bl + 1, oy - bl - 0.5);
-
-        // Safe zone (blue dashed) - 5mm inside
-        doc.setDrawColor(147, 181, 247);
-        doc.setLineWidth(0.2);
-        doc.setLineDashPattern([2, 1], 0);
-        doc.rect(ox + 5, oy + 5, pc.widthMM - 10, pc.heightMM - 10);
-
-        // Panel background
-        doc.setFillColor(255, 255, 255);
-        doc.rect(ox - bl, oy - bl, pc.widthMM + bl * 2, pc.heightMM + bl * 2, "F");
-
-        // Panel content
-        if (pnl?.designed && pnl.thumbnail) {
-          // Extend image to bleed area for print
-          try { doc.addImage(pnl.thumbnail, "PNG", ox - bl, oy - bl, pc.widthMM + bl * 2, pc.heightMM + bl * 2); } catch (e) { console.warn(e); }
-        } else {
-          doc.setFontSize(8);
-          doc.setTextColor(180, 180, 180);
-          doc.text(pc.guide || pc.name, ox + pc.widthMM / 2, oy + pc.heightMM / 2, { align: "center", baseline: "middle" } as any);
-        }
-
-        // Trim line (actual cut line) - drawn ON TOP of image
-        doc.setDrawColor(0, 0, 0);
-        doc.setLineWidth(0.2);
-        doc.setLineDashPattern([3, 2], 0);
-        doc.rect(ox, oy, pc.widthMM, pc.heightMM);
-        doc.setLineDashPattern([], 0);
-
-        // Crop marks at corners (8mm long, 2mm offset from trim)
-        const cmLen = 8;
+        const cmLen = 6;
         const cmOff = 2;
-        doc.setDrawColor(0, 0, 0);
-        doc.setLineWidth(0.2);
-        // Top-left
-        doc.line(ox - cmOff - cmLen, oy, ox - cmOff, oy);
-        doc.line(ox, oy - cmOff - cmLen, ox, oy - cmOff);
+        // Corners of entire net
+        const netX = mg;
+        const netY = mg;
+        // Top-left of body
+        doc.line(mg + 0 - cmOff - cmLen, mg + bY, mg + 0 - cmOff, mg + bY);
+        doc.line(mg + 0, mg + bY - cmOff - cmLen, mg + 0, mg + bY - cmOff);
         // Top-right
-        doc.line(ox + pc.widthMM + cmOff, oy, ox + pc.widthMM + cmOff + cmLen, oy);
-        doc.line(ox + pc.widthMM, oy - cmOff - cmLen, ox + pc.widthMM, oy - cmOff);
+        doc.line(mg + tW + cmOff, mg + bY, mg + tW + cmOff + cmLen, mg + bY);
+        doc.line(mg + tW, mg + bY - cmOff - cmLen, mg + tW, mg + bY - cmOff);
         // Bottom-left
-        doc.line(ox - cmOff - cmLen, oy + pc.heightMM, ox - cmOff, oy + pc.heightMM);
-        doc.line(ox, oy + pc.heightMM + cmOff, ox, oy + pc.heightMM + cmOff + cmLen);
+        doc.line(mg + 0 - cmOff - cmLen, mg + bY + D, mg + 0 - cmOff, mg + bY + D);
+        doc.line(mg + 0, mg + bY + D + cmOff, mg + 0, mg + bY + D + cmOff + cmLen);
         // Bottom-right
-        doc.line(ox + pc.widthMM + cmOff, oy + pc.heightMM, ox + pc.widthMM + cmOff + cmLen, oy + pc.heightMM);
-        doc.line(ox + pc.widthMM, oy + pc.heightMM + cmOff, ox + pc.widthMM, oy + pc.heightMM + cmOff + cmLen);
-
-        // Footer
-        doc.setFontSize(5);
-        doc.setTextColor(150, 150, 150);
+        doc.line(mg + tW + cmOff, mg + bY + D, mg + tW + cmOff + cmLen, mg + bY + D);
+        doc.line(mg + tW, mg + bY + D + cmOff, mg + tW, mg + bY + D + cmOff + cmLen);
+  
+        // === Legend ===
+        const legendY = tH + mg + 4;
+        doc.setFontSize(6);
+        // Die cut legend
+        doc.setDrawColor(230, 0, 0); doc.setLineWidth(0.3); doc.setLineDashPattern([], 0);
+        doc.line(mg, legendY, mg + 8, legendY);
+        doc.setTextColor(80, 80, 80); doc.text("DIE CUT", mg + 10, legendY + 0.5);
+        // Fold legend
+        doc.setDrawColor(0, 0, 200); doc.setLineWidth(0.25); doc.setLineDashPattern([2, 1.5], 0);
+        doc.line(mg + 30, legendY, mg + 38, legendY);
         doc.setLineDashPattern([], 0);
-        doc.text(boxTypeDisplay + " | " + pid + " | " + pc.widthMM + "x" + pc.heightMM + "mm | Bleed: " + bl + "mm | 300DPI", ox, oy + pc.heightMM + bl + 3);
-      }
-
-      // Crop marks on page 1 (go back to first page is not easy with jsPDF, skip for now)
-
-      const filename = "packive-print-" + boxType + "-" + L + "x" + W + "x" + D + "mm-300dpi.pdf";
-      doc.save(filename);
-    } catch (e) { console.error(e); alert("Enhanced PDF export failed"); }
-    setExporting(null);
-  }, [boxType, boxTypeDisplay, L, W, D, T, tuckH, dustH, glueW, bottomH, bottomDustH, matLabel, panels, panelConfig]);
-
+        doc.text("CREASE / FOLD", mg + 40, legendY + 0.5);
+        // Bleed legend
+        doc.setDrawColor(0, 180, 0); doc.setLineWidth(0.2);
+        doc.line(mg + 70, legendY, mg + 78, legendY);
+        doc.text("BLEED (" + BLEED + "mm)", mg + 80, legendY + 0.5);
+  
+        // === Footer info ===
+        doc.setFontSize(5.5);
+        doc.setTextColor(120, 120, 120);
+        doc.text(
+          "Packive | " + boxTypeDisplay + " | " + L + "×" + W + "×" + D + "mm | " + matLabel +
+          " | Design Area: " + tW.toFixed(1) + "×" + tH.toFixed(1) + "mm | Bleed: " + BLEED + "mm | Paper: " + T + "mm",
+          mg, legendY + 5
+        );
+  
+        doc.save("packive-print-" + boxType + "-" + L + "x" + W + "x" + D + "mm-HQ.pdf");
+      } catch (e) { console.error(e); alert("Enhanced PDF export failed"); }
+      setExporting(null);
+    }, [boxType, boxTypeDisplay, L, W, D, T, tuckH, dustH, glueW, bottomH, bottomDustH, matLabel, panels, panelConfig]);
+  
   const exportIndividualPNG = useCallback(async () => {
     setExporting("individual");
     try {
@@ -716,6 +740,12 @@ function DesignPageInner() {
                 ))}
               </div>
              
+              <button onClick={exportPDFEnhanced} disabled={exporting !== null} className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-orange-400 hover:bg-orange-50 transition text-center">
+                  <span className="text-2xl">HQ</span>
+                  <span className="text-sm font-semibold text-gray-800">Print-Ready PDF</span>
+                  <span className="text-[10px] text-gray-400">High-res + Die/Fold/Bleed lines</span>
+                  {exporting === "pdf-enhanced" && <span className="text-[10px] text-orange-500">Rendering...</span>}
+                </button>
 
               <button onClick={() => setCurrentView("front")} className="px-4 py-2 text-sm rounded-lg font-medium bg-blue-600 text-white hover:bg-blue-700 transition shrink-0">
                 {totalDesigned === 0 ? t("ov.startDesigning") : totalDesigned < 13 ? t("ov.continue") : t("ov.reviewExport")}
