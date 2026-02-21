@@ -355,8 +355,12 @@ function DesignPageInner() {
                         resolve();
                       });
                     });
-                    const multiplier = Math.max(pxW / origW, 1);
-                    const url = fc.toDataURL({ format: "png", multiplier });
+                    const mulX = pxW / origW;
+                    const mulY = pxH / origH;
+                    const multiplier = Math.max(Math.min(mulX, mulY), 1);
+                    const url = fc.toDataURL({ format: "png", multiplier, width: origW, height: origH });
+        
+                    
                     fc.dispose();
                     return url;
                   } catch (e) {
