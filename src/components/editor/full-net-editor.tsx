@@ -5,26 +5,29 @@ interface PanelData { json: string | null; thumbnail: string | null; designed: b
 
 async function renderHiRes(json: string, wMM: number, hMM: number, scale: number): Promise<string | null> {
   try {
-    const fabricModule = await import("fabric"); const FabricCanvas = fabricModule.Canvas; const util = fabricModule.util;
-    const cW = wMM * scale;
-    const cH = hMM * scale;
-    const el = document.createElement("canvas");
-    el.width = cW; el.height = cH;
-    const fc = new FabricCanvas(el, { width: cW, height: cH });
+    const fabricModule = await import("fabric");
+    const FabricCanvas = fabricModule.Canvas;
     const parsed = JSON.parse(json);
-    const origW = parsed.width || parsed.objects?.[0]?.width || cW;
-    const origH = parsed.height || parsed.objects?.[0]?.height || cH;
-    await util.enlivenObjects(parsed.objects || []);
-    const sx = cW / origW;
-    const sy = cH / origH;
-    for (const obj of parsed.objects || []) {
-      const eo = await util.enlivenObjects([obj]);
-      if (eo[0]) {
-        const o = eo[0] as any;
-        o.set({ scaleX: (o.scaleX || 1) * sx, scaleY: (o.scaleY || 1) * sy, left: (o.left || 0) * sx, top: (o.top || 0) * sy });
-        fc.add(o);
-      }
-    }
+    const origW = parsed.width || parsed.objects?.[0]?.width || 300;
+    const origH = parsed.height || parsed.objects?.[0]?.height || 400;
+    const targetW = Math.round(wMM * scale);
+    const targetH = Math.round(hMM * scale);
+    const el = document.createElement("canvas");
+    el.width = targetW;
+    el.height = targetH;
+    const fc = new FabricCanvas(el, { width: targetW, height: targetH });
+    await fc.loadFromJSON(parsed);
+    const sx = targetW / origW;
+    const sy = targetH / origH;
+    fc.getObjects().forEach((obj: any) => {
+      obj.set({
+        left: (obj.left || 0) * sx,
+        top: (obj.top || 0) * sy,
+        scaleX: (obj.scaleX || 1) * sx,
+        scaleY: (obj.scaleY || 1) * sy,
+      });
+      obj.setCoords();
+    });
     fc.renderAll();
     const url = el.toDataURL("image/png");
     fc.dispose();
@@ -61,7 +64,7 @@ export default function FullNetEditor({
   // Render high-res images from JSON for each designed panel
   useEffect(() => {
     let cancelled = false;
-    const HIRES_SCALE = 4; // 4 pixels per mm = high quality
+    const HIRES_SCALE = 8; // 4 pixels per mm = high quality
     async function renderAll() {
       const results: Record<string, string> = {};
       for (const [pid, data] of Object.entries(panels)) {
