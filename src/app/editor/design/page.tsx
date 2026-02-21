@@ -369,25 +369,53 @@ function DesignPageInner() {
             try { doc.addImage(pnl.thumbnail, "PNG", px, py, p.w, p.h); } catch (e) { console.warn(e); }
           }
         }
-          // === BLEED lines (green, solid) - outer contour only ===
-          doc.setDrawColor(0, 180, 0);
-          doc.setLineWidth(0.2);
-          doc.setLineDashPattern([], 0);
-          // Top edge bleed (topTuck top)
-          doc.line(mg + fX - BLEED, mg + 0 - BLEED, mg + fX + L + BLEED, mg + 0 - BLEED);
-          // Bottom edge bleed (bottom flaps)
-          doc.line(mg + fX - BLEED, mg + tH + BLEED, mg + rX + W + BLEED, mg + tH + BLEED);
-          // Left edge bleed (glue flap)
-          doc.line(mg + 0 - GLUE_BLEED, mg + bY - BLEED, mg + 0 - GLUE_BLEED, mg + bY + D + BLEED);
-          // Right edge bleed
-          doc.line(mg + tW + BLEED, mg + bY - BLEED, mg + tW + BLEED, mg + bY + D + BLEED);
-          // Full outer rectangle of body area
-          doc.rect(mg + 0 - GLUE_BLEED, mg + bY - BLEED, tW + GLUE_BLEED + BLEED, D + BLEED * 2);
-          // Top section bleed
-          doc.rect(mg + fX - BLEED, mg + 0 - BLEED, L + BLEED * 2, bY + BLEED);
-          // Bottom section bleed  
-          doc.rect(mg + fX - BLEED, mg + btY - BLEED, rX + W - fX + BLEED * 2, Math.max(bottomH, bottomDustH) + BLEED * 2);
-  
+                  // === BLEED lines (green, solid) - single outer contour of entire net ===
+        doc.setDrawColor(0, 180, 0);
+        doc.setLineWidth(0.2);
+        doc.setLineDashPattern([], 0);
+        const B = BLEED;
+        const GB = GLUE_BLEED;
+        // Draw one continuous bleed outline around the entire net shape
+        // Top section (topTuck)
+        doc.line(mg + fX - B, mg + 0 - B, mg + fX + L + B, mg + 0 - B); // top edge
+        doc.line(mg + fX - B, mg + 0 - B, mg + fX - B, mg + bY); // left side down to body
+        doc.line(mg + fX + L + B, mg + 0 - B, mg + fX + L + B, mg + tlY); // right side to lid bottom
+        // Right of top lid to dust flap area
+        doc.line(mg + fX + L + B, mg + tlY, mg + lX + W + B, mg + tlY); // across to dustL right
+        doc.line(mg + lX + W + B, mg + tlY, mg + lX + W + B, mg + bY - dustH - B); // down to dustL top
+        // Top dust L top edge to right
+        doc.line(mg + lX - B, mg + bY - dustH - B, mg + lX + W + B, mg + bY - dustH - B);
+        doc.line(mg + lX - B, mg + bY - dustH - B, mg + lX - B, mg + bY); // dustL left side
+        // Gap between dustL and dustR (back panel has no top part)
+        // Top dust R
+        doc.line(mg + rX - B, mg + bY - dustH - B, mg + rX + W + B, mg + bY - dustH - B);
+        doc.line(mg + rX - B, mg + bY - dustH - B, mg + rX - B, mg + bY);
+        doc.line(mg + rX + W + B, mg + bY - dustH - B, mg + rX + W + B, mg + bY);
+        // Body area - left (glue flap)
+        doc.line(mg + 0 - GB, mg + bY - B, mg + 0 - GB, mg + bY + D + B); // glue left
+        doc.line(mg + 0 - GB, mg + bY - B, mg + fX - B, mg + bY - B); // glue top to front
+        doc.line(mg + 0 - GB, mg + bY + D + B, mg + fX - B, mg + bY + D + B); // glue bottom
+        // Body area - right
+        doc.line(mg + rX + W + B, mg + bY - B, mg + rX + W + B, mg + bY + D + B); // right edge
+        // Body top edge (between panels - no bleed needed, but outer edges)
+        doc.line(mg + lX + W + B, mg + bY - B, mg + rX - B, mg + bY - B); // between dustL and dustR top
+        // Body bottom edge
+        doc.line(mg + fX - B, mg + bY + D + B, mg + fX - B, mg + btY + bottomH + B); // front left down
+        doc.line(mg + fX - B, mg + btY + bottomH + B, mg + fX + L + B, mg + btY + bottomH + B); // front bottom
+        doc.line(mg + fX + L + B, mg + bY + D + B, mg + fX + L + B, mg + btY + bottomH + B);
+        // Bottom dust L
+        doc.line(mg + lX - B, mg + bY + D + B, mg + lX - B, mg + btY + bottomDustH + B);
+        doc.line(mg + lX - B, mg + btY + bottomDustH + B, mg + lX + W + B, mg + btY + bottomDustH + B);
+        doc.line(mg + lX + W + B, mg + bY + D + B, mg + lX + W + B, mg + btY + bottomDustH + B);
+        // Bottom flap back
+        doc.line(mg + bX - B, mg + bY + D + B, mg + bX - B, mg + btY + bottomH + B);
+        doc.line(mg + bX - B, mg + btY + bottomH + B, mg + bX + L + B, mg + btY + bottomH + B);
+        doc.line(mg + bX + L + B, mg + bY + D + B, mg + bX + L + B, mg + btY + bottomH + B);
+        // Bottom dust R
+        doc.line(mg + rX - B, mg + bY + D + B, mg + rX - B, mg + btY + bottomDustH + B);
+        doc.line(mg + rX - B, mg + btY + bottomDustH + B, mg + rX + W + B, mg + btY + bottomDustH + B);
+        doc.line(mg + rX + W + B, mg + bY + D + B, mg + rX + W + B, mg + btY + bottomDustH + B);
+
                 // === DIE CUT lines (red, solid) - outer contour only ===
                 doc.setDrawColor(230, 0, 0);
                 doc.setLineWidth(0.3);
