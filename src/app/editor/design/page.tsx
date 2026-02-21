@@ -357,8 +357,9 @@ function DesignPageInner() {
                     });
                     const mulX = pxW / origW;
                     const mulY = pxH / origH;
-                    const multiplier = Math.max(Math.min(mulX, mulY), 1);
-                    const url = fc.toDataURL({ format: "png", multiplier, width: origW, height: origH });
+                    const multiplier = Math.max(pxW / origW, pxH / origH, 1);
+                    const url = fc.toDataURL({ format: "png", multiplier });
+
         
                     
                     fc.dispose();
