@@ -681,6 +681,20 @@ function DesignPageInner() {
   const bottomDesigned = [...bottomPanelOrder, ...extraPanelOrder].filter((id: PanelId) => panels[id].designed).length;
   const totalDesigned = bodyDesigned + topDesigned + bottomDesigned;
   
+  if (currentView === "fullNet") {
+    return (
+      <FullNetEditor
+        L={L} W={W} D={D} T={T}
+        tuckH={tuckH} dustH={dustH} glueW={glueW}
+        bottomH={bottomH} bottomDustH={bottomDustH}
+        panels={panels} panelConfig={panelConfig}
+        onSave={handleSave}
+        onBack={() => setCurrentView("overview")}
+        onEditPanel={(pid) => setCurrentView(pid)}
+      />
+    );
+  }
+
   if (currentView === "overview") {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -881,20 +895,6 @@ function DesignPageInner() {
         )}
       </div>
     );
-  if (currentView === "fullNet") {
-    return (
-      <FullNetEditor
-        L={L} W={W} D={D} T={T}
-        tuckH={tuckH} dustH={dustH} glueW={glueW}
-        bottomH={bottomH} bottomDustH={bottomDustH}
-        panels={panels} panelConfig={panelConfig}
-        onSave={handleSave}
-        onBack={() => setCurrentView("overview")}
-        onEditPanel={(pid) => setCurrentView(pid)}
-      />
-    );
-  }
-
   }
 
   const cfg = panelConfig[currentView as PanelId];
