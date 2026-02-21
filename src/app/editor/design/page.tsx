@@ -740,12 +740,7 @@ function DesignPageInner() {
                 ))}
               </div>
              
-              <button onClick={exportPDFEnhanced} disabled={exporting !== null} className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-orange-400 hover:bg-orange-50 transition text-center">
-                  <span className="text-2xl">HQ</span>
-                  <span className="text-sm font-semibold text-gray-800">Print-Ready PDF</span>
-                  <span className="text-[10px] text-gray-400">High-res + Die/Fold/Bleed lines</span>
-                  {exporting === "pdf-enhanced" && <span className="text-[10px] text-orange-500">Rendering...</span>}
-                </button>
+             
 
               <button onClick={() => setCurrentView("front")} className="px-4 py-2 text-sm rounded-lg font-medium bg-blue-600 text-white hover:bg-blue-700 transition shrink-0">
                 {totalDesigned === 0 ? t("ov.startDesigning") : totalDesigned < 13 ? t("ov.continue") : t("ov.reviewExport")}
@@ -763,7 +758,7 @@ function DesignPageInner() {
               <p className="text-sm text-gray-500">
                 {boxTypeDisplay} | {L}x{W}x{D}mm | {matLabel} | {totalDesigned}/13 panels
               </p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <button onClick={exportFullNetPNG} disabled={exporting !== null} className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition text-center">
                   <span className="text-2xl">NET</span>
                   <span className="text-sm font-semibold text-gray-800">{t("ov.fullNetPng")}</span>
@@ -782,6 +777,14 @@ function DesignPageInner() {
                   <span className="text-[10px] text-gray-400">{totalDesigned} panel(s) as PNGs</span>
                   {exporting === "individual" && <span className="text-[10px] text-green-500">Exporting...</span>}
                 </button>
+                <button onClick={exportPDFEnhanced} disabled={exporting !== null} className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-orange-400 hover:bg-orange-50 transition text-center">
+                  <span className="text-2xl font-bold text-orange-600">HQ</span>
+                  <span className="text-sm font-semibold text-gray-800">Print-Ready HQ</span>
+                  <span className="text-[10px] text-gray-400">Die-cut / Fold / Bleed / Crop marks</span>
+                  {exporting === "pdf-enhanced" && <span className="text-[10px] text-orange-500">Rendering...</span>}
+                </button>
+
+
                 <button onClick={export3DScreenshot} disabled={exporting !== null} className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-purple-400 hover:bg-purple-50 transition text-center">
                   <span className="text-2xl">3D</span>
                   <span className="text-sm font-semibold text-gray-800">{t("ov.screenshot3d")}</span>
