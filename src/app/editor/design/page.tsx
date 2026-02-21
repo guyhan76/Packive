@@ -837,28 +837,13 @@ function DesignPageInner() {
                   {exporting === "3d" && <span className="text-[10px] text-purple-500">Exporting...</span>}
                 </button>
               </div>
-
-               
-                <button onClick={exportPDFEnhanced} disabled={exporting !== null} className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-red-400 hover:bg-red-50 transition text-center">
-                  <span className="text-2xl font-bold text-red-600">PDF</span>
-                  <span className="text-sm font-semibold text-gray-800">HQ Print-Ready</span>
-                  <span className="text-[10px] text-gray-400">300dpi / Die-cut / Fold / Bleed</span>
-                  {exporting === "pdf-enhanced" && <span className="text-[10px] text-red-500">Rendering...</span>}
-                </button>
-
-                <button onClick={export3DScreenshot} disabled={exporting !== null} className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-purple-400 hover:bg-purple-50 transition text-center">
-                  <span className="text-2xl">3D</span>
-                  <span className="text-sm font-semibold text-gray-800">{t("ov.screenshot3d")}</span>
-                  <span className="text-[10px] text-gray-400">{t("ov.screenshot3dDesc")}</span>
-                  {exporting === "3d" && <span className="text-[10px] text-purple-500">Exporting...</span>}
-                </button>
-              </div>
               <div className="pt-2 border-t text-center">
                 <button onClick={() => setShowExport(false)} className="text-sm text-gray-500 hover:text-gray-700">{t("ov.close")}</button>
               </div>
             </div>
           </div>
-          )} 
+        )}
+
         {copySource && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setCopySource(null)}>
             <div className="bg-white rounded-2xl shadow-2xl p-6 w-80" onClick={(e) => e.stopPropagation()}>
