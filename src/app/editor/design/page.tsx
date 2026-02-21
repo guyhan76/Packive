@@ -307,18 +307,19 @@ function DesignPageInner() {
           bottomDustR: { x: rX, y: btY, w: W, h: bottomDustH },
         };
   
-        // Helper: render panel JSON to high-res data URL
         const renderPanel = async (json: string, wMM: number, hMM: number): Promise<string | null> => {
           try {
-            const pxW = wMM * MULTIPLIER;
-            const pxH = hMM * MULTIPLIER;
+            const DPI = 300;
+            const MM_TO_INCH = 1 / 25.4;
+            const pxW = Math.round(wMM * MM_TO_INCH * DPI);
+            const pxH = Math.round(hMM * MM_TO_INCH * DPI);
             const offCanvas = document.createElement("canvas");
             offCanvas.width = pxW;
             offCanvas.height = pxH;
             const fc = new FabricCanvas(offCanvas, { width: pxW, height: pxH, backgroundColor: "#ffffff" });
             const data = JSON.parse(json);
-            const scaleX = pxW / (data.width || pxW);
-            const scaleY = pxH / (data.height || pxH);
+            const origW = data.width || pxW;
+            const origH = data.height || pxH;
             await new Promise<void>((resolve) => {
               fc.loadFromJSON(data).then(() => {
                 fc.getObjects().forEach((obj: any) => {
@@ -327,15 +328,7 @@ function DesignPageInner() {
                   }
                 });
                 fc.setDimensions({ width: pxW, height: pxH });
-                fc.getObjects().forEach((obj: any) => {
-                  obj.set({
-                    left: (obj.left || 0) * scaleX,
-                    top: (obj.top || 0) * scaleY,
-                    scaleX: (obj.scaleX || 1) * scaleX,
-                    scaleY: (obj.scaleY || 1) * scaleY,
-                  });
-                  obj.setCoords();
-                });
+                fc.setViewportTransform([pxW / origW, 0, 0, pxH / origH, 0, 0]);
                 fc.renderAll();
                 resolve();
               });
@@ -348,6 +341,7 @@ function DesignPageInner() {
             return null;
           }
         };
+
   
         // Render all designed panels at high resolution
         for (const [pid, p] of Object.entries(positions)) {
