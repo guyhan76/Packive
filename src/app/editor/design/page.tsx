@@ -309,41 +309,62 @@ function DesignPageInner() {
                 };
         
   
-        const renderPanel = async (json: string, wMM: number, hMM: number): Promise<string | null> => {
-          try {
-            const DPI = 300;
-            const MM_TO_PX = DPI / 25.4;
-            const pxW = Math.round(wMM * MM_TO_PX);
-            const pxH = Math.round(hMM * MM_TO_PX);
-            const data = JSON.parse(json);
-            const origW = data.width || 400;
-            const origH = data.height || 400;
-            // First: load at original size
-            const offCanvas = document.createElement("canvas");
-            offCanvas.width = origW;
-            offCanvas.height = origH;
-            const fc = new FabricCanvas(offCanvas, { width: origW, height: origH, backgroundColor: "#ffffff" });
-            await new Promise<void>((resolve) => {
-              fc.loadFromJSON(data).then(() => {
-                fc.getObjects().forEach((obj: any) => {
-                  if (obj._isSafeZone || obj._isGuideLine || obj._isGuideText || obj._isSizeLabel || obj._isBgPattern) {
-                    fc.remove(obj);
+                const renderPanel = async (json: string, wMM: number, hMM: number): Promise<string | null> => {
+                  try {
+                    const DPI = 300;
+                    const MM_TO_PX = DPI / 25.4;
+                    const pxW = Math.round(wMM * MM_TO_PX);
+                    const pxH = Math.round(hMM * MM_TO_PX);
+                    const data = JSON.parse(json);
+                    // Find original canvas size from first Rect object or fallback
+                    let origW = data.width;
+                    let origH = data.height;
+                    if (!origW || !origH) {
+                      const firstRect = data.objects?.find((o: any) => o.type === 'Rect' && o.rx === 0 && o.ry === 0 && o.left === 0 && o.top === 0);
+                      if (firstRect) {
+                        origW = firstRect.width;
+                        origH = firstRect.height;
+                      } else if (data.objects?.length > 0) {
+                        // Use the largest object dimensions as canvas size
+                        let maxW = 0, maxH = 0;
+                        data.objects.forEach((o: any) => {
+                          const w = (o.left || 0) + (o.width || 0) * (o.scaleX || 1);
+                          const h = (o.top || 0) + (o.height || 0) * (o.scaleY || 1);
+                          if (w > maxW) maxW = w;
+                          if (h > maxH) maxH = h;
+                        });
+                        origW = maxW || 400;
+                        origH = maxH || 400;
+                      } else {
+                        origW = 400;
+                        origH = 400;
+                      }
+                    }
+                    const offCanvas = document.createElement("canvas");
+                    offCanvas.width = origW;
+                    offCanvas.height = origH;
+                    const fc = new FabricCanvas(offCanvas, { width: origW, height: origH, backgroundColor: data.background || "#ffffff" });
+                    await new Promise<void>((resolve) => {
+                      fc.loadFromJSON(data).then(() => {
+                        fc.getObjects().forEach((obj: any) => {
+                          if (obj._isSafeZone || obj._isGuideLine || obj._isGuideText || obj._isSizeLabel || obj._isBgPattern) {
+                            fc.remove(obj);
+                          }
+                        });
+                        fc.renderAll();
+                        resolve();
+                      });
+                    });
+                    const multiplier = Math.max(pxW / origW, 1);
+                    const url = fc.toDataURL({ format: "png", multiplier });
+                    fc.dispose();
+                    return url;
+                  } catch (e) {
+                    console.warn("renderPanel failed", e);
+                    return null;
                   }
-                });
-                fc.renderAll();
-                resolve();
-              });
-            });
-            // Second: export at high resolution using multiplier
-            const multiplier = pxW / origW;
-            const url = fc.toDataURL({ format: "png", multiplier: Math.max(multiplier, 1) });
-            fc.dispose();
-            return url;
-          } catch (e) {
-            console.warn("renderPanel failed", e);
-            return null;
-          }
-        };
+                };
+        
 
         // Render all designed panels at high resolution
         for (const [pid, p] of Object.entries(positions)) {
