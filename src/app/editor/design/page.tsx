@@ -269,43 +269,45 @@ function DesignPageInner() {
         const GLUE_BLEED = 5;
         const MULTIPLIER = 8; // 8x resolution for high quality
   
-        const fX = glueW + T;
-        const lX = fX + L + T;
-        const bX = lX + W + T;
-        const rX = bX + L + T;
-        const tW = rX + W;
-        const tlY = tuckH + T;
-        const bY = tlY + W;
-        const btY = bY + D + T;
-        const tH = btY + Math.max(bottomH, bottomDustH);
-        const mg = BLEED + 8;
-        const pW = tW + mg * 2;
-        const pH = tH + mg * 2 + 12; // extra for footer
-  
-        const doc = new jsPDF({
-          orientation: pW > pH ? "landscape" : "portrait",
-          unit: "mm",
-          format: [Math.max(pW, pH), Math.min(pW, pH)],
-        });
-  
-        doc.setFillColor(255, 255, 255);
-        doc.rect(0, 0, pW + 50, pH + 50, "F");
-  
-        const positions: Record<string, { x: number; y: number; w: number; h: number }> = {
-          topTuck: { x: fX, y: 0, w: L, h: tuckH },
-          topLid: { x: fX, y: tlY, w: L, h: W },
-          topDustL: { x: lX, y: bY - dustH, w: W, h: dustH },
-          topDustR: { x: rX, y: bY - dustH, w: W, h: dustH },
-          glueFlap: { x: 0, y: bY, w: glueW, h: D },
-          front: { x: fX, y: bY, w: L, h: D },
-          left: { x: lX, y: bY, w: W, h: D },
-          back: { x: bX, y: bY, w: L, h: D },
-          right: { x: rX, y: bY, w: W, h: D },
-          bottomFlapFront: { x: fX, y: btY, w: L, h: bottomH },
-          bottomDustL: { x: lX, y: btY, w: W, h: bottomDustH },
-          bottomFlapBack: { x: bX, y: btY, w: L, h: bottomH },
-          bottomDustR: { x: rX, y: btY, w: W, h: bottomDustH },
-        };
+                // PDF에서는 T(종이두께) 갭 없이 면이 바로 붙음
+                const fX = glueW;
+                const lX = fX + L;
+                const bX = lX + W;
+                const rX = bX + L;
+                const tW = rX + W;
+                const tlY = tuckH;
+                const bY = tlY + W;
+                const btY = bY + D;
+                const tH = btY + Math.max(bottomH, bottomDustH);
+                const mg = BLEED + 8;
+                const pW = tW + mg * 2;
+                const pH = tH + mg * 2 + 12;
+        
+                const doc = new jsPDF({
+                  orientation: pW > pH ? "landscape" : "portrait",
+                  unit: "mm",
+                  format: [Math.max(pW, pH), Math.min(pW, pH)],
+                });
+        
+                doc.setFillColor(255, 255, 255);
+                doc.rect(0, 0, pW + 50, pH + 50, "F");
+        
+                const positions: Record<string, { x: number; y: number; w: number; h: number }> = {
+                  topTuck: { x: fX, y: 0, w: L, h: tuckH },
+                  topLid: { x: fX, y: tlY, w: L, h: W },
+                  topDustL: { x: lX, y: bY - dustH, w: W, h: dustH },
+                  topDustR: { x: rX, y: bY - dustH, w: W, h: dustH },
+                  glueFlap: { x: 0, y: bY, w: glueW, h: D },
+                  front: { x: fX, y: bY, w: L, h: D },
+                  left: { x: lX, y: bY, w: W, h: D },
+                  back: { x: bX, y: bY, w: L, h: D },
+                  right: { x: rX, y: bY, w: W, h: D },
+                  bottomFlapFront: { x: fX, y: btY, w: L, h: bottomH },
+                  bottomDustL: { x: lX, y: btY, w: W, h: bottomDustH },
+                  bottomFlapBack: { x: bX, y: btY, w: L, h: bottomH },
+                  bottomDustR: { x: rX, y: btY, w: W, h: bottomDustH },
+                };
+        
   
         const renderPanel = async (json: string, wMM: number, hMM: number): Promise<string | null> => {
           try {
@@ -367,18 +369,24 @@ function DesignPageInner() {
             try { doc.addImage(pnl.thumbnail, "PNG", px, py, p.w, p.h); } catch (e) { console.warn(e); }
           }
         }
-  
-        // === BLEED lines (green, solid) ===
-        doc.setDrawColor(0, 180, 0);
-        doc.setLineWidth(0.2);
-        doc.setLineDashPattern([], 0);
-        for (const [pid, p] of Object.entries(positions)) {
-          if (p.w <= 0 || p.h <= 0) continue;
-          const bl = pid === "glueFlap" ? GLUE_BLEED : BLEED;
-          const px = mg + p.x;
-          const py = mg + p.y;
-          doc.rect(px - bl, py - bl, p.w + bl * 2, p.h + bl * 2);
-        }
+          // === BLEED lines (green, solid) - outer contour only ===
+          doc.setDrawColor(0, 180, 0);
+          doc.setLineWidth(0.2);
+          doc.setLineDashPattern([], 0);
+          // Top edge bleed (topTuck top)
+          doc.line(mg + fX - BLEED, mg + 0 - BLEED, mg + fX + L + BLEED, mg + 0 - BLEED);
+          // Bottom edge bleed (bottom flaps)
+          doc.line(mg + fX - BLEED, mg + tH + BLEED, mg + rX + W + BLEED, mg + tH + BLEED);
+          // Left edge bleed (glue flap)
+          doc.line(mg + 0 - GLUE_BLEED, mg + bY - BLEED, mg + 0 - GLUE_BLEED, mg + bY + D + BLEED);
+          // Right edge bleed
+          doc.line(mg + tW + BLEED, mg + bY - BLEED, mg + tW + BLEED, mg + bY + D + BLEED);
+          // Full outer rectangle of body area
+          doc.rect(mg + 0 - GLUE_BLEED, mg + bY - BLEED, tW + GLUE_BLEED + BLEED, D + BLEED * 2);
+          // Top section bleed
+          doc.rect(mg + fX - BLEED, mg + 0 - BLEED, L + BLEED * 2, bY + BLEED);
+          // Bottom section bleed  
+          doc.rect(mg + fX - BLEED, mg + btY - BLEED, rX + W - fX + BLEED * 2, Math.max(bottomH, bottomDustH) + BLEED * 2);
   
                 // === DIE CUT lines (red, solid) - outer contour only ===
                 doc.setDrawColor(230, 0, 0);
