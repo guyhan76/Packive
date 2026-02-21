@@ -6,6 +6,11 @@ import { useI18n, LanguageSelector } from "@/components/i18n-context";
 import { useSearchParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 
+const FullNetEditor = dynamic(
+  () => import("@/components/editor/full-net-editor"),
+  { ssr: false, loading: () => <div className="flex items-center justify-center h-screen text-gray-400">Loading Full Net Editor...</div> }
+);
+
 const PanelEditor = dynamic(
   () => import("@/components/editor/panel-editor"),
   { ssr: false }
@@ -36,7 +41,7 @@ type PanelId =
   | "bottomFlapFront" | "bottomFlapBack"
   | "bottomDustL" | "bottomDustR"
   | "glueFlap";
-  type ViewMode = "overview" | PanelId;
+  type ViewMode = "overview" | "fullNet" | PanelId;
 interface PanelConfig {
   name: string;
   widthMM: number;
@@ -382,10 +387,13 @@ function DesignPageInner() {
           // Panel background white
           doc.setFillColor(255, 255, 255);
           doc.rect(px, py, p.w, p.h, "F");
-  
+          const hiRes = await renderPanel(pnl.json!, p.w, p.h);
+          console.log('PDF panel', pid, 'pos:', px, py, 'size:', p.w, p.h, 'hiRes:', hiRes ? 'OK' : 'FAIL');
+
+
           // High-res panel image
           if (pnl?.designed && pnl.json) {
-            const hiRes = await renderPanel(pnl.json, p.w, p.h);
+            const hiRes = await renderPanel(pnl.json!, p.w, p.h);
             if (hiRes) {
               try { doc.addImage(hiRes, "PNG", px, py, p.w, p.h); } catch (e) { console.warn(e); }
             } else if (pnl.thumbnail) {
@@ -872,6 +880,20 @@ function DesignPageInner() {
         )}
       </div>
     );
+  if (currentView === "fullNet") {
+    return (
+      <FullNetEditor
+        L={L} W={W} D={D} T={T}
+        tuckH={tuckH} dustH={dustH} glueW={glueW}
+        bottomH={bottomH} bottomDustH={bottomDustH}
+        panels={panels} panelConfig={panelConfig}
+        onSave={handleSave}
+        onBack={() => setCurrentView("overview")}
+        onEditPanel={(pid) => setCurrentView(pid)}
+      />
+    );
+  }
+
   }
 
   const cfg = panelConfig[currentView as PanelId];
@@ -1172,3 +1194,7 @@ export default function DesignPage() {
     </Suspense>
   );
 }
+
+
+
+
