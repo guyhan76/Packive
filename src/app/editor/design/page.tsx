@@ -310,16 +310,17 @@ function DesignPageInner() {
         const renderPanel = async (json: string, wMM: number, hMM: number): Promise<string | null> => {
           try {
             const DPI = 300;
-            const MM_TO_INCH = 1 / 25.4;
-            const pxW = Math.round(wMM * MM_TO_INCH * DPI);
-            const pxH = Math.round(hMM * MM_TO_INCH * DPI);
-            const offCanvas = document.createElement("canvas");
-            offCanvas.width = pxW;
-            offCanvas.height = pxH;
-            const fc = new FabricCanvas(offCanvas, { width: pxW, height: pxH, backgroundColor: "#ffffff" });
+            const MM_TO_PX = DPI / 25.4;
+            const pxW = Math.round(wMM * MM_TO_PX);
+            const pxH = Math.round(hMM * MM_TO_PX);
             const data = JSON.parse(json);
-            const origW = data.width || pxW;
-            const origH = data.height || pxH;
+            const origW = data.width || 400;
+            const origH = data.height || 400;
+            // First: load at original size
+            const offCanvas = document.createElement("canvas");
+            offCanvas.width = origW;
+            offCanvas.height = origH;
+            const fc = new FabricCanvas(offCanvas, { width: origW, height: origH, backgroundColor: "#ffffff" });
             await new Promise<void>((resolve) => {
               fc.loadFromJSON(data).then(() => {
                 fc.getObjects().forEach((obj: any) => {
@@ -327,13 +328,13 @@ function DesignPageInner() {
                     fc.remove(obj);
                   }
                 });
-                fc.setDimensions({ width: pxW, height: pxH });
-                fc.setViewportTransform([pxW / origW, 0, 0, pxH / origH, 0, 0]);
                 fc.renderAll();
                 resolve();
               });
             });
-            const url = fc.toDataURL({ format: "png", multiplier: 1 });
+            // Second: export at high resolution using multiplier
+            const multiplier = pxW / origW;
+            const url = fc.toDataURL({ format: "png", multiplier: Math.max(multiplier, 1) });
             fc.dispose();
             return url;
           } catch (e) {
@@ -342,7 +343,6 @@ function DesignPageInner() {
           }
         };
 
-  
         // Render all designed panels at high resolution
         for (const [pid, p] of Object.entries(positions)) {
           const px = mg + p.x;
