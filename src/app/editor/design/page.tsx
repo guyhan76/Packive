@@ -812,6 +812,7 @@ function DesignPageInner() {
               <button onClick={() => setCurrentView("front")} className="px-4 py-2 text-sm rounded-lg font-medium bg-blue-600 text-white hover:bg-blue-700 transition shrink-0">
                 {totalDesigned === 0 ? t("ov.startDesigning") : totalDesigned < 13 ? t("ov.continue") : t("ov.reviewExport")}
               </button>
+              <button onClick={() => setCurrentView("fullNet")} className="px-4 py-2 text-sm rounded-lg font-medium bg-purple-600 text-white hover:bg-purple-700 transition shrink-0">Full Net Editor</button>
             </div>
           </div>
         </div>
