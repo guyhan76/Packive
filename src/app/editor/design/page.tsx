@@ -265,8 +265,8 @@ function DesignPageInner() {
       try {
         const { jsPDF } = await import("jspdf");
         const { Canvas: FabricCanvas } = await import("fabric");
-        const BLEED = 3; // mm
-        const GLUE_BLEED = 5;
+        const BLEED = 5; // mm
+        const GLUE_BLEED = 10;
         const MULTIPLIER = 3; // 3x resolution for high quality
   
         const fX = glueW + T;
@@ -386,44 +386,97 @@ function DesignPageInner() {
           doc.rect(px - bl, py - bl, p.w + bl * 2, p.h + bl * 2);
         }
   
-        // === DIE CUT lines (red, solid) ===
-        doc.setDrawColor(230, 0, 0);
-        doc.setLineWidth(0.3);
-        doc.setLineDashPattern([], 0);
-        for (const [pid, p] of Object.entries(positions)) {
-          if (p.w <= 0 || p.h <= 0) continue;
-          const px = mg + p.x;
-          const py = mg + p.y;
-          doc.rect(px, py, p.w, p.h);
-        }
-  
-        // === FOLD / CREASE lines (blue, dashed) ===
-        doc.setDrawColor(0, 0, 200);
-        doc.setLineWidth(0.25);
-        doc.setLineDashPattern([2, 1.5], 0);
-        const foldLines: number[][] = [
-          // Body top edge
-          [fX, bY, fX + L, bY], [lX, bY, lX + W, bY], [bX, bY, bX + L, bY], [rX, bY, rX + W, bY],
-          // Body bottom edge
-          [fX, bY + D, fX + L, bY + D], [lX, bY + D, lX + W, bY + D], [bX, bY + D, bX + L, bY + D], [rX, bY + D, rX + W, bY + D],
-          // Vertical folds between panels
-          [fX + L, bY, fX + L, bY + D], [lX + W, bY, lX + W, bY + D], [bX + L, bY, bX + L, bY + D],
-          // Glue flap fold
-          [glueW, bY, glueW, bY + D],
-          // Top lid fold
-          [fX, tlY, fX + L, tlY],
-          // Tuck fold
-          [fX, tuckH, fX + L, tuckH],
-          // Bottom folds
-          [fX, btY, fX + L, btY], [lX, btY, lX + W, btY], [bX, btY, bX + L, btY], [rX, btY, rX + W, btY],
-          // Dust flap top folds
-          [lX, bY - dustH, lX + W, bY - dustH], [rX, bY - dustH, rX + W, bY - dustH],
-        ];
-        foldLines.forEach(([x1, y1, x2, y2]) => {
-          doc.line(mg + x1, mg + y1, mg + x2, mg + y2);
-        });
-        doc.setLineDashPattern([], 0);
-  
+                // === DIE CUT lines (red, solid) - outer contour only ===
+                doc.setDrawColor(230, 0, 0);
+                doc.setLineWidth(0.3);
+                doc.setLineDashPattern([], 0);
+                
+                // Draw outer contour of the entire net (not individual panel rects)
+                // Top tuck top edge
+                doc.line(mg + fX, mg + 0, mg + fX + L, mg + 0);
+                // Top tuck sides
+                doc.line(mg + fX, mg + 0, mg + fX, mg + tuckH);
+                doc.line(mg + fX + L, mg + 0, mg + fX + L, mg + tuckH);
+                // Top lid sides
+                doc.line(mg + fX, mg + tuckH, mg + fX, mg + tlY);
+                doc.line(mg + fX + L, mg + tuckH, mg + fX + L, mg + tlY);
+                // Top lid to dust flaps transition
+                doc.line(mg + fX, mg + tlY, mg + fX, mg + bY);
+                doc.line(mg + fX + L, mg + tlY, mg + lX, mg + tlY);
+                doc.line(mg + lX, mg + tlY, mg + lX, mg + bY - dustH);
+                // Top dust L
+                doc.line(mg + lX, mg + bY - dustH, mg + lX + W, mg + bY - dustH);
+                doc.line(mg + lX + W, mg + bY - dustH, mg + lX + W, mg + bY);
+                // Between dust L and back
+                doc.line(mg + lX + W, mg + bY, mg + bX, mg + bY);
+                doc.line(mg + bX, mg + bY, mg + bX + L, mg + bY);
+                // Top dust R
+                doc.line(mg + bX + L, mg + bY, mg + rX, mg + bY - dustH);
+                doc.line(mg + rX, mg + bY - dustH, mg + rX + W, mg + bY - dustH);
+                doc.line(mg + rX + W, mg + bY - dustH, mg + rX + W, mg + bY);
+                // Right side top
+                doc.line(mg + rX + W, mg + bY, mg + rX + W, mg + bY);
+                
+                // Glue flap left side
+                doc.line(mg + 0, mg + bY, mg + 0, mg + bY + D);
+                // Glue flap top/bottom
+                doc.line(mg + 0, mg + bY, mg + glueW, mg + bY);
+                doc.line(mg + 0, mg + bY + D, mg + glueW, mg + bY + D);
+                
+                // Main body top edge (left of front already drawn)
+                doc.line(mg + fX + L, mg + bY, mg + lX, mg + bY); // gap area if any
+                
+                // Right outer edge
+                doc.line(mg + rX + W, mg + bY, mg + rX + W, mg + bY + D);
+                
+                // Bottom flaps outer
+                doc.line(mg + fX, mg + btY + bottomH, mg + fX + L, mg + btY + bottomH);
+                doc.line(mg + fX, mg + bY + D, mg + fX, mg + btY + bottomH);
+                doc.line(mg + fX + L, mg + bY + D, mg + fX + L, mg + btY + bottomH);
+                
+                doc.line(mg + lX, mg + btY + bottomDustH, mg + lX + W, mg + btY + bottomDustH);
+                doc.line(mg + lX, mg + bY + D, mg + lX, mg + btY + bottomDustH);
+                doc.line(mg + lX + W, mg + bY + D, mg + lX + W, mg + btY + bottomDustH);
+                
+                doc.line(mg + bX, mg + btY + bottomH, mg + bX + L, mg + btY + bottomH);
+                doc.line(mg + bX, mg + bY + D, mg + bX, mg + btY + bottomH);
+                doc.line(mg + bX + L, mg + bY + D, mg + bX + L, mg + btY + bottomH);
+                
+                doc.line(mg + rX, mg + btY + bottomDustH, mg + rX + W, mg + btY + bottomDustH);
+                doc.line(mg + rX, mg + bY + D, mg + rX, mg + btY + bottomDustH);
+                doc.line(mg + rX + W, mg + bY + D, mg + rX + W, mg + btY + bottomDustH);
+        
+                // === FOLD / CREASE lines (blue, dashed) - internal boundaries only ===
+                doc.setDrawColor(0, 0, 200);
+                doc.setLineWidth(0.25);
+                doc.setLineDashPattern([2, 1.5], 0);
+                const foldLines: number[][] = [
+                  // Tuck to lid fold
+                  [fX, tuckH, fX + L, tuckH],
+                  // Lid to body fold  
+                  [fX, tlY, fX + L, tlY],
+                  // Lid bottom = body top for front
+                  [fX, bY, fX + L, bY],
+                  // Dust flap folds (top)
+                  [lX, bY, lX + W, bY],
+                  [rX, bY, rX + W, bY],
+                  // Vertical folds between body panels
+                  [fX + L, bY, fX + L, bY + D],
+                  [lX + W, bY, lX + W, bY + D],
+                  [bX + L, bY, bX + L, bY + D],
+                  // Glue flap fold
+                  [glueW, bY, glueW, bY + D],
+                  // Body bottom to bottom flaps
+                  [fX, bY + D, fX + L, bY + D],
+                  [lX, bY + D, lX + W, bY + D],
+                  [bX, bY + D, bX + L, bY + D],
+                  [rX, bY + D, rX + W, bY + D],
+                ];
+                foldLines.forEach(([x1, y1, x2, y2]) => {
+                  doc.line(mg + x1, mg + y1, mg + x2, mg + y2);
+                });
+                doc.setLineDashPattern([], 0);
+        
         // === Crop marks ===
         doc.setDrawColor(0, 0, 0);
         doc.setLineWidth(0.15);
@@ -758,7 +811,7 @@ function DesignPageInner() {
               <p className="text-sm text-gray-500">
                 {boxTypeDisplay} | {L}x{W}x{D}mm | {matLabel} | {totalDesigned}/13 panels
               </p>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <button onClick={exportFullNetPNG} disabled={exporting !== null} className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition text-center">
                   <span className="text-2xl">NET</span>
                   <span className="text-sm font-semibold text-gray-800">{t("ov.fullNetPng")}</span>
@@ -771,18 +824,14 @@ function DesignPageInner() {
                   <span className="text-[10px] text-gray-400">{t("ov.printPdfDesc")}</span>
                   {exporting === "pdf" && <span className="text-[10px] text-red-500">Exporting...</span>}
                 </button>
-                <button onClick={exportIndividualPNG} disabled={exporting !== null || totalDesigned === 0} className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-green-400 hover:bg-green-50 transition text-center disabled:opacity-40">
-                  <span className="text-2xl">PNG</span>
-                  <span className="text-sm font-semibold text-gray-800">{t("ov.individualPanels")}</span>
-                  <span className="text-[10px] text-gray-400">{totalDesigned} panel(s) as PNGs</span>
-                  {exporting === "individual" && <span className="text-[10px] text-green-500">Exporting...</span>}
+                
+                <button onClick={exportPDFEnhanced} disabled={exporting !== null} className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-red-400 hover:bg-red-50 transition text-center">
+                <span className="text-2xl font-bold text-red-600">PDF</span>
+                <span className="text-sm font-semibold text-gray-800">HQ Print-Ready</span>
+                <span className="text-[10px] text-gray-400">Die-cut / Fold / Bleed / Crop marks</span>
+                 {exporting === "pdf-enhanced" && <span className="text-[10px] text-red-500">Rendering...</span>}
                 </button>
-                <button onClick={exportPDFEnhanced} disabled={exporting !== null} className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-orange-400 hover:bg-orange-50 transition text-center">
-                  <span className="text-2xl font-bold text-orange-600">HQ</span>
-                  <span className="text-sm font-semibold text-gray-800">Print-Ready HQ</span>
-                  <span className="text-[10px] text-gray-400">Die-cut / Fold / Bleed / Crop marks</span>
-                  {exporting === "pdf-enhanced" && <span className="text-[10px] text-orange-500">Rendering...</span>}
-                </button>
+
 
 
                 <button onClick={export3DScreenshot} disabled={exporting !== null} className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-purple-400 hover:bg-purple-50 transition text-center">
