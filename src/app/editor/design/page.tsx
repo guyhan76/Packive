@@ -266,8 +266,8 @@ function DesignPageInner() {
         const { jsPDF } = await import("jspdf");
         const { Canvas: FabricCanvas } = await import("fabric");
         const BLEED = 5; // mm
-        const GLUE_BLEED = 10;
-        const MULTIPLIER = 3; // 3x resolution for high quality
+        const GLUE_BLEED = 5;
+        const MULTIPLIER = 8; // 8x resolution for high quality
   
         const fX = glueW + T;
         const lX = fX + L + T;
@@ -818,21 +818,33 @@ function DesignPageInner() {
                   <span className="text-[10px] text-gray-400">{t("ov.fullNetDesc")}</span>
                   {exporting === "net-png" && <span className="text-[10px] text-blue-500">{t("ov.exporting")}</span>}
                 </button>
-                <button onClick={exportPDF} disabled={exporting !== null} className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-red-400 hover:bg-red-50 transition text-center">
-                  <span className="text-2xl">PDF</span>
-                  <span className="text-sm font-semibold text-gray-800">{t("ov.printPdf")}</span>
-                  <span className="text-[10px] text-gray-400">{t("ov.printPdfDesc")}</span>
-                  {exporting === "pdf" && <span className="text-[10px] text-red-500">Exporting...</span>}
-                </button>
-                
                 <button onClick={exportPDFEnhanced} disabled={exporting !== null} className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-red-400 hover:bg-red-50 transition text-center">
-                <span className="text-2xl font-bold text-red-600">PDF</span>
-                <span className="text-sm font-semibold text-gray-800">HQ Print-Ready</span>
-                <span className="text-[10px] text-gray-400">Die-cut / Fold / Bleed / Crop marks</span>
-                 {exporting === "pdf-enhanced" && <span className="text-[10px] text-red-500">Rendering...</span>}
+                  <span className="text-2xl font-bold text-red-600">PDF</span>
+                  <span className="text-sm font-semibold text-gray-800">HQ Print-Ready</span>
+                  <span className="text-[10px] text-gray-400">300dpi / Die-cut / Fold / Bleed</span>
+                  {exporting === "pdf-enhanced" && <span className="text-[10px] text-red-500">Rendering...</span>}
                 </button>
+                <button onClick={exportIndividualPNG} disabled={exporting !== null || totalDesigned === 0} className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-green-400 hover:bg-green-50 transition text-center disabled:opacity-40">
+                  <span className="text-2xl">PNG</span>
+                  <span className="text-sm font-semibold text-gray-800">Individual Panels</span>
+                  <span className="text-[10px] text-gray-400">{totalDesigned} panel(s) as PNGs</span>
+                  {exporting === "individual" && <span className="text-[10px] text-green-500">{t("ov.exporting")}</span>}
+                </button>
+                <button onClick={export3DScreenshot} disabled={exporting !== null} className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-purple-400 hover:bg-purple-50 transition text-center">
+                  <span className="text-2xl">3D</span>
+                  <span className="text-sm font-semibold text-gray-800">{t("ov.screenshot3d")}</span>
+                  <span className="text-[10px] text-gray-400">{t("ov.screenshot3dDesc")}</span>
+                  {exporting === "3d" && <span className="text-[10px] text-purple-500">Exporting...</span>}
+                </button>
+              </div>
 
-
+               
+                <button onClick={exportPDFEnhanced} disabled={exporting !== null} className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-red-400 hover:bg-red-50 transition text-center">
+                  <span className="text-2xl font-bold text-red-600">PDF</span>
+                  <span className="text-sm font-semibold text-gray-800">HQ Print-Ready</span>
+                  <span className="text-[10px] text-gray-400">300dpi / Die-cut / Fold / Bleed</span>
+                  {exporting === "pdf-enhanced" && <span className="text-[10px] text-red-500">Rendering...</span>}
+                </button>
 
                 <button onClick={export3DScreenshot} disabled={exporting !== null} className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 hover:border-purple-400 hover:bg-purple-50 transition text-center">
                   <span className="text-2xl">3D</span>
