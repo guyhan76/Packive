@@ -36,31 +36,35 @@ interface Props {
   onEditPanel: (pid: PanelId) => void;
 }
 
-const PX_PER_MM = 3;
-const PADDING = 60;
+const SCALE = 3;
+const PAD = 20;
 
 export default function FullNetEditor({
   L, W, D, T, tuckH, dustH, glueW, bottomH, bottomDustH,
   panels, panelConfig, onSave, onBack, onEditPanel
 }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fcRef = useRef<any>(null);
   const [zoom, setZoom] = useState(100);
   const [activePanel, setActivePanel] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
 
+  // Same coordinates as FullNetPreview
   const frontX = glueW + T;
   const leftX = frontX + L + T;
   const backX = leftX + W + T;
   const rightX = backX + L + T;
-  const bodyY = tuckH + T + W;
-  const bottomY = bodyY + D + T;
   const totalW = rightX + W;
+  const tuckY = 0;
+  const topLidY = tuckH + T;
+  const bodyY = topLidY + W;
+  const bottomY = bodyY + D + T;
   const totalH = bottomY + Math.max(bottomH, bottomDustH);
 
   const positions: Record<string, { x: number; y: number; w: number; h: number }> = useMemo(() => ({
-    topTuck: { x: frontX, y: 0, w: L, h: tuckH },
-    topLid: { x: frontX, y: tuckH + T, w: L, h: W },
+    topTuck: { x: frontX, y: tuckY, w: L, h: tuckH },
+    topLid: { x: frontX, y: topLidY, w: L, h: W },
     topDustL: { x: leftX, y: bodyY - dustH, w: W, h: dustH },
     topDustR: { x: rightX, y: bodyY - dustH, w: W, h: dustH },
     glueFlap: { x: 0, y: bodyY, w: glueW, h: D },
@@ -72,10 +76,10 @@ export default function FullNetEditor({
     bottomDustL: { x: leftX, y: bottomY, w: W, h: bottomDustH },
     bottomFlapBack: { x: backX, y: bottomY, w: L, h: bottomH },
     bottomDustR: { x: rightX, y: bottomY, w: W, h: bottomDustH },
-  }), [L, W, D, T, tuckH, dustH, glueW, bottomH, bottomDustH, frontX, leftX, backX, rightX, bodyY, bottomY]);
+  }), [L, W, D, T, tuckH, dustH, glueW, bottomH, bottomDustH, frontX, leftX, backX, rightX, bodyY, bottomY, topLidY, tuckY]);
 
-  const canvasW = totalW * PX_PER_MM + PADDING * 2;
-  const canvasH = totalH * PX_PER_MM + PADDING * 2;
+  const canvasW = (totalW + PAD * 2) * SCALE;
+  const canvasH = (totalH + PAD * 2) * SCALE;
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -84,242 +88,239 @@ export default function FullNetEditor({
     (async () => {
       const fabric = await import("fabric");
       if (disposed) return;
-      const FabricCanvas = fabric.Canvas;
-      const Rect = fabric.Rect;
-      const Textbox = fabric.Textbox;
-      const FabricLine = fabric.Line;
-      const FabricImage = fabric.FabricImage;
 
-      const fc = new FabricCanvas(canvasRef.current!, {
+      const fc = new fabric.Canvas(canvasRef.current!, {
         width: canvasW,
         height: canvasH,
-        backgroundColor: "#f3f4f6",
-        selection: true,
+        backgroundColor: "#f8f9fa",
+        selection: false,
       });
       fcRef.current = fc;
 
+      const S = SCALE;
+      const P = PAD * S;
+
+      // Draw each panel
       Object.entries(positions).forEach(([pid, pos]) => {
         if (pos.w <= 0 || pos.h <= 0) return;
-        const px = PADDING + pos.x * PX_PER_MM;
-        const py = PADDING + pos.y * PX_PER_MM;
-        const pw = pos.w * PX_PER_MM;
-        const ph = pos.h * PX_PER_MM;
+        const px = P + pos.x * S;
+        const py = P + pos.y * S;
+        const pw = pos.w * S;
+        const ph = pos.h * S;
         const pc = panelConfig[pid];
         const pnl = panels[pid];
 
-        const bg = new Rect({
+        // Background
+        const bg = new fabric.Rect({
           left: px, top: py, width: pw, height: ph,
           fill: pnl?.designed ? "#ffffff" : (pc?.color || "#f9fafb"),
           stroke: pnl?.designed ? "#22C55E" : (pc?.border || "#d1d5db"),
-          strokeWidth: pnl?.designed ? 1.5 : 0.8,
+          strokeWidth: pnl?.designed ? 2 : 1,
           selectable: false, evented: true,
           hoverCursor: "pointer",
         } as any);
-        (bg as any)._panelId = pid;
-        (bg as any)._isBg = true;
+        (bg as any)._pid = pid;
         fc.add(bg);
 
-        if (!pnl?.designed && pw > 30 && ph > 20) {
-          const label = new Textbox(pc?.name || pid, {
-            left: px + pw / 2, top: py + ph / 2 - 6,
-            width: pw - 10,
-            fontSize: Math.max(Math.min(pw * 0.08, ph * 0.1, 14), 8),
+        // Label (only if not designed)
+        if (!pnl?.designed) {
+          const fs = Math.max(Math.min(pw * 0.1, ph * 0.12, 16), 7);
+          const label = new fabric.Textbox(pc?.name || pid, {
+            left: px + pw / 2, top: py + ph / 2 - fs * 0.3,
+            width: pw - 4,
+            fontSize: fs,
             fill: "#9ca3af", fontFamily: "sans-serif",
             textAlign: "center", originX: "center", originY: "center",
             selectable: false, evented: false,
-          } as any);
-          (label as any)._panelId = pid;
-          (label as any)._isLabel = true;
+          });
           fc.add(label);
-
-          const sizeLabel = new Textbox(pos.w + "x" + pos.h + "mm", {
-            left: px + pw / 2, top: py + ph / 2 + 8,
-            width: pw - 10,
-            fontSize: Math.max(Math.min(pw * 0.06, 10), 6),
-            fill: "#d1d5db", fontFamily: "sans-serif",
-            textAlign: "center", originX: "center", originY: "center",
-            selectable: false, evented: false,
-          } as any);
-          (sizeLabel as any)._panelId = pid;
-          (sizeLabel as any)._isLabel = true;
-          fc.add(sizeLabel);
+          if (pw > 40 && ph > 30) {
+            const sz = new fabric.Textbox(pos.w + "x" + pos.h + "mm", {
+              left: px + pw / 2, top: py + ph / 2 + fs * 0.8,
+              width: pw - 4,
+              fontSize: Math.max(fs * 0.65, 6),
+              fill: "#d1d5db", fontFamily: "sans-serif",
+              textAlign: "center", originX: "center", originY: "center",
+              selectable: false, evented: false,
+            });
+            fc.add(sz);
+          }
         }
       });
 
-      const foldLines: number[][] = [
+      // Fold lines (blue dashed) — same as FullNetPreview
+      const folds: number[][] = [
+        // Vertical body
         [frontX, bodyY, frontX, bodyY + D],
         [frontX + L, bodyY, frontX + L, bodyY + D],
         [leftX + W, bodyY, leftX + W, bodyY + D],
         [backX + L, bodyY, backX + L, bodyY + D],
-        [glueW, bodyY, glueW, bodyY + D],
-        [frontX, bodyY, frontX + L, bodyY],
+        // Horizontal
+        [frontX, bodyY, rightX + W, bodyY],
         [frontX, bodyY + D, rightX + W, bodyY + D],
-        [frontX, tuckH + T, frontX + L, tuckH + T],
+        [frontX, topLidY, frontX + L, topLidY],
         [frontX, tuckH, frontX + L, tuckH],
+        // Dust top
         [leftX, bodyY - dustH, leftX, bodyY],
         [leftX + W, bodyY - dustH, leftX + W, bodyY],
         [rightX, bodyY - dustH, rightX, bodyY],
         [rightX + W, bodyY - dustH, rightX + W, bodyY],
+        // Bottom
         [frontX, bottomY, rightX + W, bottomY],
+        [frontX, bottomY, frontX, bottomY + bottomH],
+        [frontX + L, bottomY, frontX + L, bottomY + bottomH],
         [leftX, bottomY, leftX, bottomY + bottomDustH],
         [leftX + W, bottomY, leftX + W, bottomY + bottomDustH],
         [backX, bottomY, backX, bottomY + bottomH],
         [backX + L, bottomY, backX + L, bottomY + bottomH],
         [rightX, bottomY, rightX, bottomY + bottomDustH],
         [rightX + W, bottomY, rightX + W, bottomY + bottomDustH],
+        // Glue
+        [glueW, bodyY, glueW, bodyY + D],
       ];
-      foldLines.forEach(([x1, y1, x2, y2]) => {
-        const line = new FabricLine([
-          PADDING + x1 * PX_PER_MM, PADDING + y1 * PX_PER_MM,
-          PADDING + x2 * PX_PER_MM, PADDING + y2 * PX_PER_MM,
-        ], {
-          stroke: "#93c5fd", strokeWidth: 1,
-          strokeDashArray: [6, 3],
+      folds.forEach(([x1, y1, x2, y2]) => {
+        fc.add(new fabric.Line([P + x1 * S, P + y1 * S, P + x2 * S, P + y2 * S], {
+          stroke: "#93c5fd", strokeWidth: 1, strokeDashArray: [8, 4],
           selectable: false, evented: false,
-        });
-        (line as any)._isFold = true;
-        fc.add(line);
+        }));
       });
 
-      const cutLines: number[][] = [
+      // Die-cut lines (red solid) — outer contour
+      const cuts: number[][] = [
+        // Top tuck
         [frontX, 0, frontX + L, 0],
         [frontX, 0, frontX, tuckH],
         [frontX + L, 0, frontX + L, tuckH],
-        [frontX, tuckH + T, frontX, bodyY],
-        [frontX + L, tuckH + T, frontX + L, bodyY],
+        // Top lid sides
+        [frontX, topLidY, frontX, bodyY],
+        [frontX + L, topLidY, frontX + L, bodyY],
+        // Top dust L
         [leftX, bodyY - dustH, leftX + W, bodyY - dustH],
         [leftX, bodyY - dustH, leftX, bodyY],
         [leftX + W, bodyY - dustH, leftX + W, bodyY],
+        // Top dust R
         [rightX, bodyY - dustH, rightX + W, bodyY - dustH],
         [rightX, bodyY - dustH, rightX, bodyY],
         [rightX + W, bodyY - dustH, rightX + W, bodyY],
+        // Glue flap
         [0, bodyY, glueW, bodyY],
         [0, bodyY, 0, bodyY + D],
         [0, bodyY + D, glueW, bodyY + D],
+        // Right outer
         [rightX + W, bodyY, rightX + W, bodyY + D],
+        // Bottom flap front
         [frontX, bottomY + bottomH, frontX + L, bottomY + bottomH],
         [frontX, bottomY, frontX, bottomY + bottomH],
+        [frontX + L, bottomY, frontX + L, bottomY + bottomH],
+        // Bottom dust L
         [leftX, bottomY + bottomDustH, leftX + W, bottomY + bottomDustH],
+        [leftX, bottomY, leftX, bottomY + bottomDustH],
+        [leftX + W, bottomY, leftX + W, bottomY + bottomDustH],
+        // Bottom flap back
         [backX, bottomY + bottomH, backX + L, bottomY + bottomH],
         [backX, bottomY, backX, bottomY + bottomH],
+        [backX + L, bottomY, backX + L, bottomY + bottomH],
+        // Bottom dust R
         [rightX, bottomY + bottomDustH, rightX + W, bottomY + bottomDustH],
+        [rightX, bottomY, rightX, bottomY + bottomDustH],
         [rightX + W, bottomY, rightX + W, bottomY + bottomDustH],
-        [leftX + W, bottomY, leftX + W, bottomY + bottomDustH],
       ];
-      cutLines.forEach(([x1, y1, x2, y2]) => {
-        const line = new FabricLine([
-          PADDING + x1 * PX_PER_MM, PADDING + y1 * PX_PER_MM,
-          PADDING + x2 * PX_PER_MM, PADDING + y2 * PX_PER_MM,
-        ], {
+      cuts.forEach(([x1, y1, x2, y2]) => {
+        fc.add(new fabric.Line([P + x1 * S, P + y1 * S, P + x2 * S, P + y2 * S], {
           stroke: "#ef4444", strokeWidth: 1.5,
           selectable: false, evented: false,
-        });
-        (line as any)._isCut = true;
-        fc.add(line);
+        }));
       });
 
+      // Load thumbnails
       for (const [pid, pos] of Object.entries(positions)) {
         const pnl = panels[pid];
         if (!pnl?.designed || !pnl.thumbnail) continue;
-        const px = PADDING + pos.x * PX_PER_MM;
-        const py = PADDING + pos.y * PX_PER_MM;
-        const pw = pos.w * PX_PER_MM;
-        const ph = pos.h * PX_PER_MM;
+        const px = P + pos.x * S;
+        const py = P + pos.y * S;
+        const pw = pos.w * S;
+        const ph = pos.h * S;
         try {
-          const img = await FabricImage.fromURL(pnl.thumbnail);
+          const img = await fabric.FabricImage.fromURL(pnl.thumbnail);
           img.set({
             left: px, top: py,
             scaleX: pw / (img.width || 1),
             scaleY: ph / (img.height || 1),
             selectable: false, evented: false,
           });
-          const clipRect = new Rect({ left: px, top: py, width: pw, height: ph, absolutePositioned: true });
-          img.clipPath = clipRect;
-          (img as any)._panelId = pid;
-          (img as any)._isThumb = true;
+          img.clipPath = new fabric.Rect({ left: px, top: py, width: pw, height: ph, absolutePositioned: true });
+          (img as any)._pid = pid;
           fc.add(img);
-        } catch (e) {
-          console.warn("Failed to load thumbnail for", pid, e);
-        }
+        } catch (e) { console.warn("thumb load fail", pid, e); }
       }
 
+      // Zoom
       fc.on("mouse:wheel", (opt: any) => {
-        const delta = opt.e.deltaY;
+        const e = opt.e;
         let z = fc.getZoom();
-        z *= 0.999 ** delta;
-        z = Math.max(0.15, Math.min(6, z));
-        fc.zoomToPoint(new fabric.Point(opt.e.offsetX, opt.e.offsetY), z);
+        z *= 0.999 ** e.deltaY;
+        z = Math.max(0.1, Math.min(8, z));
+        fc.zoomToPoint(new fabric.Point(e.offsetX, e.offsetY), z);
         setZoom(Math.round(z * 100));
-        opt.e.preventDefault();
-        opt.e.stopPropagation();
+        e.preventDefault();
+        e.stopPropagation();
       });
 
-      let panning = false;
-      let lastPanX = 0, lastPanY = 0;
+      // Pan (Alt+drag or middle mouse)
+      let panning = false, lx = 0, ly = 0;
       fc.on("mouse:down", (opt: any) => {
         if (opt.e.altKey || opt.e.button === 1) {
-          panning = true;
-          lastPanX = opt.e.clientX;
-          lastPanY = opt.e.clientY;
+          panning = true; lx = opt.e.clientX; ly = opt.e.clientY;
           fc.selection = false;
-          opt.e.preventDefault();
         }
       });
       fc.on("mouse:move", (opt: any) => {
-        if (panning) {
-          const vpt = fc.viewportTransform;
-          vpt[4] += opt.e.clientX - lastPanX;
-          vpt[5] += opt.e.clientY - lastPanY;
-          lastPanX = opt.e.clientX;
-          lastPanY = opt.e.clientY;
-          fc.requestRenderAll();
-        }
+        if (!panning) return;
+        const vpt = fc.viewportTransform!;
+        vpt[4] += opt.e.clientX - lx;
+        vpt[5] += opt.e.clientY - ly;
+        lx = opt.e.clientX; ly = opt.e.clientY;
+        fc.requestRenderAll();
       });
-      fc.on("mouse:up", () => { panning = false; fc.selection = true; });
+      fc.on("mouse:up", () => { panning = false; fc.selection = false; });
 
+      // Double-click → edit panel
       fc.on("mouse:dblclick", (opt: any) => {
-        const pointer = fc.getScenePoint(opt.e);
+        const pt = fc.getScenePoint(opt.e);
         for (const [pid, pos] of Object.entries(positions)) {
-          const px = PADDING + pos.x * PX_PER_MM;
-          const py = PADDING + pos.y * PX_PER_MM;
-          const pw = pos.w * PX_PER_MM;
-          const ph = pos.h * PX_PER_MM;
-          if (pointer.x >= px && pointer.x <= px + pw && pointer.y >= py && pointer.y <= py + ph) {
+          const px = P + pos.x * S, py = P + pos.y * S;
+          const pw = pos.w * S, ph = pos.h * S;
+          if (pt.x >= px && pt.x <= px + pw && pt.y >= py && pt.y <= py + ph) {
             onEditPanel(pid as PanelId);
             return;
           }
         }
       });
 
+      // Click → select panel
       fc.on("mouse:down", (opt: any) => {
         if (opt.e.altKey || opt.e.button === 1) return;
-        const pointer = fc.getScenePoint(opt.e);
+        const pt = fc.getScenePoint(opt.e);
         let found: string | null = null;
         for (const [pid, pos] of Object.entries(positions)) {
-          const px = PADDING + pos.x * PX_PER_MM;
-          const py = PADDING + pos.y * PX_PER_MM;
-          const pw = pos.w * PX_PER_MM;
-          const ph = pos.h * PX_PER_MM;
-          if (pointer.x >= px && pointer.x <= px + pw && pointer.y >= py && pointer.y <= py + ph) {
-            found = pid;
-            break;
-          }
+          const px = P + pos.x * S, py = P + pos.y * S;
+          const pw = pos.w * S, ph = pos.h * S;
+          if (pt.x >= px && pt.x <= px + pw && pt.y >= py && pt.y <= py + ph) { found = pid; break; }
         }
         setActivePanel(found);
       });
 
-      const wrapper = canvasRef.current?.parentElement;
+      // Fit to screen
+      const wrapper = containerRef.current;
       if (wrapper) {
-        const ww = wrapper.clientWidth;
-        const wh = wrapper.clientHeight;
-        const scaleX = (ww - 40) / canvasW;
-        const scaleY = (wh - 40) / canvasH;
-        const fitZoom = Math.min(scaleX, scaleY, 1);
-        fc.setZoom(fitZoom);
-        setZoom(Math.round(fitZoom * 100));
-        const vpt = fc.viewportTransform;
-        vpt[4] = (ww - canvasW * fitZoom) / 2;
-        vpt[5] = (wh - canvasH * fitZoom) / 2;
+        const ww = wrapper.clientWidth - 20;
+        const wh = wrapper.clientHeight - 20;
+        const fitZ = Math.min(ww / canvasW, wh / canvasH, 1);
+        fc.setZoom(fitZ);
+        setZoom(Math.round(fitZ * 100));
+        const vpt = fc.viewportTransform!;
+        vpt[4] = (wrapper.clientWidth - canvasW * fitZ) / 2;
+        vpt[5] = (wrapper.clientHeight - canvasH * fitZ) / 2;
         fc.requestRenderAll();
       }
 
@@ -327,26 +328,21 @@ export default function FullNetEditor({
       setIsReady(true);
     })();
 
-    return () => {
-      disposed = true;
-      if (fcRef.current) { fcRef.current.dispose(); fcRef.current = null; }
-    };
+    return () => { disposed = true; if (fcRef.current) { fcRef.current.dispose(); fcRef.current = null; } };
   }, []);
 
   const fitToScreen = useCallback(() => {
     const fc = fcRef.current;
-    const wrapper = canvasRef.current?.parentElement;
+    const wrapper = containerRef.current;
     if (!fc || !wrapper) return;
-    const ww = wrapper.clientWidth;
-    const wh = wrapper.clientHeight;
-    const scaleX = (ww - 40) / canvasW;
-    const scaleY = (wh - 40) / canvasH;
-    const fitZoom = Math.min(scaleX, scaleY, 1);
-    fc.setZoom(fitZoom);
-    setZoom(Math.round(fitZoom * 100));
-    const vpt = fc.viewportTransform;
-    vpt[4] = (ww - canvasW * fitZoom) / 2;
-    vpt[5] = (wh - canvasH * fitZoom) / 2;
+    const ww = wrapper.clientWidth - 20;
+    const wh = wrapper.clientHeight - 20;
+    const fitZ = Math.min(ww / canvasW, wh / canvasH, 1);
+    fc.setZoom(fitZ);
+    setZoom(Math.round(fitZ * 100));
+    const vpt = fc.viewportTransform!;
+    vpt[4] = (wrapper.clientWidth - canvasW * fitZ) / 2;
+    vpt[5] = (wrapper.clientHeight - canvasH * fitZ) / 2;
     fc.requestRenderAll();
   }, [canvasW, canvasH]);
 
@@ -356,53 +352,36 @@ export default function FullNetEditor({
     <div className="flex flex-col h-screen bg-gray-100">
       <div className="flex items-center justify-between px-4 py-2 bg-white border-b shadow-sm">
         <div className="flex items-center gap-3">
-          <button onClick={onBack} className="px-3 py-1.5 text-sm bg-gray-100 rounded-lg hover:bg-gray-200 transition">
-            Back
-          </button>
+          <button onClick={onBack} className="px-3 py-1.5 text-sm bg-gray-100 rounded-lg hover:bg-gray-200 transition">Back</button>
           <span className="font-bold text-base">Full Net Editor</span>
           <span className="text-xs text-gray-400">L{L} x W{W} x D{D}mm</span>
         </div>
         <div className="flex items-center gap-3">
           {activePanel && activeCfg && (
             <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded text-xs font-semibold" style={{ backgroundColor: activeCfg.color, color: activeCfg.border }}>
-                {activeCfg.name}
-              </span>
-              <button onClick={() => onEditPanel(activePanel as PanelId)}
-                className="px-2 py-0.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700">
-                Edit Panel
-              </button>
+              <span className="px-2 py-0.5 rounded text-xs font-semibold" style={{ backgroundColor: activeCfg.color, color: activeCfg.border }}>{activeCfg.name}</span>
+              <button onClick={() => onEditPanel(activePanel as PanelId)} className="px-2 py-0.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700">Edit</button>
             </div>
           )}
-          <span className="text-xs text-gray-400">Zoom: {zoom}%</span>
-          <button onClick={fitToScreen} className="text-xs text-blue-600 hover:text-blue-800">Fit</button>
+          <span className="text-xs text-gray-400">{zoom}%</span>
+          <button onClick={fitToScreen} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Fit</button>
         </div>
       </div>
-      <div className="flex items-center gap-3 px-4 py-1.5 bg-white border-b text-xs text-gray-500">
-        <span>Scroll: Zoom</span>
-        <span className="text-gray-300">|</span>
-        <span>Alt+Drag: Pan</span>
-        <span className="text-gray-300">|</span>
-        <span>Double-click: Edit panel</span>
-        <span className="text-gray-300">|</span>
-        <span>Click: Select panel</span>
-        {activePanel && activeCfg && (
-          <>
-            <span className="text-gray-300">|</span>
-            <span className="text-blue-600 font-semibold">Selected: {activeCfg.name}</span>
-          </>
-        )}
+      <div className="flex items-center gap-3 px-4 py-1 bg-white border-b text-[11px] text-gray-400">
+        <span>Scroll: Zoom</span><span>|</span>
+        <span>Alt+Drag: Pan</span><span>|</span>
+        <span>Double-click: Edit</span><span>|</span>
+        <span>Click: Select</span>
+        {activePanel && activeCfg && <><span>|</span><span className="text-blue-600 font-semibold">{activeCfg.name}</span></>}
       </div>
-      <div className="flex-1 overflow-hidden relative" style={{ cursor: "grab" }}>
+      <div ref={containerRef} className="flex-1 overflow-hidden relative" style={{ cursor: "grab" }}>
         <canvas ref={canvasRef} />
         {!isReady && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/80">
-            <span className="text-gray-400">Loading Full Net Editor...</span>
+            <span className="text-gray-400 text-sm">Loading...</span>
           </div>
         )}
       </div>
     </div>
   );
 }
-
-
