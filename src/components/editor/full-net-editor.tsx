@@ -2,6 +2,35 @@
 import React, { useRef, useState, useCallback, useEffect } from "react";
 
 interface PanelData { json: string | null; thumbnail: string | null; designed: boolean; }
+
+async function renderHiRes(json: string, wMM: number, hMM: number, scale: number): Promise<string | null> {
+  try {
+    const fabricModule = await import("fabric"); const FabricCanvas = fabricModule.Canvas; const util = fabricModule.util;
+    const cW = wMM * scale;
+    const cH = hMM * scale;
+    const el = document.createElement("canvas");
+    el.width = cW; el.height = cH;
+    const fc = new FabricCanvas(el, { width: cW, height: cH });
+    const parsed = JSON.parse(json);
+    const origW = parsed.width || parsed.objects?.[0]?.width || cW;
+    const origH = parsed.height || parsed.objects?.[0]?.height || cH;
+    await util.enlivenObjects(parsed.objects || []);
+    const sx = cW / origW;
+    const sy = cH / origH;
+    for (const obj of parsed.objects || []) {
+      const eo = await util.enlivenObjects([obj]);
+      if (eo[0]) {
+        const o = eo[0] as any;
+        o.set({ scaleX: (o.scaleX || 1) * sx, scaleY: (o.scaleY || 1) * sy, left: (o.left || 0) * sx, top: (o.top || 0) * sy });
+        fc.add(o);
+      }
+    }
+    fc.renderAll();
+    const url = el.toDataURL("image/png");
+    fc.dispose();
+    return url;
+  } catch (e) { console.warn("renderHiRes failed:", e); return null; }
+}
 interface PanelConfig { name: string; widthMM: number; heightMM: number; guide: string; color: string; border: string; icon: string; group: "body"|"top"|"bottom"|"glue"; }
 type PanelId = "front"|"left"|"back"|"right"|"topLid"|"topTuck"|"topDustL"|"topDustR"|"bottomFlapFront"|"bottomFlapBack"|"bottomDustL"|"bottomDustR"|"glueFlap";
 
@@ -27,6 +56,27 @@ export default function FullNetEditor({
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [hoveredPanel, setHoveredPanel] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<string | null>(null);
+  const [hiResUrls, setHiResUrls] = useState<Record<string, string>>({});
+
+  // Render high-res images from JSON for each designed panel
+  useEffect(() => {
+    let cancelled = false;
+    const HIRES_SCALE = 4; // 4 pixels per mm = high quality
+    async function renderAll() {
+      const results: Record<string, string> = {};
+      for (const [pid, data] of Object.entries(panels)) {
+        if (!data.json || !data.designed) continue;
+        const pc = panelConfig[pid as PanelId];
+        if (!pc) continue;
+        const url = await renderHiRes(data.json, pc.widthMM, pc.heightMM, HIRES_SCALE);
+        if (cancelled) return;
+        if (url) results[pid] = url;
+      }
+      if (!cancelled) setHiResUrls(results);
+    }
+    renderAll();
+    return () => { cancelled = true; };
+  }, [panels, panelConfig]);
 
   const frontX = glueW + T;
   const leftX = frontX + L + T;
@@ -219,10 +269,10 @@ export default function FullNetEditor({
                       stroke={isActive ? "#2563EB" : isHovered ? "#3B82F6" : d?.designed ? "#22C55E" : pc.border}
                       strokeWidth={isActive ? 2 : isHovered ? 1.5 : d?.designed ? 0.8 : 0.5}
                       style={{ transition: "stroke 0.15s, stroke-width 0.15s", pointerEvents: "all" }} />
-                    {d?.thumbnail && (
-                      <image href={d.thumbnail} x={p.x} y={p.y} width={p.w} height={p.h} preserveAspectRatio="none" clipPath={"url(#fne-clip-" + pid + ")"} />
+                    {(hiResUrls[pid] || d?.thumbnail) && (
+                      <image href={hiResUrls[pid] || d.thumbnail!} x={p.x} y={p.y} width={p.w} height={p.h} preserveAspectRatio="none" clipPath={"url(#fne-clip-" + pid + ")"} />
                     )}
-                    {!d?.thumbnail && p.w > 10 && p.h > 6 && (
+                    {!(hiResUrls[pid] || d?.thumbnail) && p.w > 10 && p.h > 6 && (
                       <text x={p.x + p.w / 2} y={p.y + p.h / 2} textAnchor="middle" dominantBaseline="middle"
                         fontSize={Math.max(Math.min(p.w * 0.06, p.h * 0.08, 6), 2)}
                         fill={isActive ? "#2563EB" : isHovered ? "#3B82F6" : "#9CA3AF"}
@@ -252,3 +302,6 @@ export default function FullNetEditor({
     </div>
   );
 }
+
+
+
