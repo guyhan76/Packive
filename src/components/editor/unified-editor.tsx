@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 import React, { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { useI18n } from "@/components/i18n-context";
 import { PACKIVE_SPOT_COLORS } from "@/data/packive-spot-colors";
 import { HLC_COLORS, HLC_HUE_CATEGORIES } from "@/data/cielab-hlc-colors";
-import { loadFOGRA39LUT, cmykToSrgb, cmykToHex as iccCmykToHex, srgbToCmyk, isLUTReady } from "@/lib/cmyk-engine";
+import { loadFOGRA39LUT, cmykToSrgb, cmykToHex as iccCmykToHex, srgbToCmyk, isLUTReady, isReverseLUTReady } from "@/lib/cmyk-engine";
 
 // ─── Types ───
 interface UnifiedEditorProps {
@@ -60,9 +60,8 @@ function panelPath(pid: string, p: {x:number;y:number;w:number;h:number}, geo: a
 
 // ─── CMYK Helpers ───
 function hexToCmyk(hex: string): [number,number,number,number] {
-  const r = parseInt(hex.slice(1,3),16)/255, g = parseInt(hex.slice(3,5),16)/255, b = parseInt(hex.slice(5,7),16)/255;
-  const k = 1 - Math.max(r,g,b); if (k===1) return [0,0,0,100];
-  return [Math.round((1-r-k)/(1-k)*100), Math.round((1-g-k)/(1-k)*100), Math.round((1-b-k)/(1-k)*100), Math.round(k*100)];
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return srgbToCmyk(r, g, b);
 }
 function cmykToHex(c:number,m:number,y:number,k:number): string {
   if (isLUTReady()) return iccCmykToHex(c, m, y, k);
@@ -184,6 +183,12 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [showUploadGuide, setShowUploadGuide] = useState(false);
   const [fillHue, setFillHue] = useState(0);
   const [strokeHue, setStrokeHue] = useState(0);
+  const cmykPickRef = useRef<HTMLDivElement>(null);
+  const cmykDragging = useRef(false);
+  const [cmykPickPos, setCmykPickPos] = useState<{s:number;v:number}>({s:50,v:50});
+  const strokePickRef = useRef<HTMLDivElement>(null);
+  const strokeDragging = useRef(false);
+  const [strokePickPos, setStrokePickPos] = useState<{s:number;v:number}>({s:50,v:50});
   const useEngineRef = useRef(true);
 
   // ─── PADDING for die-cut display ───
@@ -1060,7 +1065,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                           </label>
                           <label className="text-[10px] text-gray-500 flex items-center gap-2">Stroke
                             <input type="color" value={selProps.stroke || "#000000"} onChange={e => updateProp("stroke", e.target.value)} className="w-6 h-6 rounded cursor-pointer border" />
-                            <input type="number" value={selProps.strokeWidth} onChange={e => updateProp("strokeWidth", e.target.value)} className="w-12 border rounded px-1 py-0.5 text-[10px]" min="0" step="0.25" />
+                            <input type="number" value={selProps.strokeWidth} onChange={e => updateProp("strokeWidth", e.target.value)} className="w-16 border rounded px-1 py-0.5 text-[10px]" min="0" step="0.25" />
                           </label>
                         </div>
                       )}
@@ -1071,6 +1076,73 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                         const sc = selProps.strokeCmyk || (() => { const h = selProps.stroke || "#000000"; return {c:hexToCmyk(h)[0],m:hexToCmyk(h)[1],y:hexToCmyk(h)[2],k:hexToCmyk(h)[3]}; })();
                         return (
                           <div className="space-y-3">
+                            {/* 2D Color Picker + Spectrum Bar */}
+                            <div className="mb-3">
+                              {/* 2D Saturation/Brightness Area */}
+                              <div
+                                ref={cmykPickRef}
+                                className="relative w-full h-40 rounded cursor-crosshair border border-gray-200 select-none"
+                                style={{
+                                  background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${fillHue}, 100%, 50%))`
+                                }}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  cmykDragging.current = true;
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  const s = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+                                  const v = Math.max(0, Math.min(100, (1 - (e.clientY - rect.top) / rect.height) * 100));
+                                  setCmykPickPos({s, v});
+                                  const hex = hsvToHex(fillHue, s/100, v/100);
+                                  const cmyk = hexToCmyk(hex);
+                                  updateProp("fillCmyk", {c:cmyk[0],m:cmyk[1],y:cmyk[2],k:cmyk[3]});
+                                  const onMove = (ev: MouseEvent) => {
+                                    if (!cmykDragging.current) return;
+                                    const r = cmykPickRef.current?.getBoundingClientRect();
+                                    if (!r) return;
+                                    const ms = Math.max(0, Math.min(100, ((ev.clientX - r.left) / r.width) * 100));
+                                    const mv = Math.max(0, Math.min(100, (1 - (ev.clientY - r.top) / r.height) * 100));
+                                    setCmykPickPos({s: ms, v: mv});
+                                    const mhex = hsvToHex(fillHue, ms/100, mv/100);
+                                    const mcmyk = hexToCmyk(mhex);
+                                    updateProp("fillCmyk", {c:mcmyk[0],m:mcmyk[1],y:mcmyk[2],k:mcmyk[3]});
+                                  };
+                                  const onUp = () => {
+                                    cmykDragging.current = false;
+                                    document.removeEventListener("mousemove", onMove);
+                                    document.removeEventListener("mouseup", onUp);
+                                  };
+                                  document.addEventListener("mousemove", onMove);
+                                  document.addEventListener("mouseup", onUp);
+                                }}
+                              >
+                                {/* Crosshair indicator */}
+                                <div className="absolute w-4 h-4 border-2 border-white rounded-full shadow-md pointer-events-none" style={{
+                                  left: `calc(${cmykPickPos.s}% - 8px)`,
+                                  top: `calc(${100 - cmykPickPos.v}% - 8px)`,
+                                  backgroundColor: cmykToHex(fc.c,fc.m,fc.y,fc.k),
+                                  boxShadow: "0 0 0 1px rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.3)"
+                                }} />
+                              </div>
+                              {/* Hue Spectrum Bar */}
+                              <div className="relative mt-2">
+                                <input type="range" min="0" max="360" value={fillHue}
+                                  onChange={(e) => {
+                                    const h = Number(e.target.value);
+                                    setFillHue(h);
+                                    // Recalculate CMYK with new hue, keep saturation/brightness
+                                    const hex = cmykToHex(fc.c,fc.m,fc.y,fc.k);
+                                    const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;
+                                    const mx=Math.max(r,g,b),mn=Math.min(r,g,b);
+                                    const s=mx===0?0:(1-mn/mx); const v=mx;
+                                    const newHex = hsvToHex(h, s, v);
+                                    const cmyk = hexToCmyk(newHex);
+                                    updateProp("fillCmyk", {c:cmyk[0],m:cmyk[1],y:cmyk[2],k:cmyk[3]});
+                                  }}
+                                  className="w-full h-3 rounded-full cursor-pointer appearance-none"
+                                  style={{background: "linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)"}}
+                                />
+                              </div>
+                            </div>
                             {/* Fill CMYK */}
                             <div>
                               <div className="flex items-center gap-2 mb-2">
@@ -1094,13 +1166,77 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                                 );
                               })}
                             </div>
+                            {/* Stroke 2D Color Picker */}
+                            <div className="mb-3">
+                              <div className="text-[10px] font-medium text-gray-600 mb-1">Stroke Color</div>
+                              <div
+                                ref={strokePickRef}
+                                className="relative w-full h-32 rounded cursor-crosshair border border-gray-200 select-none"
+                                style={{
+                                  background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${strokeHue}, 100%, 50%))`
+                                }}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  strokeDragging.current = true;
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  const s = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+                                  const v = Math.max(0, Math.min(100, (1 - (e.clientY - rect.top) / rect.height) * 100));
+                                  setStrokePickPos({s, v});
+                                  const hex = hsvToHex(strokeHue, s/100, v/100);
+                                  const cmyk = hexToCmyk(hex);
+                                  updateProp("strokeCmyk", {c:cmyk[0],m:cmyk[1],y:cmyk[2],k:cmyk[3]});
+                                  const onMove = (ev: MouseEvent) => {
+                                    if (!strokeDragging.current) return;
+                                    const r = strokePickRef.current?.getBoundingClientRect();
+                                    if (!r) return;
+                                    const ms = Math.max(0, Math.min(100, ((ev.clientX - r.left) / r.width) * 100));
+                                    const mv = Math.max(0, Math.min(100, (1 - (ev.clientY - r.top) / r.height) * 100));
+                                    setStrokePickPos({s: ms, v: mv});
+                                    const mhex = hsvToHex(strokeHue, ms/100, mv/100);
+                                    const mcmyk = hexToCmyk(mhex);
+                                    updateProp("strokeCmyk", {c:mcmyk[0],m:mcmyk[1],y:mcmyk[2],k:mcmyk[3]});
+                                  };
+                                  const onUp = () => {
+                                    strokeDragging.current = false;
+                                    document.removeEventListener("mousemove", onMove);
+                                    document.removeEventListener("mouseup", onUp);
+                                  };
+                                  document.addEventListener("mousemove", onMove);
+                                  document.addEventListener("mouseup", onUp);
+                                }}
+                              >
+                                <div className="absolute w-4 h-4 border-2 border-white rounded-full shadow-md pointer-events-none" style={{
+                                  left: `calc(${strokePickPos.s}% - 8px)`,
+                                  top: `calc(${100 - strokePickPos.v}% - 8px)`,
+                                  backgroundColor: cmykToHex(sc.c,sc.m,sc.y,sc.k),
+                                  boxShadow: "0 0 0 1px rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.3)"
+                                }} />
+                              </div>
+                              <div className="relative mt-2">
+                                <input type="range" min="0" max="360" value={strokeHue}
+                                  onChange={(e) => {
+                                    const h = Number(e.target.value);
+                                    setStrokeHue(h);
+                                    const hex = cmykToHex(sc.c,sc.m,sc.y,sc.k);
+                                    const r2=parseInt(hex.slice(1,3),16)/255,g2=parseInt(hex.slice(3,5),16)/255,b2=parseInt(hex.slice(5,7),16)/255;
+                                    const mx=Math.max(r2,g2,b2),mn=Math.min(r2,g2,b2);
+                                    const s=mx===0?0:(1-mn/mx); const v=mx;
+                                    const newHex = hsvToHex(h, s, v);
+                                    const cmyk = hexToCmyk(newHex);
+                                    updateProp("strokeCmyk", {c:cmyk[0],m:cmyk[1],y:cmyk[2],k:cmyk[3]});
+                                  }}
+                                  className="w-full h-3 rounded-full cursor-pointer appearance-none"
+                                  style={{background: "linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)"}}
+                                />
+                              </div>
+                            </div>
                             {/* Stroke CMYK */}
                             <div>
                               <div className="flex items-center gap-2 mb-2">
                                 <span className="text-[10px] font-medium text-gray-600">Stroke</span>
                                 <div className="w-6 h-6 rounded border border-gray-300" style={{backgroundColor: cmykToHex(sc.c,sc.m,sc.y,sc.k)}} />
                                 <span className="text-[9px] text-gray-400 font-mono">{cmykToHex(sc.c,sc.m,sc.y,sc.k)}</span>
-                                <input type="number" value={selProps.strokeWidth} onChange={e => updateProp("strokeWidth", e.target.value)} className="w-10 border rounded px-1 py-0.5 text-[9px]" min="0" step="0.25" />
+                                <input type="number" value={selProps.strokeWidth} onChange={e => updateProp("strokeWidth", e.target.value)} className="w-16 border rounded px-1 py-0.5 text-[9px]" min="0" step="0.25" />
                               </div>
                               {(["c","m","y","k"] as const).map(ch => {
                                 const colors = {c:"#00BCD4",m:"#E91E63",y:"#FFC107",k:"#424242"};
