@@ -1,5 +1,5 @@
 ﻿"use client";
-import React, { useRef, useState, useCallback, useEffect } from "react";
+import React, { useRef, useState, useCallback, useEffect, useMemo } from "react";
 
 interface PanelData { json: string | null; thumbnail: string | null; designed: boolean; }
 
@@ -127,7 +127,7 @@ export default function FullNetEditor({
     bottomDustR: { x: rightX, y: bottomY, w: W, h: bottomDustH },
   };
 
-  const pad = 8;
+  const pad = 15;
   const ZOOM_PRESETS = [25, 50, 75, 100, 150, 200, 300, 400, 600];
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -179,6 +179,118 @@ export default function FullNetEditor({
     [leftX, bodyY, leftX + W, bodyY], [rightX, bodyY, rightX + W, bodyY],
     [glueW, bodyY, glueW, bodyY + D],
   ];
+
+  // ─── Die-cut outline (칼선): 전체 전개도 외곽 ───
+  const dieCutPath = useMemo(() => {
+    const gT = glueTaper;
+    const bT = bottomTaper;
+    const bDT = bottomDustTaper;
+    const bDR = Math.min(bDT * 0.8, 4);
+    const tI = tuckInset;
+    const tN = tuckNotch;
+    const dT = dustTaper;
+    const dR = dustRad;
+
+    // Build full outline clockwise from top-tuck top-left
+    return `
+      M ${frontX + tI} ${tuckY}
+      Q ${frontX + L/2} ${tuckY - tuckH * 0.08} ${frontX + L - tI} ${tuckY}
+      L ${frontX + L} ${tuckY + tuckH - tN}
+      L ${frontX + L - tN} ${tuckY + tuckH}
+      L ${frontX + L} ${topLidY}
+      L ${frontX + L} ${topLidY + W}
+      L ${leftX + W} ${bodyY}
+      L ${leftX + W - dR} ${bodyY - dustH}
+      Q ${leftX + W} ${bodyY - dustH} ${leftX + W} ${bodyY - dustH + dT}
+      L ${leftX + W} ${bodyY}
+      L ${backX} ${bodyY}
+      L ${backX} ${bodyY + D}
+      L ${backX + L} ${bodyY + D}
+      L ${backX + L} ${bodyY}
+      L ${rightX} ${bodyY}
+      L ${rightX} ${bodyY - dustH + dT}
+      Q ${rightX} ${bodyY - dustH} ${rightX + dR} ${bodyY - dustH}
+      L ${rightX + W - dR} ${bodyY - dustH}
+      Q ${rightX + W} ${bodyY - dustH} ${rightX + W} ${bodyY - dustH + dT}
+      L ${rightX + W} ${bodyY}
+      L ${rightX + W} ${bodyY + D}
+      L ${rightX + W} ${bottomY}
+      L ${rightX + W} ${bottomY + bottomDustH - bDT}
+      Q ${rightX + W} ${bottomY + bottomDustH} ${rightX + W - bDR} ${bottomY + bottomDustH}
+      L ${rightX + bDR} ${bottomY + bottomDustH}
+      Q ${rightX} ${bottomY + bottomDustH} ${rightX} ${bottomY + bottomDustH - bDT}
+      L ${rightX} ${bottomY}
+      L ${backX + L} ${bottomY}
+      L ${backX + L - bT} ${bottomY + bottomH}
+      L ${backX + bT} ${bottomY + bottomH}
+      L ${backX} ${bottomY + bottomH - bT}
+      L ${backX} ${bottomY}
+      L ${leftX + W} ${bottomY}
+      L ${leftX + W} ${bottomY + bottomDustH - bDT}
+      Q ${leftX + W} ${bottomY + bottomDustH} ${leftX + W - bDR} ${bottomY + bottomDustH}
+      L ${leftX + bDR} ${bottomY + bottomDustH}
+      Q ${leftX} ${bottomY + bottomDustH} ${leftX} ${bottomY + bottomDustH - bDT}
+      L ${leftX} ${bottomY}
+      L ${frontX + L} ${bottomY}
+      L ${frontX + L - bT} ${bottomY + bottomH}
+      L ${frontX + bT} ${bottomY + bottomH}
+      L ${frontX} ${bottomY + bottomH - bT}
+      L ${frontX} ${bottomY}
+      L ${glueW} ${bodyY + D}
+      L ${0} ${bodyY + D - gT}
+      L ${0} ${bodyY + gT}
+      L ${glueW} ${bodyY}
+      L ${frontX} ${bodyY}
+      L ${frontX} ${topLidY + W}
+      L ${frontX} ${topLidY}
+      L ${frontX + tN} ${tuckY + tuckH}
+      L ${frontX} ${tuckY + tuckH - tN}
+      L ${frontX + tI} ${tuckY}
+      Z
+    `;
+  }, [frontX, L, W, D, tuckY, tuckH, topLidY, bodyY, bottomY, leftX, backX, rightX, glueW, tuckInset, tuckNotch, dustTaper, dustRad, dustH, glueTaper, bottomTaper, bottomDustTaper, bottomH, bottomDustH]);
+
+  // ─── Bleed (블리드): 외곽에서 3mm 확장 ───
+  const BLEED = 3; // mm
+
+  // ─── Crop marks (크롭마크): 코너에 표시 ───
+  const cropMarkLen = 5;
+  const cropMarkOffset = 2;
+  const cropMarks = useMemo(() => {
+    const marks: { x1: number; y1: number; x2: number; y2: number }[] = [];
+    const corners = [
+      { x: frontX, y: tuckY },
+      { x: frontX + L, y: tuckY },
+      { x: frontX, y: topLidY },
+      { x: frontX + L, y: topLidY },
+      { x: 0, y: bodyY },
+      { x: frontX, y: bodyY },
+      { x: frontX + L, y: bodyY },
+      { x: leftX + W, y: bodyY },
+      { x: backX + L, y: bodyY },
+      { x: rightX + W, y: bodyY },
+      { x: 0, y: bodyY + D },
+      { x: frontX, y: bottomY },
+      { x: frontX + L, y: bottomY },
+      { x: leftX, y: bottomY },
+      { x: leftX + W, y: bottomY },
+      { x: backX, y: bottomY },
+      { x: backX + L, y: bottomY },
+      { x: rightX, y: bottomY },
+      { x: rightX + W, y: bottomY },
+      { x: frontX, y: bottomY + bottomH },
+      { x: frontX + L, y: bottomY + bottomH },
+      { x: backX, y: bottomY + bottomH },
+      { x: backX + L, y: bottomY + bottomH },
+    ];
+    for (const c of corners) {
+      marks.push({ x1: c.x - cropMarkLen - cropMarkOffset, y1: c.y, x2: c.x - cropMarkOffset, y2: c.y });
+      marks.push({ x1: c.x + cropMarkOffset, y1: c.y, x2: c.x + cropMarkLen + cropMarkOffset, y2: c.y });
+      marks.push({ x1: c.x, y1: c.y - cropMarkLen - cropMarkOffset, x2: c.x, y2: c.y - cropMarkOffset });
+      marks.push({ x1: c.x, y1: c.y + cropMarkOffset, x2: c.x, y2: c.y + cropMarkLen + cropMarkOffset });
+    }
+    return marks;
+  }, [frontX, L, W, tuckY, topLidY, bodyY, bottomY, leftX, backX, rightX, glueW, D, bottomH]);
 
   const activeCfg = activePanel ? panelConfig[activePanel] : null;
 
@@ -250,6 +362,19 @@ export default function FullNetEditor({
               {/* Fold lines */}
               {foldLines.map((ln, i) => (
                 <line key={"fl" + i} x1={ln[0]} y1={ln[1]} x2={ln[2]} y2={ln[3]} stroke="#00AA00" strokeWidth={0.3} strokeDasharray="2 1" />
+              ))}
+
+              {/* Bleed outline (블리드 - 빨간 점선) */}
+              <path d={dieCutPath} fill="none" stroke="#FF0000" strokeWidth={0.2} strokeDasharray="1 0.5"
+                transform={`translate(0,0)`}
+                style={{ filter: "url(#bleedExpand)" }} />
+
+              {/* Die-cut outline (칼선 - 빨간 실선) */}
+              <path d={dieCutPath} fill="none" stroke="#FF0000" strokeWidth={0.5} />
+
+              {/* Crop marks (크롭마크 - 검정) */}
+              {cropMarks.map((m, i) => (
+                <line key={"cm" + i} x1={m.x1} y1={m.y1} x2={m.x2} y2={m.y2} stroke="#000000" strokeWidth={0.2} />
               ))}
 
               {/* Panels */}
