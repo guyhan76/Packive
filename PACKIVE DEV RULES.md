@@ -1,4 +1,4 @@
-﻿
+
 ---
 
 ## 2026-02-27 작업 기록
@@ -454,3 +454,33 @@ Status bar (28px) must not overlap canvas bottom.
 - FOGRA39 또는 Japan Color 2001 ICC 프로파일 사용
 - CMYK 값이 원본, RGB는 화면 표시용 파생값
 - 모든 오브젝트에 CMYK 값 원본 저장
+
+---
+
+## Dieline Upload Rules - DO NOT CHANGE (2026-03-03)
+
+### Upload Priority (EPS/AI/PDF)
+1. **Primary**: /api/convert-file (Ghostscript + Inkscape pipeline) — full fidelity, preserves all lines/text/curves
+2. **Fallback (EPS only)**: /api/convert-eps (CorelDRAW native parser) — used only if Ghostscript+Inkscape fails
+
+### Required Software
+- Ghostscript: C:\Program Files\gs\gs10.06.0\bin\gswin64c.exe
+- Inkscape: C:\Program Files\Inkscape\bin\inkscape.com
+
+### Stroke Rules
+- **SVG upload**: preserve original colors (red cut lines, green fold lines)
+- **EPS/AI/PDF upload**: force all strokes to #111111 (solid dark black), min strokeWidth 1.5, remove dashArray, opacity 1
+- Customer EPS/AI/PDF files already have cut/fold distinction from CorelDraw CAD — do NOT re-classify
+
+### Upload Behavior
+- Before loading new dieline, remove ALL existing dieline objects (_isDieLine, _isGuideLayer, _isFoldLine, _isPanelLabel)
+- Uploaded dieline group properties: _isDieLine: true, _isGuideLayer: true, name: "__dieline_upload__"
+- Scale to 90% of canvas, centered
+- sendObjectToBack after adding
+
+### Canvas Size Rules Update (2026-03-03)
+- Blank mode (L=0, W=0, D=0): canvasW = cw-20, canvasH = ch-60, scale = 1
+- Normal mode: original formula (pxPerMM = max(fitScale, 2.0))
+- availW = cw-20, availH = ch-60 declared before mode branch
+- Single canvas variable shared across both modes
+- drawGuideLayer skipped in blank mode

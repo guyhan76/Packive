@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React, { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { useI18n } from "@/components/i18n-context";
 import { PACKIVE_SPOT_COLORS } from "@/data/packive-spot-colors";
@@ -137,10 +137,57 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [rightTab, setRightTab] = useState<RightTab>("properties");
   const [color, setColor] = useState("#000000");
   const [fSize, setFSize] = useState(24);
-  const [selectedFont, setSelectedFont] = useState("Arial, sans-serif");
+  const [selectedFont, setSelectedFont] = useState("Inter");
+  const [googleFonts, setGoogleFonts] = useState<string[]>(["Inter", "Noto Sans KR", "Noto Sans JP", "Roboto", "Open Sans", "Lato", "Montserrat", "Poppins"]);
+  const [koFonts, setKoFonts] = useState<string[]>([]);
+  const [jaFonts, setJaFonts] = useState<string[]>([]);
+  const [fontsLoaded, setFontsLoaded] = useState<Set<string>>(new Set());
+  const [fontSearch, setFontSearch] = useState("");
+  const [fontDropOpen, setFontDropOpen] = useState(false);
+  const [fontCategory, setFontCategory] = useState<"all"|"en"|"ko"|"ja">("all");
+  const fontSearchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetch("https://www.googleapis.com/webfonts/v1/webfonts?key=AIzaSyAx3bN9fSS61y6FKewBaDZ4azs6W4XFnPk&sort=popularity")
+      .then(r => r.json())
+      .then(data => {
+        if (data.items) {
+          const names = data.items.map((f: any) => f.family);
+          const priority = ["Inter", "Noto Sans KR", "Noto Sans JP", "Roboto", "Open Sans", "Lato", "Montserrat", "Poppins"];
+          const sorted = [...priority, ...names.filter((n: string) => !priority.includes(n))];
+          setGoogleFonts([...new Set(sorted)]);
+        }
+      }).catch(() => {});
+  }, []);
+  useEffect(() => {
+    const key = "AIzaSyAx3bN9fSS61y6FKewBaDZ4azs6W4XFnPk";
+    fetch("https://www.googleapis.com/webfonts/v1/webfonts?key="+key+"&subset=korean&sort=popularity")
+      .then(r => r.json()).then(d => { if(d.items) setKoFonts(d.items.map((f:any)=>f.family)); }).catch(()=>{});
+    fetch("https://www.googleapis.com/webfonts/v1/webfonts?key="+key+"&subset=japanese&sort=popularity")
+      .then(r => r.json()).then(d => { if(d.items) setJaFonts(d.items.map((f:any)=>f.family)); }).catch(()=>{});
+
+  }, []);
+  const loadGoogleFont = useCallback((family: string) => {
+    if (fontsLoaded.has(family)) return;
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@300;400;500;600;700&display=swap`;
+    document.head.appendChild(link);
+    setFontsLoaded(prev => new Set([...prev, family]));
+  }, [fontsLoaded]);
+
+  const detectFontForText = useCallback((text: string): string => {
+    const koRegex = /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]/;
+    const jpRegex = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/;
+    if (koRegex.test(text)) return "Noto Sans KR";
+    if (jpRegex.test(text)) return "Noto Sans JP";
+    return "Inter";
+  }, []);
   const [zoom, setZoom] = useState(100);
   const zoomRef = useRef(100);
   const [drawMode, setDrawMode] = useState(false);
+  const [eyedropperMode, setEyedropperMode] = useState(false);
+  const [eyedropperResult, setEyedropperResult] = useState<{hex:string;cmyk:[number,number,number,number];spot?:string}|null>(null);
   const [brushSize, setBrushSize] = useState(3);
   const [showGrid, setShowGrid] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -181,6 +228,10 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [customHex, setCustomHex] = useState("#FF0000");
   const [customPantoneRef, setCustomPantoneRef] = useState("");
   const [showUploadGuide, setShowUploadGuide] = useState(false);
+  const [dielineVisible, setDielineVisible] = useState(true);
+  const [dielineLocked, setDielineLocked] = useState(true);
+  const [dielineFileName, setDielineFileName] = useState<string>('');
+  const dielineFileRef = useRef<HTMLInputElement>(null);
   const [fillHue, setFillHue] = useState(0);
   const [strokeHue, setStrokeHue] = useState(0);
   const cmykPickRef = useRef<HTMLDivElement>(null);
@@ -281,6 +332,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   // ─── Draw dieline guide layer on Fabric canvas ───
   const drawGuideLayer = useCallback(async (canvas: any, scale: number) => {
     const F = fabricModRef.current; if (!F) return;
+    if (L === 0 && W === 0 && D === 0) return; // blank canvas mode - no guide layer
 
     // Die-cut outline paths for each panel
     Object.entries(pos).forEach(([pid, p]) => {
@@ -361,30 +413,34 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
       const cw = wrapperRef.current!.clientWidth;
       const ch = wrapperRef.current!.clientHeight;
-      const netW = totalW + PAD * 2;
-      const netH = totalH + PAD * 2;
 
-      // Calculate scale: fit net into available space
-      const availW = cw - 20;
-      const availH = ch - 60;
-      const fitScale = Math.min(availW / netW, availH / netH);
-      const pxPerMM = Math.max(fitScale, 2.0); // minimum 1.5 px/mm for clarity
-      scaleRef.current = pxPerMM;
-
-      const canvasW = Math.min(Math.round(netW * pxPerMM), cw - 20);
-      const canvasH = Math.min(Math.round(netH * pxPerMM), ch - 60);
+      // Canvas creation (blank or normal mode)
+      const isBlank = (L === 0 && W === 0 && D === 0);
+      let canvasW: number, canvasH: number, availW: number, availH: number;
+      availW = cw - 20; availH = ch - 60;
+      if (isBlank) {
+        canvasW = cw - 20;
+        canvasH = ch - 60;
+        scaleRef.current = 1;
+      } else {
+        const netW = totalW + PAD * 2;
+        const netH = totalH + PAD * 2;
+        const fitScale = Math.min(availW / netW, availH / netH);
+        const pxPerMM = Math.max(fitScale, 2.0);
+        scaleRef.current = pxPerMM;
+        canvasW = Math.min(Math.round(netW * pxPerMM), cw - 20);
+        canvasH = Math.min(Math.round(netH * pxPerMM), ch - 60);
+      }
 
       const el = canvasElRef.current!;
-      el.width = canvasW;
-      el.height = canvasH;
-      el.style.width = canvasW + "px";
-      el.style.height = canvasH + "px";
+      el.width = canvasW; el.height = canvasH;
+      el.style.width = canvasW + 'px'; el.style.height = canvasH + 'px';
 
       if (disposed) return;
 
       const canvas = new Canvas(el, {
         width: canvasW, height: canvasH,
-        backgroundColor: "#FFFFFF",
+        backgroundColor: '#FFFFFF',
         selection: true,
         perPixelTargetFind: false,
       });
@@ -394,16 +450,23 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       canvas.fireRightClick = true;
       canvas.stopContextMenu = true;
 
-      // Draw guide layer (die lines, fold lines, labels)
-      await drawGuideLayer(canvas, pxPerMM);
-
-      // Bring guide layer to back
-      canvas.getObjects().filter((o: any) => o._isGuideLayer).forEach((o: any) => {
-        canvas.sendObjectToBack(o);
-      });
+      // Draw guide layer only for normal mode
+      if (!isBlank) {
+        await drawGuideLayer(canvas, scaleRef.current);
+        canvas.getObjects().filter((o: any) => o._isGuideLayer).forEach((o: any) => {
+          canvas.sendObjectToBack(o);
+        });
+      }
 
       // Event handlers
       canvas.on("object:modified", () => { if (!loadingRef.current) { pushHistory(); refreshLayers(); } });
+      canvas.on("object:scaling", (e: any) => {
+        const t = e.target;
+        if (t && t.type === "i-text" && t.fontSize && t.scaleX) {
+          const realSize = Math.round(t.fontSize * t.scaleX / scaleRef.current);
+          setSelProps(prev => ({ ...prev, fontSize: realSize }));
+        }
+      });
       canvas.on("path:created", () => { if (!loadingRef.current) { pushHistory(); refreshLayers(); } });
       canvas.on("selection:created", () => refreshLayers());
       canvas.on("selection:updated", () => refreshLayers());
@@ -471,22 +534,28 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
 
   // ─── Add Text ───
-  const addText = useCallback(async (preset?: string) => {
+  const addText = useCallback(async () => {
     const c = fcRef.current; if (!c) return;
     const F = fabricModRef.current; if (!F) return;
     const cx = c.getWidth() / 2, cy = c.getHeight() / 2;
-    let fontSize = fSize * scaleRef.current;
-    let text = "Text";
-    if (preset === "heading") { fontSize = 36 * scaleRef.current; text = "Heading"; }
-    else if (preset === "subheading") { fontSize = 24 * scaleRef.current; text = "Subheading"; }
-    else if (preset === "body") { fontSize = 14 * scaleRef.current; text = "Body text"; }
-    const t = new F.IText(text, {
+    loadGoogleFont(selectedFont);
+    const t = new F.IText("Text", {
       left: cx, top: cy, originX: "center", originY: "center",
-      fontSize: Math.round(fontSize), fill: color, fontFamily: selectedFont,
+      fontSize: Math.round(24 * scaleRef.current), fill: color, fontFamily: "Inter",
+    });
+    t.on("changed", () => {
+      const newFont = detectFontForText(t.text || "");
+      if (newFont !== t.fontFamily) {
+        loadGoogleFont(newFont);
+        t.set({ fontFamily: newFont });
+        setSelectedFont(newFont);
+        c.requestRenderAll();
+      }
+      setSelProps(getSelectedProps());
     });
     c.add(t); c.setActiveObject(t); c.renderAll(); refreshLayers(); pushHistory();
-    setShowTextPanel(false);
-  }, [color, fSize, selectedFont, refreshLayers, pushHistory]);
+        setSelectedFont("Inter");
+  }, [color, selectedFont, loadGoogleFont, detectFontForText, refreshLayers, pushHistory]);
 
   // ─── Add Shape ───
   const addShape = useCallback(async (type: string) => {
@@ -793,7 +862,13 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     c.on("selection:updated", update);
     c.on("selection:cleared", () => setSelProps(null));
     c.on("object:modified", update);
-    c.on("object:scaling", update);
+    c.on("object:scaling", (e: any) => {
+      const t = e.target;
+      if (t && (t.type === "i-text" || t.type === "textbox") && t.fontSize && t.scaleX) {
+        const realSize = Math.round(t.fontSize * t.scaleX / scaleRef.current);
+        setSelProps(prev => prev ? { ...prev, fontSize: realSize } : prev);
+      } else { update(); }
+    });
     c.on("object:moving", update);
     c.on("object:rotating", update);
     return () => {
@@ -842,62 +917,142 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   // ─── RENDER ───
   return (
     <div className="h-screen flex flex-col bg-gray-50 overflow-hidden select-none">
-      {/* ═══ TOP BAR ═══ */}
-      <div className="h-14 bg-white border-b border-gray-200 flex items-center px-4 gap-3 shrink-0 z-20">
-        <button onClick={onBack} className="flex items-center gap-1 text-gray-600 hover:text-gray-900 text-sm font-medium">
-          <span className="text-lg">&#8592;</span> Back
-        </button>
-        <div className="w-px h-8 bg-gray-200" />
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-gray-800">{boxType}</span>
-          <span className="text-xs text-gray-500">{L} x {W} x {D} mm</span>
-        </div>
+      {/* TOP BAR */}
+      <div className="h-12 bg-white border-b border-gray-200 flex items-center px-4 gap-2 shrink-0 z-20">
+        <button onClick={onBack} className="flex items-center gap-1 text-gray-600 hover:text-gray-900 text-sm font-medium"><span className="text-base">&#8592;</span> Back</button>
+        <div className="w-px h-7 bg-gray-200 mx-1" />
+        {boxType && <span className="text-sm font-semibold text-gray-800">{boxType}</span>}
+        {dielineFileName && <span className="text-[11px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded font-medium truncate max-w-[200px]" title={dielineFileName}>{dielineFileName}</span>}
+        {!dielineFileName && boxType && <span className="text-xs text-gray-400">{L} x {W} x {D} mm</span>}
         <div className="flex-1" />
-        {/* Undo / Redo */}
-        <button onClick={undo} title="Undo (Ctrl+Z)" className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600">&#8630;</button>
-        <button onClick={redo} title="Redo (Ctrl+Y)" className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600">&#8631;</button>
-        <div className="w-px h-8 bg-gray-200" />
-        {/* Zoom */}
-        <button onClick={() => applyZoom(zoom - 25)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500 text-sm">-</button>
-        <span className="text-xs text-gray-600 w-12 text-center">{zoom}%</span>
-        <button onClick={() => applyZoom(zoom + 25)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500 text-sm">+</button>
-        <button onClick={() => applyZoom(100)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Fit</button>
-        <div className="w-px h-8 bg-gray-200" />
-        <button onClick={() => setShowExport(true)} className="px-4 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
-          Export
-        </button>
+        <input ref={dielineFileRef} type="file" accept=".eps,.ai,.pdf,.svg" className="hidden" onChange={async (e) => {
+          const f = e.target.files?.[0]; if (!f) return;
+          const c = fcRef.current; if (!c) return;
+          const F = fabricModRef.current; if (!F) return;
+          setDielineFileName(f.name);
+          // Remove existing dielines first
+          const oldDielines = c.getObjects().filter((o: any) => o._isDieLine || o._isGuideLayer || o._isFoldLine || o._isPanelLabel);
+          oldDielines.forEach((o: any) => c.remove(o));
+          
+          const ext = f.name.split(".").pop()?.toLowerCase() || "";
+          let svgStr = "";
+          
+          if (ext === "svg") {
+            svgStr = await f.text();
+          } else if (ext === "eps" || ext === "ai" || ext === "pdf") {
+            // Primary: Ghostscript + Inkscape pipeline (full fidelity)
+            try {
+              const fd = new FormData(); fd.append("file", f);
+              const res = await fetch("/api/convert-file", { method: "POST", body: fd });
+              const data = await res.json();
+              if (data.svg) { svgStr = data.svg; }
+              else if (ext === "eps") {
+                // Fallback: CorelDRAW native parser for EPS only
+                const fd2 = new FormData(); fd2.append("file", f);
+                const res2 = await fetch("/api/convert-eps", { method: "POST", body: fd2 });
+                const data2 = await res2.json();
+                if (data2.svg) svgStr = data2.svg;
+                else { alert("EPS conversion failed: " + (data2.error || "Unknown")); return; }
+              } else {
+                alert(ext.toUpperCase() + " conversion failed: " + (data.error || "Unknown")); return;
+              }
+            } catch (err: any) { alert(ext.toUpperCase() + " upload failed: " + err.message); return; }
+          } else {
+            alert("Unsupported format: " + ext); return;
+          }
+          
+          if (!svgStr) { alert("No SVG data received"); return; }
+          
+          try {
+            const result = await F.loadSVGFromString(svgStr);
+            // Force all uploaded dieline strokes to solid dark black with visible width
+            const forceBlack = (objs: any[]) => {
+              if (!objs) return;
+              objs.forEach((obj: any) => {
+                obj.set({ stroke: "#111111", strokeWidth: Math.max(obj.strokeWidth || 1, 1.5), opacity: 1, strokeDashArray: null });
+                if (obj._objects) forceBlack(obj._objects);
+              });
+            };
+            if (ext !== "svg") forceBlack(result.objects);
+            const group = F.util.groupSVGElements(result.objects, result.options);
+            group.set({ _isDieLine: true, _isGuideLayer: true, selectable: !dielineLocked, evented: !dielineLocked, name: "__dieline_upload__" });
+            const cw2 = c.getWidth(), ch2 = c.getHeight();
+            const sw = cw2 * 0.9 / (group.width || 1), sh = ch2 * 0.9 / (group.height || 1);
+            const sc = Math.min(sw, sh);
+            group.set({ scaleX: sc, scaleY: sc, left: cw2 / 2, top: ch2 / 2, originX: "center", originY: "center" });
+            c.add(group); c.sendObjectToBack(group); c.requestRenderAll();
+          } catch (err: any) { alert("Failed to load dieline: " + err.message); }
+          e.target.value = "";
+        }} />
+        <button onClick={() => { if (!window.confirm("Start a completely new blank canvas?\nAll current work including dielines will be permanently removed.")) return; const c = fcRef.current; if (!c) return; c.clear(); c.backgroundColor = "#ffffff"; c.requestRenderAll(); setDielineFileName(""); pushHistory(); refreshLayers(); }} className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors" title="Start a completely new blank canvas">New</button>
+        <button onClick={() => dielineFileRef.current?.click()} className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-blue-600 hover:bg-blue-50 hover:border-blue-400 transition-colors">Upload Dieline (EPS/AI/PDF/SVG)</button>
+        <button onClick={() => { const c = fcRef.current; if (!c) return; const nv = !dielineVisible; setDielineVisible(nv); c.getObjects().forEach((o: any) => { if (o._isGuideLayer || o._isDieLine || o._isFoldLine || o._isPanelLabel) o.set({ visible: nv }); }); c.requestRenderAll(); }} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${dielineVisible ? "bg-gray-200 border-gray-300 text-gray-600 hover:bg-gray-300" : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"}`}>{dielineVisible ? "Hide Lines" : "Show Lines"}</button>
+        <button onClick={() => { const c = fcRef.current; if (!c) return; const nl = !dielineLocked; setDielineLocked(nl); c.getObjects().forEach((o: any) => { if (o._isGuideLayer || o._isDieLine || o._isFoldLine || o._isPanelLabel) o.set({ selectable: !nl, evented: !nl }); }); c.requestRenderAll(); }} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1 ${dielineLocked ? "bg-orange-50 border-orange-300 text-orange-700" : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"}`}>{dielineLocked ? "\uD83D\uDD12 Locked" : "\uD83D\uDD13 Unlocked"}</button>
+        <div className="w-px h-7 bg-gray-200 mx-1" />
+        <button onClick={undo} title="Undo (Ctrl+Z)" className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500">&#8630;</button>
+        <button onClick={redo} title="Redo (Ctrl+Y)" className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500">&#8631;</button>
+        <div className="w-px h-7 bg-gray-200 mx-1" />
+        <button onClick={() => applyZoom(zoom - 25)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-400 text-sm">-</button>
+        <span className="text-[11px] text-gray-600 w-10 text-center">{zoom}%</span>
+        <button onClick={() => applyZoom(zoom + 25)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-400 text-sm">+</button>
+        <button onClick={() => applyZoom(100)} className="text-[11px] text-blue-600 hover:text-blue-800 font-medium ml-1">Fit</button>
+        <div className="w-px h-7 bg-gray-200 mx-1" />
+        <button onClick={() => setShowExport(true)} className="px-4 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors">Export</button>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
         {/* ═══ LEFT TOOLBAR ═══ */}
-        <div className="w-16 bg-white border-r border-gray-200 flex flex-col items-center py-3 gap-1 shrink-0 overflow-y-auto">
+        <div className="w-16 bg-white border-r border-gray-200 flex flex-col items-center py-3 shrink-0 overflow-y-auto">
+          <span className="text-[8px] font-bold text-gray-400 tracking-wider mb-1">DESIGN</span>
           {[
-            { icon: "↖", label: "Select", action: () => { const c = fcRef.current; if(c){ c.isDrawingMode = false; setDrawMode(false); } } },
-            { icon: "T", label: "Text", action: () => setShowTextPanel(p => !p) },
-            { icon: "🖼", label: "Image", action: addImage },
-            { icon: "◆", label: "Shapes", action: () => setShowShapePanel(p => !p) },
-            { icon: "⊞", label: "Table", action: () => setShowTablePanel(p => !p) },
-            { icon: "▮▯", label: "Barcode", action: () => setShowBarcodePanel(p => !p) },
-            { icon: "◎", label: "Marks", action: () => setShowMarkPanel(p => !p) },
-            { icon: "✎", label: "Draw", action: toggleDraw },
+            { icon: "\u2196", label: "Select", action: () => { const c = fcRef.current; if(c){ c.isDrawingMode = false; setDrawMode(false); setEyedropperMode(false); c.defaultCursor = "default"; c.hoverCursor = "move"; } } },
+            { icon: "T", label: "Text", action: addText },
+            { icon: "\uD83D\uDDBC", label: "Image", action: addImage },
+            { icon: "\u25C6", label: "Shapes", action: () => setShowShapePanel(p => !p) },
           ].map(btn => (
             <button key={btn.label} onClick={btn.action} title={btn.label}
-              className={`w-12 h-12 flex flex-col items-center justify-center rounded-lg text-xs transition-colors ${
-                (btn.label === "Draw" && drawMode) ? "bg-blue-100 text-blue-700 border border-blue-300" : "hover:bg-gray-100 text-gray-600"
-              }`}>
+              className="w-12 h-12 flex flex-col items-center justify-center rounded-lg text-xs transition-colors hover:bg-gray-100 text-gray-600">
               <span className="text-base leading-none">{btn.icon}</span>
               <span className="text-[9px] mt-0.5">{btn.label}</span>
             </button>
           ))}
-          <div className="w-8 h-px bg-gray-200 my-1" />
+          <div className="w-8 h-px bg-gray-200 my-2" />
+          <span className="text-[8px] font-bold text-gray-400 tracking-wider mb-1">PACKAGE</span>
+          {[
+            { icon: "\u229E", label: "Table", action: () => setShowTablePanel(p => !p) },
+            { icon: "\u25AE\u25AF", label: "Barcode", action: () => setShowBarcodePanel(p => !p) },
+            { icon: "\u25CE", label: "Marks", action: () => setShowMarkPanel(p => !p) },
+          ].map(btn => (
+            <button key={btn.label} onClick={btn.action} title={btn.label}
+              className="w-12 h-12 flex flex-col items-center justify-center rounded-lg text-xs transition-colors hover:bg-gray-100 text-gray-600">
+              <span className="text-base leading-none">{btn.icon}</span>
+              <span className="text-[9px] mt-0.5">{btn.label}</span>
+            </button>
+          ))}
+          <div className="w-8 h-px bg-gray-200 my-2" />
+          <span className="text-[8px] font-bold text-gray-400 tracking-wider mb-1">UTILS</span>
+          <button onClick={() => { const c = fcRef.current; if (!c) return; const nm = !eyedropperMode; setEyedropperMode(nm); if (nm) { c.isDrawingMode = false; setDrawMode(false); c.defaultCursor = "crosshair"; c.hoverCursor = "crosshair"; const handler = (opt: any) => { const t = opt.target; if (!t) return; const fill = t.fill || "#000000"; const hex = typeof fill === "string" && fill.match(/^#[0-9a-fA-F]{6}$/) ? fill : "#000000"; const cmyk = hexToCmyk(hex); setEyedropperResult({ hex, cmyk, spot: t._spotColorName || undefined }); setEyedropperMode(false); c.defaultCursor = "default"; c.hoverCursor = "move"; c.off("mouse:down", handler); }; c.on("mouse:down", handler); } else { c.defaultCursor = "default"; c.hoverCursor = "move"; } }} title="Eyedropper (CMYK/Spot)"
+            className={`w-12 h-12 flex flex-col items-center justify-center rounded-lg text-xs transition-colors ${eyedropperMode ? "bg-blue-100 text-blue-700 border border-blue-300" : "hover:bg-gray-100 text-gray-600"}`}>
+            <span className="text-base leading-none">{"\uD83D\uDCA7"}</span>
+            <span className="text-[9px] mt-0.5">Picker</span>
+          </button>
+          {eyedropperResult && (
+            <div className="w-14 mt-1 p-1 bg-gray-50 rounded border text-[8px] text-center">
+              <div className="w-6 h-6 mx-auto rounded border mb-0.5" style={{ backgroundColor: eyedropperResult.hex }} />
+              <div className="text-gray-500">{eyedropperResult.hex}</div>
+              <div className="text-gray-400">C{eyedropperResult.cmyk[0]} M{eyedropperResult.cmyk[1]}</div>
+              <div className="text-gray-400">Y{eyedropperResult.cmyk[2]} K{eyedropperResult.cmyk[3]}</div>
+              {eyedropperResult.spot && <div className="text-orange-500 font-bold">{eyedropperResult.spot}</div>}
+            </div>
+          )}
           <button onClick={() => { const c=fcRef.current; if(!c)return; const a=c.getActiveObjects(); a.filter((o:any)=>o.selectable!==false).forEach((o:any)=>c.remove(o)); c.discardActiveObject(); c.requestRenderAll(); pushHistory(); refreshLayers(); }}
             title="Delete" className="w-12 h-12 flex flex-col items-center justify-center rounded-lg text-xs hover:bg-red-50 text-gray-600 hover:text-red-600">
-            <span className="text-base leading-none">🗑</span>
+            <span className="text-base leading-none">{"\uD83D\uDDD1"}</span>
             <span className="text-[9px] mt-0.5">Delete</span>
           </button>
           <button onClick={() => setShowShortcuts(true)} title="Shortcuts (F1)"
             className="w-12 h-12 flex flex-col items-center justify-center rounded-lg text-xs hover:bg-gray-100 text-gray-600">
-            <span className="text-base leading-none">⌨</span>
+            <span className="text-base leading-none">{"\u2328"}</span>
             <span className="text-[9px] mt-0.5">Keys</span>
           </button>
         </div>
@@ -988,7 +1143,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
 
           {/* ═══ CANVAS AREA ═══ */}
-          <div ref={wrapperRef} className="flex-1 overflow-auto bg-gray-100 relative flex items-center justify-center"
+          <div ref={wrapperRef} className="flex-1 overflow-auto bg-gray-100 relative flex items-center justify-center pb-7"
             style={{ cursor: drawMode ? "crosshair" : "default" }}>
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
             <canvas ref={canvasElRef} className="shadow-lg" />
@@ -1357,9 +1512,45 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     {(selProps.type === "i-text" || selProps.type === "textbox" || selProps.type === "text") && (
                       <div className="space-y-1.5 pt-2 border-t">
                         <label className="text-[10px] text-gray-500">Font
-                          <select value={selProps.fontFamily} onChange={e => updateProp("fontFamily", e.target.value)} className="w-full border rounded px-1.5 py-1 text-xs mt-0.5">
-                            {FONTS.map(f => <option key={f} value={f}>{f.split(",")[0]}</option>)}
-                          </select>
+                <div className="relative">
+                  <button onClick={() => { setFontDropOpen(p => !p); setTimeout(() => fontSearchRef.current?.focus(), 100); }} className="w-full border rounded px-2 py-1 text-xs text-left flex items-center justify-between hover:border-blue-400" style={{fontFamily: selProps.fontFamily}}>
+                    <span className="truncate">{selProps.fontFamily}</span>
+                    <span className="text-gray-400 text-[9px]">{fontDropOpen ? "\u25B2" : "\u25BC"}</span>
+                  </button>
+                  {fontDropOpen && (
+                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-xl max-h-64 flex flex-col">
+                      <div className="p-1.5 border-b">
+                        <input ref={fontSearchRef} value={fontSearch} onChange={e => setFontSearch(e.target.value)} placeholder="Search fonts..." className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-400" />
+                      </div>
+                      <div className="overflow-y-auto flex-1">
+              {/* Category tabs */}
+              <div className="flex border-b mb-1">
+                {(["all","en","ko","ja"] as const).map(cat => (
+                  <button key={cat} onClick={() => setFontCategory(cat)}
+                    className={"px-2 py-0.5 text-[10px] border-b-2 " + (fontCategory===cat?"border-blue-500 text-blue-600":"border-transparent text-gray-500")}>
+                    {cat==="all"?"All":cat==="en"?"English":cat==="ko"?"Korean":"Japanese"}
+                  </button>
+                ))}
+              </div>
+              {(() => {
+                const enPriority = ["Inter","Roboto","Open Sans","Lato","Montserrat","Poppins","Oswald","Raleway","Merriweather","Playfair Display","Source Sans 3","Nunito","Ubuntu","Rubik","Work Sans","Quicksand","Barlow","Mulish","Karla","Libre Baskerville","DM Sans","Manrope","Space Grotesk","Archivo","Bitter","Crimson Text","Cormorant Garamond","Josefin Sans","Cabin","Overpass","Fira Sans","PT Sans","Dosis","Titillium Web","Oxygen","Catamaran","Comfortaa","Abel","Asap","Exo 2","Maven Pro","Prompt","Signika","Varela Round","Heebo","Outfit","Lexend","Figtree","Sora","Plus Jakarta Sans","Albert Sans","Red Hat Display","Wix Madefor Display"];
+                let pool = googleFonts;
+                if (fontCategory === "en") pool = enPriority.filter(f => googleFonts.includes(f));
+                else if (fontCategory === "ko") pool = koFonts.length > 0 ? koFonts : ["Noto Sans KR","Noto Serif KR","Gothic A1","Nanum Gothic","Nanum Myeongjo"];
+                else if (fontCategory === "ja") pool = jaFonts.length > 0 ? jaFonts : ["Noto Sans JP","Noto Serif JP","M PLUS Rounded 1c","M PLUS 1p","Kosugi Maru"];
+                const filtered = pool.filter(f => !fontSearch || f.toLowerCase().includes(fontSearch.toLowerCase()));
+                return filtered.slice(0, fontSearch ? 200 : 200).map(f => (
+                          <button key={f} onClick={() => { loadGoogleFont(f); updateProp("fontFamily", f); setSelectedFont(f); setFontDropOpen(false); setFontSearch(""); }}
+                            className={`w-full text-left px-2 py-1.5 text-xs hover:bg-blue-50 transition-colors ${selProps.fontFamily === f ? "bg-blue-100 text-blue-700 font-medium" : "text-gray-700"}`}
+                            style={{fontFamily: f}}>
+                            {f}
+                          </button>
+                    ));
+               })()}
+                      </div>
+                    </div>
+                  )}
+                </div>
                         </label>
                         <div className="flex gap-2">
                           <label className="text-[10px] text-gray-500 flex-1">Size<input type="number" value={selProps.fontSize} onChange={e => updateProp("fontSize", e.target.value)} className="w-full border rounded px-1.5 py-1 text-xs mt-0.5" min="1" /></label>
