@@ -1,4 +1,4 @@
-
+﻿
 ---
 
 ## 2026-02-27 작업 기록
@@ -484,3 +484,213 @@ Status bar (28px) must not overlap canvas bottom.
 - availW = cw-20, availH = ch-60 declared before mode branch
 - Single canvas variable shared across both modes
 - drawGuideLayer skipped in blank mode
+
+
+---
+
+## Backup Rules – DO NOT CHANGE (2026-03-03)
+
+### Triple Backup Policy (3중 백업 정책)
+
+Every time work is completed, the following THREE backups MUST be performed:
+
+#### 1. Local Backup
+- Path: `C:\Users\user\Desktop\dev\packive\backups\`
+- Format: `full_backup_YYYYMMDD_HHMMSS\` folder with key files copied
+- Key files to backup:
+  - `src/components/editor/unified-editor.tsx`
+  - `src/app/api/convert-eps/route.ts`
+  - `src/app/api/convert-file/route.ts`
+  - `PACKIVE DEV RULES.md`
+  - `package.json`
+
+#### 2. Git Commit
+- Branch: `feature/cmyk-icc-engine` (or current working branch)
+- **NEVER commit to or merge into `main` branch** — main has production deployment
+- Commit message must include date and summary of changes
+
+#### 3. Working File (Original)
+- `src/components/editor/unified-editor.tsx` and other source files remain as latest version in working directory
+
+### Per-Edit Backup
+- Before EVERY script modification, create an individual timestamped backup:
+  - Format: `unified-editor_YYYYMMDD_HHMMSS.tsx`
+  - Path: `C:\Users\user\Desktop\dev\packive\backups\`
+- If safety checks fail after edit, RESTORE from this backup immediately
+
+### Recovery
+- If files are lost or corrupted, restore from:
+  1. Latest Git commit: `git checkout feature/cmyk-icc-engine`
+  2. Local backup folder: `backups\full_backup_YYYYMMDD_HHMMSS\`
+  3. Individual file backups: `backups\unified-editor_YYYYMMDD_HHMMSS.tsx`
+
+
+
+---
+
+## Product Vision and Core Values - DO NOT CHANGE (2026-03-03)
+
+### Core Values
+- Simpler: CAD, Adobe Illustrator 없이 몇 가지 동작만으로 패키지 디자인 완성
+- Faster: 복잡한 프로세스 없이 즉시 결과물 생성
+- Cheaper: 전문 디자이너 없이도 전문가 수준의 패키지 디자인 가능
+
+### Target Users
+- 소규모 브랜드, 스타트업, 해외 셀러
+- 전문 디자이너 (빠른 작업 도구로 활용)
+- 패키지 디자인 경험이 없는 초보자
+
+### User Flow
+
+Step 1: 박스형태 선택 (FEFCO 표준 등)
+Step 2: 박스치수 입력 (L x W x D mm)
+Step 3: 업종 선택 (2단계)
+  - 대분류 (8-10개): 식품, 화장품/뷰티, 건강기능식품, 음료, 생활용품, 전자기기, 의류/패션, 기타
+  - 세부 카테고리: 대분류 선택 후 표시
+Step 4: 디자인 방법 선택
+  4-1. 직접 디자인 (Direct)
+    - 생성된 칼선전개도 위에 에디터로 직접 디자인
+    - 대상: 전문 디자이너, 디자인 경험자
+  4-2. 템플릿 선택 (Template)
+    - 업종에 맞는 추천 템플릿 중 선택
+    - 선택 후 에디터에서 텍스트/이미지/색상 수정
+    - 대상: 일반 사용자
+  4-3. AI 자동 디자인 (AI Generate)
+    - 입력 정보: 업종, 회사명, 상품명, 입수량, 중량, 제조국 등
+    - AI가 3-4개 시안 자동 생성
+    - 마음에 드는 시안 선택 후 에디터에서 미세 수정
+    - 대상: 완전 초보자, 시간이 없는 사용자
+
+### Design Method Switching
+- 4-1, 4-2, 4-3 선택 후에도 언제든 다른 방식으로 전환 가능
+- 템플릿 선택 후 직접 수정 모드 전환 가능
+- AI 생성 결과를 에디터에서 자유롭게 편집 가능
+- 세 방법이 단절되지 않고 하나의 에디터 안에서 연결
+
+### Competitive Advantage
+- Canva: 범용 디자인 도구, 패키지 전문 아님
+- 기존 업체: CAD + Illustrator 조합, 높은 비용과 긴 작업 시간
+- Packive: 패키지 전용 + 칼선 자동생성 + AI 디자인을 하나로 통합
+- 원스톱 패키지 디자인 플랫폼
+
+### Future AI Features Roadmap
+1. 단기: AI 템플릿 추천, 텍스트 자동 배치, 브랜드 컬러 추출
+2. 중기: AI 이미지/패턴 생성, 인쇄 품질 자동 검사, 다국어 레이아웃 자동 변환
+3. 장기: 자연어 디자인 생성, 시장 트렌드 분석, 3D 목업 자동 생성
+
+---
+
+## Panel Map System Design (2026-03-05) - NEXT MAJOR FEATURE
+
+### Overview
+Panel Map은 칼선 전개도의 각 면(앞면, 뒷면, 옆면, 윗날개, 아래날개, 플랩 등)을
+개별 영역(Zone)으로 정의하는 데이터 구조이다.
+이 시스템이 완성되면 면별 색상 채우기, 이미지 클리핑, 템플릿 적용, AI 디자인이 모두 가능해진다.
+
+### Why Panel Map is Critical
+- 템플릿 시스템(4-2)의 전제 조건: 면 상대좌표로 요소 배치, 치수 변경 시 자동 재배치
+- AI 디자인(4-3)의 전제 조건: AI에게 면 단위 디자인 지시 가능
+- 면별 색상/이미지 채우기: SVG clipPath로 복잡한 면 형태 안에만 정확히 채움
+- Packive의 핵심 기술 차별점이자 경쟁사 진입 장벽
+
+### Technical Approach: Method A - Parametric Generation
+- 각 박스형태(FEFCO/ECMA)마다 치수(L,W,D,T) 입력시 모든 면 경로를 수학 공식으로 자동 계산
+- 면 경로는 SVG Path 형식 (직선=LineTo, 곡선=CurveTo/Arc)
+- 복잡한 면(둥근 날개, 사다리꼴 플랩, 손잡이 구멍) 모두 표현 가능
+- 구멍: Compound Path (외곽 시계방향 + 구멍 반시계방향, fill-rule evenodd)
+
+### Panel Data Structure
+- id: front, back, left, right, top_flap_front 등
+- label/labelEn: 앞면/Front, 뒷면/Back 등
+- type: main, flap, tab, glue
+- path: SVG Path data (M, L, C, A, Z commands)
+- holes: 구멍 경로 배열 (손잡이, 홀)
+- designable: boolean (접착 플랩은 false)
+- bounds: x, y, w, h (바운딩 박스)
+
+### Color/Image Fill via clipPath
+- 면 선택시 path를 Fabric.js clipPath로 변환
+- 색상: 면 path 영역에 Rect + clipPath
+- 이미지: Image에 clipPath 적용하면 면 형태대로 자동 클리핑
+- 패턴: Pattern fill + clipPath로 면 내부에만 반복
+
+### Development Priority (박스형태별)
+- 1순위 (5종): 맞뚜껑(A식), 조립박스(B식), 택배박스(FEFCO-0201), 슬리브, 싸바리
+- 2순위 (5종): 디스플레이, 파우치, 필로우, 육각형, 서랍형
+- 3순위: 나머지 FEFCO/ECMA 확장
+
+### Prerequisites
+- 에디터 UI/UX 개선 및 기능 추가 완료 후 착수
+- 대표자의 박스 제조 도메인 지식으로 면 경로 수학 공식 정의 필수
+
+### Status: BLOCKED - Editor UI/UX completion first
+
+
+---
+
+## PDF CMYK Export - ICC 색상 문제 해결 기록 (2026-03-06)
+
+### 최종 작동 방식 (절대 변경 금지)
+1. `pdf-cmyk-export.ts`의 `rgbToCmyk`는 **단순 수학 변환** (fallback용)
+2. `iccRgbToCmyk`는 **ICC FOGRA39 프로파일** 기반 변환 (동적 import)
+3. `buildColorMap`으로 색상 수집 → ICC 엔진으로 업그레이드 (단, `_cmykFill` 사용자 지정 색상은 건너뜀)
+4. `replacePdfColorsInString`에서 **colorMap에 있는 색상만 CMYK 변환**, 없는 색상은 **RGB 유지**
+5. 순수 검정(`#000000`) → `C0 M0 Y0 K100`, 순수 흰색(`#ffffff`) → `C0 M0 Y0 K0` 특수 처리
+
+### 절대 하면 안 되는 것
+- `replacePdfColorsInString`에서 colorMap에 없는 색상을 강제 CMYK 변환하면 **색상 불일치 발생**
+- `cmyk-engine.ts`를 정적 import하면 **Turbopack RangeError: Invalid count value: -1** 발생
+- `text-to-outlines.ts` (opentype.js)를 정적 import하면 **동일 RangeError** 발생
+- `iccRgbToCmyk` 결과값을 clamp(0-100) 하지 않으면 **음수 CMYK값** 발생
+
+### 반드시 동적 import 해야 하는 모듈
+- `cmyk-engine.ts` → `await import("./cmyk-engine")`
+- `text-to-outlines.ts` → `await import("./text-to-outlines")`  
+- `pdf-cmyk-export.ts` → unified-editor.tsx에서 `await import("@/lib/pdf-cmyk-export")`
+- `jspdf` → `await import("jspdf")`
+- `svg2pdf.js` → `await import("svg2pdf.js")`
+
+### 칼선(Dieline) PDF 출력 규칙
+- Fabric 객체 속성: `_isDieLine` (대문자 L), `_isFoldLine`, `_isGuideLayer`, `_isPanelLabel`
+- **오타 주의**: `_isDieline` (소문자 l) 사용 금지 → 칼선 필터 실패
+- `_isGuideLayer: true`인 객체 중 `_isDieLine`도 true인 경우 → `includeDieline` 옵션에 따라 표시
+- `dielineOnly` 모드: 칼선 객체만 visible, 나머지 전부 hidden
+
+### 파일별 역할
+- `src/lib/pdf-cmyk-export.ts` - PDF 벡터 내보내기 (SVG → svg2pdf.js → jsPDF → CMYK 후처리)
+- `src/lib/cmyk-engine.ts` - ICC FOGRA39 LUT 로드, srgbToCmyk/cmykToSrgb 변환
+- `src/lib/text-to-outlines.ts` - opentype.js로 텍스트 → 벡터 경로 변환
+- `src/lib/font-locale.ts` - 로케일별 폰트 매핑
+
+### 복원 방법
+- 색상 불일치 발생 시: `replacePdfColorsInString`에서 colorMap 매칭 안 된 색상이 강제 변환되고 있는지 확인
+- RangeError 발생 시: 정적 import를 동적 import로 변경
+- 칼선 안 나올 시: `_isDieLine` 오타 확인 + `_isGuideLayer` 필터가 칼선까지 숨기는지 확인
+
+---
+
+## Design File Save/Load (2026-03-06)
+
+### 구현 방식
+- **파일 시스템 기반**: `.pkv.json` 파일로 로컬 폴더에 저장/불러오기
+- localStorage 방식 폐기 → 용량 제한 없음, 무제한 파일 저장 가능
+- Fabric.js `toJSON`/`loadFromJSON` 사용 → 모든 캔버스 데이터 완벽 보존
+
+### 저장되는 데이터
+- 도형 위치, 크기, 회전, 색상, 투명도
+- 텍스트 내용, 폰트, 스타일 (bold/italic/align)
+- 이미지 (Base64 내장)
+- 칼선/접선 속성 (`_isDieLine`, `_isFoldLine`, `_isGuideLayer`, `_isPanelLabel`)
+- CMYK/Spot Color 속성 (`_cmykFill`, `_cmykStroke`, `_spotFillName` 등)
+- 배경색, 캔버스 크기
+
+### UI
+- 💾 Save 버튼 / Ctrl+S: 파일 다운로드 (`packive-design-YYYY-MM-DD-HH-mm.pkv.json`)
+- 📂 Load 버튼: 파일 선택 다이얼로그 → 확인 팝업 → 캔버스 복원
+- JSON_PROPS 배열: pushHistory와 동일한 속성 목록 유지 필수
+
+### 주의사항
+- `fileLoad` 함수에서 `refreshLayers`를 의존성으로 사용하면 **초기화 순서 에러** 발생
+- 해결: inline으로 `setLayersList` 직접 호출, deps는 `[pushHistory]`만
+- 이미지가 많으면 파일 크기 증가 (Base64 인코딩)
+- 향후 Supabase 연동 시 서버 저장으로 확장 가능

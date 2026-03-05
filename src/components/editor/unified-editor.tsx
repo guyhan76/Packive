@@ -1,5 +1,6 @@
-"use client";
+﻿"use client";
 import React, { useRef, useState, useCallback, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useI18n } from "@/components/i18n-context";
 import { PACKIVE_SPOT_COLORS } from "@/data/packive-spot-colors";
 import { HLC_COLORS, HLC_HUE_CATEGORIES } from "@/data/cielab-hlc-colors";
@@ -13,9 +14,9 @@ interface UnifiedEditorProps {
   onBack: () => void;
 }
 
-type RightTab = "properties" | "aiCopy" | "aiReview" | "aiImage" | "layers";
+type RightTab = "properties" | "ai" | "layers";
 
-type ColorMode = "rgb" | "cmyk" | "spot";
+type ColorMode = "cmyk" | "spot";
 
 // ─── Material helpers (same as page.tsx) ───
 type MatCat = "white-cardboard" | "kraft-paperboard" | "single-flute" | "double-flute";
@@ -135,6 +136,10 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
   // ─── UI state ───
   const [rightTab, setRightTab] = useState<RightTab>("properties");
+  const [aiSubView, setAiSubView] = useState<"menu" | "copy" | "review" | "image">("menu");
+  const [spotTarget, setSpotTarget] = useState<"fill" | "stroke">("fill");
+  const [accOpen, setAccOpen] = useState<Record<string, boolean>>({ position: true, typography: true, color: false, spot: false });
+  const toggleAcc = (key: string) => setAccOpen(prev => ({ ...prev, [key]: !prev[key] }));
   const [color, setColor] = useState("#000000");
   const [fSize, setFSize] = useState(24);
   const [selectedFont, setSelectedFont] = useState("Inter");
@@ -146,6 +151,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [fontDropOpen, setFontDropOpen] = useState(false);
   const [fontCategory, setFontCategory] = useState<"all"|"en"|"ko"|"ja">("all");
   const fontSearchRef = useRef<HTMLInputElement>(null);
+  const fontBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     fetch("https://www.googleapis.com/webfonts/v1/webfonts?key=AIzaSyAx3bN9fSS61y6FKewBaDZ4azs6W4XFnPk&sort=popularity")
@@ -219,10 +225,15 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [aiImgResults, setAiImgResults] = useState<string[]>([]);
 
   // ─── Color Mode & CMYK/Spot states ───
-  const [colorMode, setColorMode] = useState<ColorMode>("rgb");
+  const [colorMode, setColorMode] = useState<ColorMode>("cmyk");
   const [spotLib, setSpotLib] = useState<"packive"|"hlc"|"custom">("packive");
   const [spotSearch, setSpotSearch] = useState("");
   const [hlcHue, setHlcHue] = useState("All");
+  const [spotCategory, setSpotCategory] = useState<string>("All");
+  const [spotPreview, setSpotPreview] = useState<any>(null);
+  const [hlcLightness, setHlcLightness] = useState<number[]>([20, 90]);
+  const [hlcSearch, setHlcSearch] = useState("");
+  const [hlcPreview, setHlcPreview] = useState<any>(null);
   const [customSpotColors, setCustomSpotColors] = useState<Array<{id:string;name:string;hex:string;cmyk:[number,number,number,number];pantoneRef?:string}>>([]);
   const [customName, setCustomName] = useState("");
   const [customHex, setCustomHex] = useState("#FF0000");
@@ -299,6 +310,57 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     loadingRef.current = false;
     refreshLayers();
   }, []);
+
+  // ─── Temp Save / Load ───
+  const SAVE_KEY = "packive-temp-design";
+  const SAVE_META_KEY = "packive-temp-meta";
+  const JSON_PROPS = ["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone"];
+
+  const [saveStatus, setSaveStatus] = useState<string|null>(null);
+
+
+
+  const fileSave = useCallback(() => {
+    const c = fcRef.current; if (!c) return;
+    try {
+      const json = JSON.stringify(c.toJSON(JSON_PROPS), null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const name = "packive-design-" + new Date().toISOString().slice(0,16).replace(/[T:]/g,"-") + ".pkv.json";
+      const a = document.createElement("a");
+      a.href = url; a.download = name; a.click();
+      URL.revokeObjectURL(url);
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus(null), 2000);
+      console.log("[SAVE] File saved:", name, (json.length/1024).toFixed(1), "KB");
+    } catch (e: any) { alert("Save failed: " + e.message); }
+  }, []);
+
+  const fileLoadRef = useRef<HTMLInputElement>(null);
+
+  const fileLoad = useCallback(async (file: File) => {
+    const c = fcRef.current; if (!c) return;
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      loadingRef.current = true;
+      await c.loadFromJSON(json);
+      c.requestRenderAll();
+      loadingRef.current = false;
+      pushHistory();
+      try {
+        const objs = c.getObjects().filter((o:any) => o.selectable !== false && !o._isGuideLayer);
+        setLayersList(objs.map((o:any,i:number) => ({ name: o.name || o.type || "Object", type: o.type, visible: o.visible !== false, idx: i })).reverse());
+      } catch {}
+      setSaveStatus("loaded");
+      setTimeout(() => setSaveStatus(null), 2000);
+      console.log("[SAVE] File loaded:", file.name);
+    } catch (e: any) {
+      loadingRef.current = false;
+      alert("Load failed: " + e.message);
+    }
+  }, [pushHistory]);
+
 
   // ─── Layer management ───
   const refreshLayers = useCallback(() => {
@@ -462,9 +524,11 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       canvas.on("object:modified", () => { if (!loadingRef.current) { pushHistory(); refreshLayers(); } });
       canvas.on("object:scaling", (e: any) => {
         const t = e.target;
-        if (t && t.type === "i-text" && t.fontSize && t.scaleX) {
-          const realSize = Math.round(t.fontSize * t.scaleX / scaleRef.current);
+        if (t && (t.type === "i-text" || t.type === "textbox") && t.fontSize && t.scaleX) {
+          const rawSize = Math.round(t.fontSize * t.scaleX / scaleRef.current);
+          const realSize = Math.max(24, rawSize);
           setSelProps(prev => ({ ...prev, fontSize: realSize }));
+          setFSize(realSize);
         }
       });
       canvas.on("path:created", () => { if (!loadingRef.current) { pushHistory(); refreshLayers(); } });
@@ -503,13 +567,35 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
   // ─── Keyboard shortcuts ───
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
+    const handler = async (e: KeyboardEvent) => {
       const tag = (document.activeElement?.tagName || "").toUpperCase();
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       const c = fcRef.current; if (!c) return;
 
       if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); undo(); }
       else if ((e.ctrlKey || e.metaKey) && e.key === "y") { e.preventDefault(); redo(); }
+      else if ((e.ctrlKey||e.metaKey) && e.key==="s") { e.preventDefault(); fileSave(); }
+      else if ((e.ctrlKey||e.metaKey) && e.key==="c") {
+        const cv=fcRef.current; if(!cv) return;
+        const o=cv.getActiveObject(); if(!o) return;
+        const cloned = await o.clone(); (window as any).__pkClip=cloned;
+      }
+      else if ((e.ctrlKey||e.metaKey) && e.key==="v") {
+        e.preventDefault();
+        const cv=fcRef.current; if(!cv) return;
+        const cl=(window as any).__pkClip; if(!cl) return;
+        const p = await cl.clone();
+        p.set({left:(p.left||0)+20,top:(p.top||0)+20});
+        cv.add(p); cv.setActiveObject(p);
+        cv.requestRenderAll(); pushHistory(); refreshLayers();
+      }
+      else if ((e.ctrlKey||e.metaKey) && e.key==="x") {
+        const cv=fcRef.current; if(!cv) return;
+        const o=cv.getActiveObject(); if(!o) return;
+        const cloned = await o.clone(); (window as any).__pkClip=cloned;
+        cv.remove(o); cv.requestRenderAll();
+        pushHistory(); refreshLayers();
+      }
       else if (e.key === "Delete" || e.key === "Backspace") {
         const active = c.getActiveObjects();
         if (active.length > 0) {
@@ -538,7 +624,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     const c = fcRef.current; if (!c) return;
     const F = fabricModRef.current; if (!F) return;
     const cx = c.getWidth() / 2, cy = c.getHeight() / 2;
-    loadGoogleFont(selectedFont);
+    loadGoogleFont("Inter");
     const t = new F.IText("Text", {
       left: cx, top: cy, originX: "center", originY: "center",
       fontSize: Math.round(24 * scaleRef.current), fill: color, fontFamily: "Inter",
@@ -554,39 +640,107 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       setSelProps(getSelectedProps());
     });
     c.add(t); c.setActiveObject(t); c.renderAll(); refreshLayers(); pushHistory();
-        setSelectedFont("Inter");
-  }, [color, selectedFont, loadGoogleFont, detectFontForText, refreshLayers, pushHistory]);
+    setSelectedFont("Inter");
+    setFSize(24);
+  }, [color, loadGoogleFont, detectFontForText, refreshLayers, pushHistory]);
 
   // ─── Add Shape ───
   const addShape = useCallback(async (type: string) => {
     const c = fcRef.current; if (!c) return;
     const F = fabricModRef.current; if (!F) return;
-    const { Rect, Circle, Ellipse, Triangle, Polygon, Path, Line: FL } = F;
+    const { Rect, Circle, Ellipse, Triangle, Polygon, Path, Line: FL, Polyline } = F;
     const cx = c.getWidth() / 2, cy = c.getHeight() / 2;
     let s: any = null;
     const sz = 30 * scaleRef.current;
     const hsz = sz / 2;
+    const mkPoly = (n: number, outerR = hsz, innerR?: number) => {
+      const pts: {x:number;y:number}[] = [];
+      const total = innerR ? n * 2 : n;
+      for (let i = 0; i < total; i++) {
+        const r = innerR ? (i % 2 === 0 ? outerR : innerR) : outerR;
+        const a = -Math.PI/2 + (i * 2 * Math.PI / total);
+        pts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
+      }
+      return pts;
+    };
 
+    // === Basic Shapes ===
     if (type === "rect") s = new Rect({ left: cx-sz, top: cy-hsz, width: sz*2, height: sz, fill: color });
+    else if (type === "square") s = new Rect({ left: cx-hsz, top: cy-hsz, width: sz, height: sz, fill: color });
     else if (type === "roundrect") s = new Rect({ left: cx-sz, top: cy-hsz, width: sz*2, height: sz, fill: color, rx: 12, ry: 12 });
+    else if (type === "roundsquare") s = new Rect({ left: cx-hsz, top: cy-hsz, width: sz, height: sz, fill: color, rx: 10, ry: 10 });
     else if (type === "circle") s = new Circle({ left: cx-hsz, top: cy-hsz, radius: hsz, fill: color });
     else if (type === "ellipse") s = new Ellipse({ left: cx-sz, top: cy-hsz*0.7, rx: sz, ry: hsz*0.7, fill: color });
+    else if (type === "ring") s = new Circle({ left: cx-hsz, top: cy-hsz, radius: hsz, fill: "", stroke: color, strokeWidth: 8 });
+    else if (type === "semicircle") s = new Path(`M ${cx-hsz} ${cy} A ${hsz} ${hsz} 0 0 1 ${cx+hsz} ${cy} Z`, { fill: color });
+    else if (type === "quarter") s = new Path(`M ${cx} ${cy} L ${cx+hsz} ${cy} A ${hsz} ${hsz} 0 0 0 ${cx} ${cy-hsz} Z`, { fill: color });
+
+    // === Polygons ===
     else if (type === "triangle") s = new Triangle({ left: cx-hsz, top: cy-hsz, width: sz, height: sz, fill: color });
-    else if (type === "diamond") { const r = hsz; s = new Polygon([{x:cx,y:cy-r},{x:cx+r,y:cy},{x:cx,y:cy+r},{x:cx-r,y:cy}], { fill: color }); }
-    else if (type === "pentagon") { const pts: {x:number;y:number}[] = []; for(let i=0;i<5;i++){const a=(Math.PI/2*3)+(i*2*Math.PI/5); pts.push({x:cx+Math.cos(a)*hsz,y:cy+Math.sin(a)*hsz});} s = new Polygon(pts, { fill: color }); }
-    else if (type === "hexagon") { const pts: {x:number;y:number}[] = []; for(let i=0;i<6;i++){const a=i*Math.PI/3; pts.push({x:cx+Math.cos(a)*hsz,y:cy+Math.sin(a)*hsz});} s = new Polygon(pts, { fill: color }); }
-    else if (type === "star") { const pts: {x:number;y:number}[] = []; for(let i=0;i<10;i++){const r=i%2===0?hsz:hsz*0.5; const a=(Math.PI/2*3)+(i*Math.PI/5); pts.push({x:cx+Math.cos(a)*r,y:cy+Math.sin(a)*r});} s = new Polygon(pts, { fill: color }); }
-    else if (type === "heart") s = new Path("M 25 45 L 5 25 A 10 10 0 0 1 25 10 A 10 10 0 0 1 45 25 Z", { left: cx-22, top: cy-22, fill: color });
-    else if (type === "arrow") s = new Path("M 0 15 L 50 15 L 50 5 L 70 20 L 50 35 L 50 25 L 0 25 Z", { left: cx-35, top: cy-20, fill: color });
-    else if (type === "bubble") s = new Path("M 5 5 Q 5 0 10 0 L 60 0 Q 65 0 65 5 L 65 35 Q 65 40 60 40 L 25 40 L 15 50 L 18 40 L 10 40 Q 5 40 5 35 Z", { left: cx-32, top: cy-25, fill: color });
+    else if (type === "righttri") s = new Polygon([{x:cx-hsz,y:cy+hsz},{x:cx+hsz,y:cy+hsz},{x:cx-hsz,y:cy-hsz}], { fill: color });
+    else if (type === "diamond") s = new Polygon([{x:cx,y:cy-hsz},{x:cx+hsz,y:cy},{x:cx,y:cy+hsz},{x:cx-hsz,y:cy}], { fill: color });
+    else if (type === "pentagon") s = new Polygon(mkPoly(5), { fill: color });
+    else if (type === "hexagon") s = new Polygon(mkPoly(6), { fill: color });
+    else if (type === "heptagon") s = new Polygon(mkPoly(7), { fill: color });
+    else if (type === "octagon") s = new Polygon(mkPoly(8), { fill: color });
+    else if (type === "decagon") s = new Polygon(mkPoly(10), { fill: color });
+    else if (type === "parallelogram") s = new Polygon([{x:cx-sz+hsz*0.3,y:cy-hsz*0.5},{x:cx+sz,y:cy-hsz*0.5},{x:cx+sz-hsz*0.3,y:cy+hsz*0.5},{x:cx-sz,y:cy+hsz*0.5}], { fill: color });
+    else if (type === "trapezoid") s = new Polygon([{x:cx-hsz*0.6,y:cy-hsz*0.5},{x:cx+hsz*0.6,y:cy-hsz*0.5},{x:cx+sz,y:cy+hsz*0.5},{x:cx-sz,y:cy+hsz*0.5}], { fill: color });
+
+    // === Stars & Badges ===
+    else if (type === "star4") s = new Polygon(mkPoly(4, hsz, hsz*0.4), { fill: color });
+    else if (type === "star") s = new Polygon(mkPoly(5, hsz, hsz*0.45), { fill: color });
+    else if (type === "star6") s = new Polygon(mkPoly(6, hsz, hsz*0.5), { fill: color });
+    else if (type === "star8") s = new Polygon(mkPoly(8, hsz, hsz*0.5), { fill: color });
+    else if (type === "burst12") s = new Polygon(mkPoly(12, hsz, hsz*0.7), { fill: color });
+    else if (type === "burst24") s = new Polygon(mkPoly(24, hsz, hsz*0.8), { fill: color });
+    else if (type === "badge") s = new Polygon(mkPoly(16, hsz, hsz*0.85), { fill: color });
+
+    // === Arrows ===
+    else if (type === "arrowright") s = new Path("M 0 15 L 50 15 L 50 5 L 70 20 L 50 35 L 50 25 L 0 25 Z", { left: cx-35, top: cy-20, fill: color });
+    else if (type === "arrowleft") s = new Path("M 70 15 L 20 15 L 20 5 L 0 20 L 20 35 L 20 25 L 70 25 Z", { left: cx-35, top: cy-20, fill: color });
+    else if (type === "arrowup") s = new Path("M 15 70 L 15 20 L 5 20 L 20 0 L 35 20 L 25 20 L 25 70 Z", { left: cx-17, top: cy-35, fill: color });
+    else if (type === "arrowdown") s = new Path("M 15 0 L 15 50 L 5 50 L 20 70 L 35 50 L 25 50 L 25 0 Z", { left: cx-17, top: cy-35, fill: color });
+    else if (type === "arrowdouble") s = new Path("M 0 20 L 15 5 L 15 13 L 55 13 L 55 5 L 70 20 L 55 35 L 55 27 L 15 27 L 15 35 Z", { left: cx-35, top: cy-20, fill: color });
+    else if (type === "arrowcurve") s = new Path("M 5 40 Q 5 5 40 5 L 40 0 L 55 10 L 40 20 L 40 15 Q 15 15 15 40 Z", { left: cx-27, top: cy-20, fill: color });
+    else if (type === "chevron") s = new Path("M 0 0 L 50 0 L 70 20 L 50 40 L 0 40 L 20 20 Z", { left: cx-35, top: cy-20, fill: color });
+
+    // === Lines ===
     else if (type === "line") s = new FL([cx-sz, cy, cx+sz, cy], { stroke: color, strokeWidth: 3, fill: "" });
     else if (type === "dashed") s = new FL([cx-sz, cy, cx+sz, cy], { stroke: color, strokeWidth: 3, strokeDashArray: [10,5], fill: "" });
-    else if (type === "cross") { s = new Polygon([{x:cx-hsz*0.33,y:cy-hsz},{x:cx+hsz*0.33,y:cy-hsz},{x:cx+hsz*0.33,y:cy-hsz*0.33},{x:cx+hsz,y:cy-hsz*0.33},{x:cx+hsz,y:cy+hsz*0.33},{x:cx+hsz*0.33,y:cy+hsz*0.33},{x:cx+hsz*0.33,y:cy+hsz},{x:cx-hsz*0.33,y:cy+hsz},{x:cx-hsz*0.33,y:cy+hsz*0.33},{x:cx-hsz,y:cy+hsz*0.33},{x:cx-hsz,y:cy-hsz*0.33},{x:cx-hsz*0.33,y:cy-hsz*0.33}], { fill: color }); }
-    else if (type === "ring") s = new Circle({ left: cx-hsz, top: cy-hsz, radius: hsz, fill: "", stroke: color, strokeWidth: 8 });
+    else if (type === "dotted") s = new FL([cx-sz, cy, cx+sz, cy], { stroke: color, strokeWidth: 3, strokeDashArray: [3,3], fill: "" });
+    else if (type === "thick") s = new FL([cx-sz, cy, cx+sz, cy], { stroke: color, strokeWidth: 8, fill: "" });
+    else if (type === "diagonal") s = new FL([cx-hsz, cy+hsz, cx+hsz, cy-hsz], { stroke: color, strokeWidth: 3, fill: "" });
+
+    // === Symbols ===
+    else if (type === "heart") s = new Path("M 25 45 L 5 25 A 10 10 0 0 1 25 10 A 10 10 0 0 1 45 25 Z", { left: cx-22, top: cy-22, fill: color });
+    else if (type === "cross") s = new Polygon([{x:cx-hsz*0.33,y:cy-hsz},{x:cx+hsz*0.33,y:cy-hsz},{x:cx+hsz*0.33,y:cy-hsz*0.33},{x:cx+hsz,y:cy-hsz*0.33},{x:cx+hsz,y:cy+hsz*0.33},{x:cx+hsz*0.33,y:cy+hsz*0.33},{x:cx+hsz*0.33,y:cy+hsz},{x:cx-hsz*0.33,y:cy+hsz},{x:cx-hsz*0.33,y:cy+hsz*0.33},{x:cx-hsz,y:cy+hsz*0.33},{x:cx-hsz,y:cy-hsz*0.33},{x:cx-hsz*0.33,y:cy-hsz*0.33}], { fill: color });
+    else if (type === "check") s = new Path("M 5 25 L 20 40 L 50 5 L 45 0 L 20 30 L 10 20 Z", { left: cx-25, top: cy-20, fill: color });
+    else if (type === "xmark") s = new Path("M 5 0 L 25 20 L 45 0 L 50 5 L 30 25 L 50 45 L 45 50 L 25 30 L 5 50 L 0 45 L 20 25 L 0 5 Z", { left: cx-25, top: cy-25, fill: color });
+    else if (type === "moon") s = new Path(`M ${cx} ${cy-hsz} A ${hsz} ${hsz} 0 1 0 ${cx} ${cy+hsz} A ${hsz*0.65} ${hsz} 0 1 1 ${cx} ${cy-hsz} Z`, { fill: color });
+    else if (type === "lightning") s = new Path("M 25 0 L 10 25 L 20 25 L 5 50 L 35 20 L 25 20 L 40 0 Z", { left: cx-20, top: cy-25, fill: color });
+    else if (type === "cloud") s = new Path("M 25 45 Q 5 45 5 33 Q 5 23 15 20 Q 12 5 28 5 Q 42 5 42 18 Q 50 20 50 30 Q 50 45 35 45 Z", { left: cx-25, top: cy-22, fill: color });
+    else if (type === "droplet") s = new Path("M 20 0 Q 20 0 0 30 A 20 20 0 1 0 40 30 Q 20 0 20 0 Z", { left: cx-20, top: cy-25, fill: color });
+
+    // === Callouts ===
+    else if (type === "bubble") s = new Path("M 5 5 Q 5 0 10 0 L 60 0 Q 65 0 65 5 L 65 35 Q 65 40 60 40 L 25 40 L 15 50 L 18 40 L 10 40 Q 5 40 5 35 Z", { left: cx-32, top: cy-25, fill: color });
+    else if (type === "bubbleround") s = new Path("M 5 20 A 30 20 0 1 1 55 35 L 30 50 L 35 35 A 30 20 0 0 1 5 20 Z", { left: cx-30, top: cy-25, fill: color });
+    else if (type === "ribbon") s = new Path("M 0 10 L 10 10 L 10 0 L 60 0 L 60 10 L 70 10 L 60 20 L 70 30 L 60 30 L 60 40 L 10 40 L 10 30 L 0 30 L 10 20 Z", { left: cx-35, top: cy-20, fill: color });
+    else if (type === "tag") s = new Path("M 0 0 L 50 0 L 65 20 L 50 40 L 0 40 Z", { left: cx-32, top: cy-20, fill: color });
+    else if (type === "seal") s = new Polygon(mkPoly(20, hsz, hsz*0.88), { fill: color });
+
+    // === Packaging ===
+    else if (type === "tab") s = new Path("M 0 10 Q 0 0 10 0 L 50 0 Q 60 0 60 10 L 60 40 L 0 40 Z", { left: cx-30, top: cy-20, fill: color });
+    else if (type === "capsule") s = new Rect({ left: cx-sz, top: cy-hsz*0.5, width: sz*2, height: hsz, fill: color, rx: hsz*0.5, ry: hsz*0.5 });
+    else if (type === "arch") s = new Path(`M ${cx-sz} ${cy+hsz} L ${cx-sz} ${cy-hsz*0.3} A ${sz} ${sz*0.7} 0 0 1 ${cx+sz} ${cy-hsz*0.3} L ${cx+sz} ${cy+hsz} Z`, { fill: color });
+    else if (type === "frame") { s = new Rect({ left: cx-sz, top: cy-hsz, width: sz*2, height: sz, fill: "", stroke: color, strokeWidth: 6 }); }
+    else if (type === "roundframe") { s = new Rect({ left: cx-sz, top: cy-hsz, width: sz*2, height: sz, fill: "", stroke: color, strokeWidth: 6, rx: 12, ry: 12 }); }
+    else if (type === "circleframe") { s = new Circle({ left: cx-hsz, top: cy-hsz, radius: hsz, fill: "", stroke: color, strokeWidth: 6 }); }
 
     if (s) { c.add(s); c.setActiveObject(s); c.renderAll(); refreshLayers(); pushHistory(); }
     setShowShapePanel(false);
   }, [color, refreshLayers, pushHistory]);
+
 
   // ─── Add Image ───
   const addImage = useCallback(() => { fileRef.current?.click(); }, []);
@@ -665,58 +819,36 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     setShowTablePanel(false);
   }, [tableRows, tableCols, pushHistory]);
 
-  // ─── Packaging Marks ───
-  const MARKS = useMemo(() => [
-    { cat: "Recycling", items: [
-      { id: "recycle", label: "Recycling", svg: "M12 2L8 6h3v4H9L5 6l4-4h3zm0 20l4-4h-3v-4h2l4 4-4 4h-3z" },
-      { id: "fsc", label: "FSC", text: "FSC" },
-      { id: "paper", label: "Paper", text: "PAP" },
-      { id: "plastic1", label: "PETE", text: "1\nPETE" },
-      { id: "greenDot", label: "Green Dot", text: "GD" },
-    ]},
-    { cat: "Safety", items: [
-      { id: "fragile", label: "Fragile", text: "FRAGILE" },
-      { id: "thisWayUp", label: "This Way Up", text: "UP ↑" },
-      { id: "keepDry", label: "Keep Dry", text: "☂" },
-      { id: "noSun", label: "No Sunlight", text: "☀✕" },
-    ]},
-    { cat: "Food/Cosmetics", items: [
-      { id: "pao", label: "PAO", text: "12M" },
-      { id: "vegan", label: "Vegan", text: "VEGAN" },
-      { id: "organic", label: "Organic", text: "ORG" },
-      { id: "halal", label: "Halal", text: "HALAL" },
-      { id: "kosher", label: "Kosher", text: "K" },
-    ]},
-    { cat: "Export", items: [
-      { id: "ce", label: "CE", text: "CE" },
-      { id: "ukca", label: "UKCA", text: "UKCA" },
-      { id: "rohs", label: "RoHS", text: "RoHS" },
-      { id: "weee", label: "WEEE", text: "WEEE" },
-    ]},
-    { cat: "Certification", items: [
-      { id: "iso", label: "ISO", text: "ISO" },
-      { id: "haccp", label: "HACCP", text: "HACCP" },
-      { id: "kc", label: "KC", text: "KC" },
-      { id: "gmp", label: "GMP", text: "GMP" },
-    ]},
-  ], []);
+  // ─── Packaging Marks (SVG-based) ───
+  const [markUploadRef] = useState(() => ({ current: null as HTMLInputElement | null }));
+  // ─── Compliance Marks (Upload Only) ───
+  // Built-in SVG marks removed — official compliance marks require certified artwork.
+  // Users should upload official mark files from certification bodies.
 
-  const addMarkToCanvas = useCallback(async (mark: { id: string; label: string; text?: string }) => {
+  // addMarkToCanvas removed — using upload-only approach for compliance marks
+
+  const uploadMarkImage = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
     const cv = fcRef.current; if (!cv) return;
     const F = fabricModRef.current; if (!F) return;
-    const sz = 20 * scaleRef.current;
-    // Create mark as circle + text group
-    const circle = new F.Circle({ radius: sz, fill: "transparent", stroke: "#333", strokeWidth: 1.5, originX: "center", originY: "center" });
-    const txt = new F.FabricText(mark.text || mark.label, {
-      fontSize: Math.max(8, sz * 0.55), fill: "#333", fontFamily: "Arial, sans-serif",
-      fontWeight: "bold", originX: "center", originY: "center", textAlign: "center",
-    });
-    const grp = new F.Group([circle, txt], {
-      left: cv.getWidth() / 2, top: cv.getHeight() / 2, originX: "center", originY: "center",
-    });
-    cv.add(grp); cv.setActiveObject(grp); cv.renderAll(); pushHistory(); refreshLayers();
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const img = await F.FabricImage.fromURL(reader.result as string);
+      const maxSz = 50 * scaleRef.current;
+      const scale = maxSz / Math.max(img.width || 1, img.height || 1);
+      img.set({
+        left: cv.getWidth() / 2, top: cv.getHeight() / 2,
+        originX: "center", originY: "center",
+        scaleX: scale, scaleY: scale,
+      });
+      (img as any).name = file.name.replace(/\.[^.]+$/, "");
+      cv.add(img); cv.setActiveObject(img); cv.renderAll(); pushHistory(); refreshLayers();
+    };
+    reader.readAsDataURL(file);
     setShowMarkPanel(false);
+    e.target.value = "";
   }, [pushHistory, refreshLayers]);
+
 
   // ─── AI Copy ───
   const handleAiCopy = useCallback(async () => {
@@ -773,12 +905,11 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   }, [pushHistory]);
 
   // ─── Export ───
-  const handleExport = useCallback(async (type: "png" | "pdf" | "dieline") => {
+  const handleExport = useCallback(async (type: "png" | "pdf" | "svg" | "dieline") => {
     const c = fcRef.current; if (!c) return;
     setExporting(type);
     try {
       if (type === "png") {
-        // Hide guide layers, export, restore
         const guides = c.getObjects().filter((o: any) => o._isGuideLayer);
         guides.forEach((o: any) => o.set({ visible: false }));
         c.requestRenderAll();
@@ -787,39 +918,40 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
         c.requestRenderAll();
         const link = document.createElement("a");
         link.href = dataUrl; link.download = "packive-design.png"; link.click();
-      } else if (type === "pdf") {
-        const { jsPDF } = await import("jspdf");
+      } else if (type === "svg") {
         const guides = c.getObjects().filter((o: any) => o._isGuideLayer);
         guides.forEach((o: any) => o.set({ visible: false }));
         c.requestRenderAll();
-        const dataUrl = c.toDataURL({ format: "png", multiplier: 4 });
+        const svgString = c.toSVG({ width: c.getWidth(), height: c.getHeight() });
         guides.forEach((o: any) => o.set({ visible: true }));
         c.requestRenderAll();
-        const doc = new jsPDF({ orientation: totalW > totalH ? "landscape" : "portrait", unit: "mm", format: [totalW + PAD * 2, totalH + PAD * 2] });
-        doc.addImage(dataUrl, "PNG", 0, 0, totalW + PAD * 2, totalH + PAD * 2);
-        doc.save("packive-design.pdf");
-      } else if (type === "dieline") {
-        const { jsPDF } = await import("jspdf");
-        const doc = new jsPDF({ orientation: totalW > totalH ? "landscape" : "portrait", unit: "mm", format: [totalW + PAD * 2, totalH + PAD * 2] });
-        // Draw die-cut lines
-        doc.setDrawColor(255, 0, 0); doc.setLineWidth(0.3);
-        Object.entries(pos).forEach(([pid, p]) => {
-          if (p.w <= 0 || p.h <= 0) return;
-          const sp = { x: p.x + PAD, y: p.y + PAD, w: p.w, h: p.h };
-          // Simple rect for non-special panels
-          if (["front","left","back","right","topLid"].includes(pid)) {
-            doc.rect(sp.x, sp.y, sp.w, sp.h);
-          }
+        const blob = new Blob([svgString], { type: "image/svg+xml" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url; link.download = "packive-design.svg"; link.click();
+        URL.revokeObjectURL(url);
+      } else if (type === "pdf") {
+        const { exportCmykPdf } = await import("@/lib/pdf-cmyk-export");
+        await exportCmykPdf(c, {
+          width: c.getWidth(),
+          height: c.getHeight(),
+          filename: "packive-design.pdf",
+          includeDieline: true,
+          dielineOnly: false
         });
-        // Fold lines
-        doc.setDrawColor(0, 170, 0); doc.setLineDashPattern([2, 1], 0);
-        foldLines.forEach(([x1, y1, x2, y2]) => { doc.line(x1 + PAD, y1 + PAD, x2 + PAD, y2 + PAD); });
-        doc.save("packive-dieline.pdf");
+      } else if (type === "dieline") {
+        const { exportCmykPdf } = await import("@/lib/pdf-cmyk-export");
+        await exportCmykPdf(c, {
+          width: c.getWidth(),
+          height: c.getHeight(),
+          filename: "packive-dieline.pdf",
+          includeDieline: true,
+          dielineOnly: true
+        });
       }
     } catch (e: any) { alert("Export failed: " + e.message); }
     setExporting(null); setShowExport(false);
-  }, [totalW, totalH, pos, foldLines, PAD]);
-
+  }, [])
 
   // ─── Selected object properties ───
   const getSelectedProps = useCallback(() => {
@@ -831,42 +963,67 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       fill: obj.fill || "#000000",
       stroke: obj.stroke || "",
       strokeWidth: obj.strokeWidth || 0,
-      opacity: (obj.opacity ?? 1) * 100,
       left: Math.round(obj.left || 0),
       top: Math.round(obj.top || 0),
       width: Math.round((obj.width || 0) * (obj.scaleX || 1)),
       height: Math.round((obj.height || 0) * (obj.scaleY || 1)),
       angle: Math.round(obj.angle || 0),
-      fontSize: obj.fontSize || 0,
-      fontFamily: obj.fontFamily || "",
-      fontWeight: obj.fontWeight || "normal",
-      fontStyle: obj.fontStyle || "normal",
-      textAlign: obj.textAlign || "left",
-      text: obj.text || "",
-      obj: obj,
-      fillCmyk: (obj as any)._cmykFill || null,
-      strokeCmyk: (obj as any)._cmykStroke || null,
-      _spotFillName: (obj as any)._spotFillName || null,
-      _spotStrokeName: (obj as any)._spotStrokeName || null,
-      _spotFillPantone: (obj as any)._spotFillPantone || null,
-      _spotStrokePantone: (obj as any)._spotStrokePantone || null,
+      opacity: Math.round((obj.opacity || 1) * 100),
+      fontSize: obj.type === "i-text" || obj.type === "textbox" ? Math.max(24, Math.round(((obj as any).fontSize || 24) * ((obj as any).scaleX || 1) / scaleRef.current)) : undefined,
+      fontFamily: (obj as any).fontFamily || "Inter",
+      fontWeight: (obj as any).fontWeight || "normal",
+      fontStyle: (obj as any).fontStyle || "normal",
+      textAlign: (obj as any).textAlign || "left",
+      name: (obj as any).name || "",
     };
   }, []);
+
 
   const [canvasReady, setCanvasReady] = useState(false);
   const [selProps, setSelProps] = useState<any>(null);
   useEffect(() => {
     const c = fcRef.current; if (!c) return;
-    const update = () => setSelProps(getSelectedProps());
+    const update = () => {
+      const props = getSelectedProps();
+      setSelProps(props);
+      if (props) {
+        const obj = c.getActiveObject();
+        if (obj && (obj.type === "i-text" || obj.type === "textbox")) {
+          const objFont = (obj as any).fontFamily || "Inter";
+          const objSize = Math.max(24, Math.round(((obj as any).fontSize || 24) * ((obj as any).scaleX || 1) / scaleRef.current));
+          setSelectedFont(objFont);
+          setFSize(objSize);
+        }
+      }
+    };
     c.on("selection:created", update);
     c.on("selection:updated", update);
-    c.on("selection:cleared", () => setSelProps(null));
-    c.on("object:modified", update);
+    c.on("selection:cleared", () => {
+      setSelProps(null);
+      setSelectedFont("Inter");
+      setFSize(24);
+    });
+    c.on("object:modified", (e: any) => {
+      const t = e.target;
+      if (t && (t.type === "i-text" || t.type === "textbox") && t.scaleX && t.scaleX !== 1) {
+        const newFS = Math.max(Math.round(24 * scaleRef.current), Math.round(t.fontSize * t.scaleX));
+        t.set({ fontSize: newFS, scaleX: 1, scaleY: 1 });
+        t.setCoords();
+        c.requestRenderAll();
+        const dSize = Math.max(24, Math.round(newFS / scaleRef.current));
+        setFSize(dSize);
+        setSelProps(prev => prev ? { ...prev, fontSize: dSize } : prev);
+      }
+      update();
+      if (!loadingRef.current) { pushHistory(); refreshLayers(); }
+    });
     c.on("object:scaling", (e: any) => {
       const t = e.target;
       if (t && (t.type === "i-text" || t.type === "textbox") && t.fontSize && t.scaleX) {
-        const realSize = Math.round(t.fontSize * t.scaleX / scaleRef.current);
+        const rawSize = Math.round(t.fontSize * t.scaleX / scaleRef.current);
+        const realSize = Math.max(24, rawSize);
         setSelProps(prev => prev ? { ...prev, fontSize: realSize } : prev);
+        setFSize(realSize);
       } else { update(); }
     });
     c.on("object:moving", update);
@@ -875,9 +1032,12 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       c.off("selection:created", update);
       c.off("selection:updated", update);
       c.off("selection:cleared");
-      c.off("object:modified", update);
+      c.off("object:modified");
+      c.off("object:scaling");
+      c.off("object:moving", update);
+      c.off("object:rotating", update);
     };
-  }, [getSelectedProps, canvasReady]);
+  }, [getSelectedProps, canvasReady, pushHistory, refreshLayers]);
 
   const updateProp = useCallback((key: string, value: any) => {
     const c = fcRef.current; if (!c) return;
@@ -895,7 +1055,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     else if (key === "fillCmyk") { const cm = value as {c:number;m:number;y:number;k:number}; obj.set({ fill: cmykToHex(cm.c,cm.m,cm.y,cm.k) }); (obj as any)._cmykFill = cm; }
     else if (key === "strokeCmyk") { const cm = value as {c:number;m:number;y:number;k:number}; obj.set({ stroke: cmykToHex(cm.c,cm.m,cm.y,cm.k) }); (obj as any)._cmykStroke = cm; }
     else if (key === "spotFill") { const s = value as {name:string;hex:string}; obj.set({ fill: s.hex }); (obj as any)._spotFillName = s.name; }
-    else if (key === "spotStroke") { const s = value as {name:string;hex:string}; obj.set({ stroke: s.hex }); (obj as any)._spotStrokeName = s.name; }
+    else if (key === "spotStroke") { const s = value as {name:string;hex:string}; obj.set({ stroke: s.hex }); (obj as any)._spotStrokeName = s.name; if (!obj.strokeWidth || obj.strokeWidth < 0.5) obj.set({ strokeWidth: 1 }); }
     else if (key === "clearSpotFill") { delete (obj as any)._spotFillName; delete (obj as any)._spotFillPantone; }
     else if (key === "clearSpotStroke") { delete (obj as any)._spotStrokeName; delete (obj as any)._spotStrokePantone; }
     c.requestRenderAll();
@@ -997,6 +1157,10 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
         <button onClick={() => applyZoom(zoom + 25)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-400 text-sm">+</button>
         <button onClick={() => applyZoom(100)} className="text-[11px] text-blue-600 hover:text-blue-800 font-medium ml-1">Fit</button>
         <div className="w-px h-7 bg-gray-200 mx-1" />
+        <button onClick={fileSave} title="Save Design (Ctrl+S)" className="px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors">{saveStatus === "saved" ? "✓ Saved!" : "💾 Save"}</button>
+        <button onClick={() => fileLoadRef.current?.click()} title="Load Design File" className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-semibold rounded-lg hover:bg-gray-200 border border-gray-300 transition-colors">{saveStatus === "loaded" ? "✓ Loaded!" : "📂 Load"}</button>
+        <input ref={fileLoadRef} type="file" accept=".json,.pkv.json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) { if (window.confirm("Loading will replace current canvas. Continue?")) { fileLoad(f); } } e.target.value = ""; }} />
+        <div className="w-px h-7 bg-gray-200 mx-1" />
         <button onClick={() => setShowExport(true)} className="px-4 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors">Export</button>
       </div>
 
@@ -1074,24 +1238,125 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
           {/* Shape Popup */}
           {showShapePanel && (
-            <div className="absolute left-1 top-1 z-30 bg-white rounded-xl shadow-xl border p-3 w-64 max-h-80 overflow-y-auto">
-              <div className="text-xs font-semibold text-gray-700 mb-2">Shapes</div>
-              <div className="grid grid-cols-4 gap-1.5">
-                {[
-                  {id:"rect",icon:"▬"},{id:"roundrect",icon:"▢"},{id:"circle",icon:"●"},{id:"ellipse",icon:"⬮"},
-                  {id:"triangle",icon:"▲"},{id:"diamond",icon:"◆"},{id:"pentagon",icon:"⬠"},{id:"hexagon",icon:"⬡"},
-                  {id:"star",icon:"★"},{id:"heart",icon:"♥"},{id:"cross",icon:"✚"},{id:"ring",icon:"◯"},
-                  {id:"arrow",icon:"➜"},{id:"line",icon:"─"},{id:"dashed",icon:"┅"},{id:"bubble",icon:"💬"},
-                ].map(s => (
-                  <button key={s.id} onClick={() => addShape(s.id)}
-                    className="w-13 h-13 flex items-center justify-center rounded-lg border hover:bg-blue-50 hover:border-blue-300 text-lg" title={s.id}>
-                    {s.icon}
-                  </button>
-                ))}
+            <div className="absolute left-1 top-1 z-30 bg-white rounded-xl shadow-2xl border p-3 w-72 max-h-[520px] overflow-y-auto">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-xs font-semibold text-gray-700">Shapes</div>
+                <button onClick={() => setShowShapePanel(false)} className="text-gray-400 hover:text-gray-600 text-sm">×</button>
               </div>
-              <button onClick={() => setShowShapePanel(false)} className="mt-2 text-xs text-gray-400 hover:text-gray-600">Close</button>
+
+              {/* Basic */}
+              <div className="mb-3">
+                <div className="text-[9px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Basic</div>
+                <div className="grid grid-cols-5 gap-1">
+                  {([
+                    {id:"rect",icon:"▬"},{id:"square",icon:"■"},{id:"roundrect",icon:"▢"},{id:"roundsquare",icon:"▣"},{id:"circle",icon:"●"},
+                    {id:"ellipse",icon:"⬮"},{id:"ring",icon:"◯"},{id:"semicircle",icon:"◗"},{id:"quarter",icon:"◔"},{id:"frame",icon:"□"},
+                    {id:"roundframe",icon:"▢"},{id:"circleframe",icon:"○"},
+                  ] as {id:string;icon:string}[]).map(s => (
+                    <button key={s.id} onClick={() => addShape(s.id)} title={s.id}
+                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-base transition-all hover:scale-105">{s.icon}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Polygons */}
+              <div className="mb-3">
+                <div className="text-[9px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Polygons</div>
+                <div className="grid grid-cols-5 gap-1">
+                  {([
+                    {id:"triangle",icon:"▲"},{id:"righttri",icon:"◣"},{id:"diamond",icon:"◆"},{id:"pentagon",icon:"⬠"},{id:"hexagon",icon:"⬡"},
+                    {id:"heptagon",icon:"7⬡"},{id:"octagon",icon:"⯃"},{id:"decagon",icon:"10"},{id:"parallelogram",icon:"▱"},{id:"trapezoid",icon:"⏢"},
+                  ] as {id:string;icon:string}[]).map(s => (
+                    <button key={s.id} onClick={() => addShape(s.id)} title={s.id}
+                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-[11px] font-medium transition-all hover:scale-105">{s.icon}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Stars & Badges */}
+              <div className="mb-3">
+                <div className="text-[9px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Stars & Badges</div>
+                <div className="grid grid-cols-5 gap-1">
+                  {([
+                    {id:"star4",icon:"✦"},{id:"star",icon:"★"},{id:"star6",icon:"✶"},{id:"star8",icon:"✴"},{id:"burst12",icon:"✺"},
+                    {id:"burst24",icon:"❊"},{id:"badge",icon:"🏷"},{id:"seal",icon:"◎"},
+                  ] as {id:string;icon:string}[]).map(s => (
+                    <button key={s.id} onClick={() => addShape(s.id)} title={s.id}
+                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-base transition-all hover:scale-105">{s.icon}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Arrows */}
+              <div className="mb-3">
+                <div className="text-[9px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Arrows</div>
+                <div className="grid grid-cols-5 gap-1">
+                  {([
+                    {id:"arrowright",icon:"➜"},{id:"arrowleft",icon:"⬅"},{id:"arrowup",icon:"⬆"},{id:"arrowdown",icon:"⬇"},{id:"arrowdouble",icon:"⬌"},
+                    {id:"arrowcurve",icon:"↩"},{id:"chevron",icon:"❯"},
+                  ] as {id:string;icon:string}[]).map(s => (
+                    <button key={s.id} onClick={() => addShape(s.id)} title={s.id}
+                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-base transition-all hover:scale-105">{s.icon}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Lines */}
+              <div className="mb-3">
+                <div className="text-[9px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Lines</div>
+                <div className="grid grid-cols-5 gap-1">
+                  {([
+                    {id:"line",icon:"─"},{id:"dashed",icon:"┅"},{id:"dotted",icon:"···"},{id:"thick",icon:"━"},{id:"diagonal",icon:"╱"},
+                  ] as {id:string;icon:string}[]).map(s => (
+                    <button key={s.id} onClick={() => addShape(s.id)} title={s.id}
+                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-base transition-all hover:scale-105">{s.icon}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Symbols */}
+              <div className="mb-3">
+                <div className="text-[9px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Symbols</div>
+                <div className="grid grid-cols-5 gap-1">
+                  {([
+                    {id:"heart",icon:"♥"},{id:"cross",icon:"✚"},{id:"check",icon:"✓"},{id:"xmark",icon:"✗"},{id:"moon",icon:"☽"},
+                    {id:"lightning",icon:"⚡"},{id:"cloud",icon:"☁"},{id:"droplet",icon:"💧"},
+                  ] as {id:string;icon:string}[]).map(s => (
+                    <button key={s.id} onClick={() => addShape(s.id)} title={s.id}
+                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-base transition-all hover:scale-105">{s.icon}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Callouts & Labels */}
+              <div className="mb-3">
+                <div className="text-[9px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Callouts & Labels</div>
+                <div className="grid grid-cols-5 gap-1">
+                  {([
+                    {id:"bubble",icon:"💬"},{id:"bubbleround",icon:"🗨"},{id:"ribbon",icon:"🎀"},{id:"tag",icon:"🏷"},
+                  ] as {id:string;icon:string}[]).map(s => (
+                    <button key={s.id} onClick={() => addShape(s.id)} title={s.id}
+                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-base transition-all hover:scale-105">{s.icon}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Packaging */}
+              <div className="mb-1">
+                <div className="text-[9px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Packaging</div>
+                <div className="grid grid-cols-5 gap-1">
+                  {([
+                    {id:"tab",icon:"⌐"},{id:"capsule",icon:"💊"},{id:"arch",icon:"⌓"},
+                  ] as {id:string;icon:string}[]).map(s => (
+                    <button key={s.id} onClick={() => addShape(s.id)} title={s.id}
+                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-base transition-all hover:scale-105">{s.icon}</button>
+                  ))}
+                </div>
+              </div>
+
             </div>
           )}
+
 
           {/* Barcode Popup */}
           {showBarcodePanel && (
@@ -1120,26 +1385,52 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             </div>
           )}
 
-          {/* Marks Popup */}
+          {/* Marks Popup - Upload Only */}
           {showMarkPanel && (
-            <div className="absolute left-1 top-1 z-30 bg-white rounded-xl shadow-xl border p-3 w-72 max-h-96 overflow-y-auto">
-              <div className="text-xs font-semibold text-gray-700 mb-2">Packaging Marks</div>
-              {MARKS.map(cat => (
-                <div key={cat.cat} className="mb-2">
-                  <div className="text-[10px] font-semibold text-gray-500 uppercase mb-1">{cat.cat}</div>
-                  <div className="grid grid-cols-4 gap-1">
-                    {cat.items.map(m => (
-                      <button key={m.id} onClick={() => addMarkToCanvas(m)} title={m.label}
-                        className="h-10 flex items-center justify-center rounded border hover:bg-blue-50 hover:border-blue-300 text-[10px] font-semibold text-gray-700">
-                        {m.text || m.label}
-                      </button>
-                    ))}
-                  </div>
+            <div className="absolute left-1 top-1 z-30 bg-white rounded-xl shadow-2xl border p-4 w-72">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-xs font-semibold text-gray-700">Compliance Marks</div>
+                <button onClick={() => setShowMarkPanel(false)} className="text-gray-400 hover:text-gray-600 text-sm">×</button>
+              </div>
+
+              {/* Upload Section */}
+              <div className="border-2 border-dashed border-gray-300 rounded-xl p-4 text-center hover:border-blue-400 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                onClick={() => document.getElementById("mark-upload-input")?.click()}>
+                <div className="text-2xl mb-1">📁</div>
+                <div className="text-xs font-medium text-gray-700">Upload Mark Image</div>
+                <div className="text-[10px] text-gray-400 mt-1">SVG, PNG, JPG, PDF</div>
+                <input id="mark-upload-input" type="file" accept=".svg,.png,.jpg,.jpeg,.pdf" className="hidden" onChange={uploadMarkImage} />
+              </div>
+
+              {/* Common marks guide */}
+              <div className="mt-3 space-y-1.5">
+                <div className="text-[9px] font-medium text-gray-500 uppercase tracking-wider">Common Packaging Marks</div>
+                <div className="grid grid-cols-2 gap-1">
+                  {[
+                    "♻ Recycling (Mobius Loop)",
+                    "🔢 Resin ID (1-7)",
+                    "📦 Corrugated (PAP 20)",
+                    "🌿 FSC Certified",
+                    "🟢 Green Dot",
+                    "🗑 Tidy Man",
+                    "⚡ WEEE",
+                    "🇪🇺 CE Mark",
+                    "🇬🇧 UKCA",
+                    "⚠️ RoHS",
+                    "🧴 PAO (Period After Opening)",
+                    "🐰 Cruelty Free",
+                  ].map(m => (
+                    <div key={m} className="text-[8px] text-gray-400 py-0.5">{m}</div>
+                  ))}
                 </div>
-              ))}
-              <button onClick={() => setShowMarkPanel(false)} className="mt-1 text-xs text-gray-400 hover:text-gray-600">Close</button>
+                <div className="text-[8px] text-gray-400 italic mt-1 pt-1.5 border-t border-gray-100">
+                  Download official marks from certification bodies and upload here.
+                  Using unofficial marks may cause legal issues.
+                </div>
+              </div>
             </div>
           )}
+
 
 
           {/* ═══ CANVAS AREA ═══ */}
@@ -1159,17 +1450,15 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
         </div>
 
         {/* ═══ RIGHT PANEL ═══ */}
-        <div className="w-72 bg-white border-l border-gray-200 flex flex-col shrink-0 overflow-hidden">
-          {/* Tab buttons */}
+        <div className="w-80 bg-white border-l border-gray-200 flex flex-col shrink-0 overflow-hidden">
+          {/* Tab buttons - 3 tabs */}
           <div className="flex border-b border-gray-200 shrink-0">
             {([
               { id: "properties", label: "Props", icon: "⚙" },
-              { id: "aiCopy", label: "Copy", icon: "✍" },
-              { id: "aiReview", label: "Review", icon: "🔍" },
-              { id: "aiImage", label: "Image", icon: "🎨" },
+              { id: "ai", label: "AI", icon: "🤖" },
               { id: "layers", label: "Layers", icon: "☰" },
             ] as { id: RightTab; label: string; icon: string }[]).map(tab => (
-              <button key={tab.id} onClick={() => setRightTab(tab.id)}
+              <button key={tab.id} onClick={() => { setRightTab(tab.id); if (tab.id === "ai") setAiSubView("menu"); }}
                 className={`flex-1 py-2 text-center text-[10px] font-medium transition-colors ${
                   rightTab === tab.id ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/50" : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
                 }`}>
@@ -1184,393 +1473,586 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
             {/* ─── Properties Tab ─── */}
             {rightTab === "properties" && (
-              <div className="space-y-3">
+              <div className="space-y-1">
                 {selProps ? (
                   <>
-                    <div className="text-xs font-semibold text-gray-700 uppercase">{selProps.type}</div>
-                    {/* Position & Size */}
-                    <div className="grid grid-cols-2 gap-2">
-                      <label className="text-[10px] text-gray-500">X<input type="number" value={selProps.left} onChange={e => { selProps.obj.set({left:+e.target.value}); fcRef.current?.requestRenderAll(); setSelProps(getSelectedProps()); }} className="w-full border rounded px-1.5 py-1 text-xs mt-0.5" /></label>
-                      <label className="text-[10px] text-gray-500">Y<input type="number" value={selProps.top} onChange={e => { selProps.obj.set({top:+e.target.value}); fcRef.current?.requestRenderAll(); setSelProps(getSelectedProps()); }} className="w-full border rounded px-1.5 py-1 text-xs mt-0.5" /></label>
-                      <label className="text-[10px] text-gray-500">W<span className="ml-1 text-gray-400">{selProps.width}px</span></label>
-                      <label className="text-[10px] text-gray-500">H<span className="ml-1 text-gray-400">{selProps.height}px</span></label>
-                    </div>
-                    {/* Rotation & Opacity */}
-                    <div className="grid grid-cols-2 gap-2">
-                      <label className="text-[10px] text-gray-500">Rotation<input type="number" value={selProps.angle} onChange={e => updateProp("angle", e.target.value)} className="w-full border rounded px-1.5 py-1 text-xs mt-0.5" /></label>
-                      <label className="text-[10px] text-gray-500">Opacity<input type="range" min="0" max="100" value={selProps.opacity} onChange={e => updateProp("opacity", +e.target.value)} className="w-full mt-1" /><span className="text-[10px] text-gray-400">{Math.round(selProps.opacity)}%</span></label>
-                    </div>
-                    {/* ─── Color Mode Tabs ─── */}
-                    <div className="space-y-2">
-                      <div className="flex rounded-lg bg-gray-100 p-0.5">
-                        {(["rgb","cmyk","spot"] as ColorMode[]).map(m => (
-                          <button key={m} onClick={() => setColorMode(m)}
-                            className={`flex-1 py-1 rounded text-[10px] font-medium transition-colors ${
-                              colorMode === m ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                            }`}>{m.toUpperCase()}</button>
-                        ))}
-                      </div>
+                    <div className="text-xs font-semibold text-gray-700 uppercase mb-2">{selProps.type}</div>
 
-                      {/* === RGB Mode === */}
-                      {colorMode === "rgb" && (
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] text-gray-500 flex items-center gap-2">Fill
-                            <input type="color" value={typeof selProps.fill === "string" ? selProps.fill : "#000000"} onChange={e => updateProp("fill", e.target.value)} className="w-6 h-6 rounded cursor-pointer border" />
-                            <span className="text-[9px] text-gray-400">{selProps.fill}</span>
-                          </label>
-                          <label className="text-[10px] text-gray-500 flex items-center gap-2">Stroke
-                            <input type="color" value={selProps.stroke || "#000000"} onChange={e => updateProp("stroke", e.target.value)} className="w-6 h-6 rounded cursor-pointer border" />
-                            <input type="number" value={selProps.strokeWidth} onChange={e => updateProp("strokeWidth", e.target.value)} className="w-16 border rounded px-1 py-0.5 text-[10px]" min="0" step="0.25" />
-                          </label>
-                        </div>
-                      )}
-
-                      {/* === CMYK Mode === */}
-                      {colorMode === "cmyk" && selProps.fill && (() => {
-                        const fc = selProps.fillCmyk || (() => { const h = typeof selProps.fill === "string" ? selProps.fill : "#000000"; return {c:hexToCmyk(h)[0],m:hexToCmyk(h)[1],y:hexToCmyk(h)[2],k:hexToCmyk(h)[3]}; })();
-                        const sc = selProps.strokeCmyk || (() => { const h = selProps.stroke || "#000000"; return {c:hexToCmyk(h)[0],m:hexToCmyk(h)[1],y:hexToCmyk(h)[2],k:hexToCmyk(h)[3]}; })();
-                        return (
-                          <div className="space-y-3">
-                            {/* 2D Color Picker + Spectrum Bar */}
-                            <div className="mb-3">
-                              {/* 2D Saturation/Brightness Area */}
-                              <div
-                                ref={cmykPickRef}
-                                className="relative w-full h-40 rounded cursor-crosshair border border-gray-200 select-none"
-                                style={{
-                                  background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${fillHue}, 100%, 50%))`
-                                }}
-                                onMouseDown={(e) => {
-                                  e.preventDefault();
-                                  cmykDragging.current = true;
-                                  const rect = e.currentTarget.getBoundingClientRect();
-                                  const s = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-                                  const v = Math.max(0, Math.min(100, (1 - (e.clientY - rect.top) / rect.height) * 100));
-                                  setCmykPickPos({s, v});
-                                  const hex = hsvToHex(fillHue, s/100, v/100);
-                                  const cmyk = hexToCmyk(hex);
-                                  updateProp("fillCmyk", {c:cmyk[0],m:cmyk[1],y:cmyk[2],k:cmyk[3]});
-                                  const onMove = (ev: MouseEvent) => {
-                                    if (!cmykDragging.current) return;
-                                    const r = cmykPickRef.current?.getBoundingClientRect();
-                                    if (!r) return;
-                                    const ms = Math.max(0, Math.min(100, ((ev.clientX - r.left) / r.width) * 100));
-                                    const mv = Math.max(0, Math.min(100, (1 - (ev.clientY - r.top) / r.height) * 100));
-                                    setCmykPickPos({s: ms, v: mv});
-                                    const mhex = hsvToHex(fillHue, ms/100, mv/100);
-                                    const mcmyk = hexToCmyk(mhex);
-                                    updateProp("fillCmyk", {c:mcmyk[0],m:mcmyk[1],y:mcmyk[2],k:mcmyk[3]});
-                                  };
-                                  const onUp = () => {
-                                    cmykDragging.current = false;
-                                    document.removeEventListener("mousemove", onMove);
-                                    document.removeEventListener("mouseup", onUp);
-                                  };
-                                  document.addEventListener("mousemove", onMove);
-                                  document.addEventListener("mouseup", onUp);
-                                }}
-                              >
-                                {/* Crosshair indicator */}
-                                <div className="absolute w-4 h-4 border-2 border-white rounded-full shadow-md pointer-events-none" style={{
-                                  left: `calc(${cmykPickPos.s}% - 8px)`,
-                                  top: `calc(${100 - cmykPickPos.v}% - 8px)`,
-                                  backgroundColor: cmykToHex(fc.c,fc.m,fc.y,fc.k),
-                                  boxShadow: "0 0 0 1px rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.3)"
-                                }} />
-                              </div>
-                              {/* Hue Spectrum Bar */}
-                              <div className="relative mt-2">
-                                <input type="range" min="0" max="360" value={fillHue}
-                                  onChange={(e) => {
-                                    const h = Number(e.target.value);
-                                    setFillHue(h);
-                                    // Recalculate CMYK with new hue, keep saturation/brightness
-                                    const hex = cmykToHex(fc.c,fc.m,fc.y,fc.k);
-                                    const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;
-                                    const mx=Math.max(r,g,b),mn=Math.min(r,g,b);
-                                    const s=mx===0?0:(1-mn/mx); const v=mx;
-                                    const newHex = hsvToHex(h, s, v);
-                                    const cmyk = hexToCmyk(newHex);
-                                    updateProp("fillCmyk", {c:cmyk[0],m:cmyk[1],y:cmyk[2],k:cmyk[3]});
-                                  }}
-                                  className="w-full h-3 rounded-full cursor-pointer appearance-none"
-                                  style={{background: "linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)"}}
-                                />
-                              </div>
-                            </div>
-                            {/* Fill CMYK */}
-                            <div>
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="text-[10px] font-medium text-gray-600">Fill</span>
-                                <div className="w-6 h-6 rounded border border-gray-300" style={{backgroundColor: cmykToHex(fc.c,fc.m,fc.y,fc.k)}} />
-                                <span className="text-[9px] text-gray-400 font-mono">{cmykToHex(fc.c,fc.m,fc.y,fc.k)}</span>
-                              </div>
-                              {(["c","m","y","k"] as const).map(ch => {
-                                const colors = {c:"#00BCD4",m:"#E91E63",y:"#FFC107",k:"#424242"};
-                                const labels = {c:"Cyan",m:"Magenta",y:"Yellow",k:"Key"};
-                                return (
-                                  <div key={ch} className="flex items-center gap-2 mb-1">
-                                    <span className="text-[9px] w-4 font-bold" style={{color:colors[ch]}}>{ch.toUpperCase()}</span>
-                                    <input type="range" min="0" max="100" value={fc[ch]}
-                                      onChange={e => { const v = Number(e.target.value); const next = {...fc, [ch]:v}; updateProp("fillCmyk", next); }}
-                                      className="flex-1 h-1.5 rounded-full cursor-pointer" style={{accentColor:colors[ch]}} title={labels[ch]} />
-                                    <input type="number" min="0" max="100" value={fc[ch]}
-                                      onChange={e => { const v = Math.max(0,Math.min(100,Number(e.target.value))); const next = {...fc, [ch]:v}; updateProp("fillCmyk", next); }}
-                                      className="w-10 border rounded px-1 py-0.5 text-[9px] text-center" />
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            {/* Stroke 2D Color Picker */}
-                            <div className="mb-3">
-                              <div className="text-[10px] font-medium text-gray-600 mb-1">Stroke Color</div>
-                              <div
-                                ref={strokePickRef}
-                                className="relative w-full h-32 rounded cursor-crosshair border border-gray-200 select-none"
-                                style={{
-                                  background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${strokeHue}, 100%, 50%))`
-                                }}
-                                onMouseDown={(e) => {
-                                  e.preventDefault();
-                                  strokeDragging.current = true;
-                                  const rect = e.currentTarget.getBoundingClientRect();
-                                  const s = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-                                  const v = Math.max(0, Math.min(100, (1 - (e.clientY - rect.top) / rect.height) * 100));
-                                  setStrokePickPos({s, v});
-                                  const hex = hsvToHex(strokeHue, s/100, v/100);
-                                  const cmyk = hexToCmyk(hex);
-                                  updateProp("strokeCmyk", {c:cmyk[0],m:cmyk[1],y:cmyk[2],k:cmyk[3]});
-                                  const onMove = (ev: MouseEvent) => {
-                                    if (!strokeDragging.current) return;
-                                    const r = strokePickRef.current?.getBoundingClientRect();
-                                    if (!r) return;
-                                    const ms = Math.max(0, Math.min(100, ((ev.clientX - r.left) / r.width) * 100));
-                                    const mv = Math.max(0, Math.min(100, (1 - (ev.clientY - r.top) / r.height) * 100));
-                                    setStrokePickPos({s: ms, v: mv});
-                                    const mhex = hsvToHex(strokeHue, ms/100, mv/100);
-                                    const mcmyk = hexToCmyk(mhex);
-                                    updateProp("strokeCmyk", {c:mcmyk[0],m:mcmyk[1],y:mcmyk[2],k:mcmyk[3]});
-                                  };
-                                  const onUp = () => {
-                                    strokeDragging.current = false;
-                                    document.removeEventListener("mousemove", onMove);
-                                    document.removeEventListener("mouseup", onUp);
-                                  };
-                                  document.addEventListener("mousemove", onMove);
-                                  document.addEventListener("mouseup", onUp);
-                                }}
-                              >
-                                <div className="absolute w-4 h-4 border-2 border-white rounded-full shadow-md pointer-events-none" style={{
-                                  left: `calc(${strokePickPos.s}% - 8px)`,
-                                  top: `calc(${100 - strokePickPos.v}% - 8px)`,
-                                  backgroundColor: cmykToHex(sc.c,sc.m,sc.y,sc.k),
-                                  boxShadow: "0 0 0 1px rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.3)"
-                                }} />
-                              </div>
-                              <div className="relative mt-2">
-                                <input type="range" min="0" max="360" value={strokeHue}
-                                  onChange={(e) => {
-                                    const h = Number(e.target.value);
-                                    setStrokeHue(h);
-                                    const hex = cmykToHex(sc.c,sc.m,sc.y,sc.k);
-                                    const r2=parseInt(hex.slice(1,3),16)/255,g2=parseInt(hex.slice(3,5),16)/255,b2=parseInt(hex.slice(5,7),16)/255;
-                                    const mx=Math.max(r2,g2,b2),mn=Math.min(r2,g2,b2);
-                                    const s=mx===0?0:(1-mn/mx); const v=mx;
-                                    const newHex = hsvToHex(h, s, v);
-                                    const cmyk = hexToCmyk(newHex);
-                                    updateProp("strokeCmyk", {c:cmyk[0],m:cmyk[1],y:cmyk[2],k:cmyk[3]});
-                                  }}
-                                  className="w-full h-3 rounded-full cursor-pointer appearance-none"
-                                  style={{background: "linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)"}}
-                                />
-                              </div>
-                            </div>
-                            {/* Stroke CMYK */}
-                            <div>
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="text-[10px] font-medium text-gray-600">Stroke</span>
-                                <div className="w-6 h-6 rounded border border-gray-300" style={{backgroundColor: cmykToHex(sc.c,sc.m,sc.y,sc.k)}} />
-                                <span className="text-[9px] text-gray-400 font-mono">{cmykToHex(sc.c,sc.m,sc.y,sc.k)}</span>
-                                <input type="number" value={selProps.strokeWidth} onChange={e => updateProp("strokeWidth", e.target.value)} className="w-16 border rounded px-1 py-0.5 text-[9px]" min="0" step="0.25" />
-                              </div>
-                              {(["c","m","y","k"] as const).map(ch => {
-                                const colors = {c:"#00BCD4",m:"#E91E63",y:"#FFC107",k:"#424242"};
-                                return (
-                                  <div key={ch} className="flex items-center gap-2 mb-1">
-                                    <span className="text-[9px] w-4 font-bold" style={{color:colors[ch]}}>{ch.toUpperCase()}</span>
-                                    <input type="range" min="0" max="100" value={sc[ch]}
-                                      onChange={e => { const v = Number(e.target.value); const next = {...sc, [ch]:v}; updateProp("strokeCmyk", next); }}
-                                      className="flex-1 h-1.5 rounded-full cursor-pointer" style={{accentColor:colors[ch]}} />
-                                    <input type="number" min="0" max="100" value={sc[ch]}
-                                      onChange={e => { const v = Math.max(0,Math.min(100,Number(e.target.value))); const next = {...sc, [ch]:v}; updateProp("strokeCmyk", next); }}
-                                      className="w-10 border rounded px-1 py-0.5 text-[9px] text-center" />
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                      {/* === SPOT Mode === */}
-                      {colorMode === "spot" && (
-                        <div className="space-y-2">
-                          {/* Spot lib tabs */}
-                          <div className="flex rounded bg-gray-100 p-0.5">
-                            {(["packive","hlc","custom"] as const).map(lib => (
-                              <button key={lib} onClick={() => setSpotLib(lib)}
-                                className={`flex-1 py-1 rounded text-[10px] font-medium transition-colors ${
-                                  spotLib === lib ? "bg-white text-purple-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                                }`}>{lib === "packive" ? "PKV" : lib === "hlc" ? "HLC" : "Custom"}</button>
+                    {/* ▶ Position & Size Accordion */}
+                    <div className="border rounded-lg overflow-hidden">
+                      <button onClick={() => toggleAcc("position")} className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors">
+                        <span className="text-[10px] font-semibold text-gray-600">Position & Size</span>
+                        <span className="text-[9px] text-gray-400">{accOpen.position ? "▲" : "▼"}</span>
+                      </button>
+                      {accOpen.position && (
+                        <div className="p-2 space-y-1.5 border-t">
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {(["left","top","width","height"] as const).map(k => (
+                              <label key={k} className="text-[10px] text-gray-500">{k === "left" ? "X" : k === "top" ? "Y" : k === "width" ? "W" : "H"}
+                                <input type="number" value={Math.round(selProps[k] || 0)} onChange={e => updateProp(k, Number(e.target.value))} className="w-full border rounded px-2 py-1 text-xs mt-0.5" />
+                              </label>
                             ))}
                           </div>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <label className="text-[10px] text-gray-500">Rotation
+                              <input type="number" value={Math.round(selProps.angle || 0)} onChange={e => updateProp("angle", Number(e.target.value))} className="w-full border rounded px-2 py-1 text-xs mt-0.5" />
+                            </label>
+                            <label className="text-[10px] text-gray-500">Opacity
+                              <input type="range" min={0} max={100} value={Math.round((selProps.opacity ?? 1) * 100)} onChange={e => updateProp("opacity", Number(e.target.value))} className="w-full mt-1" />
+                            </label>
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
-                          {/* Packive Spot Colors */}
-                          {spotLib === "packive" && (
-                            <>
-                              <input value={spotSearch} onChange={e => setSpotSearch(e.target.value)} placeholder="Search colors..." className="w-full border border-gray-200 rounded px-2 py-1 text-[10px] focus:border-purple-400 outline-none" />
-                              <div className="max-h-44 overflow-y-auto rounded-lg border border-gray-100 bg-gray-50 p-1">
-                                <div className="grid grid-cols-5 gap-1">
-                                  {PACKIVE_SPOT_COLORS.filter(c => !spotSearch || c.name.toLowerCase().includes(spotSearch.toLowerCase())).map(c => (
-                                    <button key={c.id} onClick={() => updateProp("spotFill", {name:c.name, hex:c.hex})} title={`${c.name}\n${c.hex}`}
-                                      className="w-full aspect-square rounded border border-gray-200 hover:scale-110 transition-transform hover:shadow-md"
-                                      style={{backgroundColor: c.hex}} />
-                                  ))}
-                                </div>
-                              </div>
-                            </>
-                          )}
+                    {/* ▶ Typography Accordion (text only) */}
+                    {(selProps.type === "i-text" || selProps.type === "textbox" || selProps.type === "text") && (
+                      <div className="border rounded-lg overflow-hidden">
+                        <button onClick={() => toggleAcc("typography")} className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors">
+                          <span className="text-[10px] font-semibold text-gray-600">Typography</span>
+                          <span className="text-[9px] text-gray-400">{accOpen.typography ? "▲" : "▼"}</span>
+                        </button>
+                        {accOpen.typography && (
+                          <div className="p-2 space-y-2 border-t">
+                             {/* Font selector */}
+                             <div className="relative">
+                               <button ref={fontBtnRef} onClick={() => { setFontDropOpen(p => !p); setTimeout(() => fontSearchRef.current?.focus(), 100); }}
+                                 className="w-full border rounded px-2 py-1.5 text-xs text-left flex items-center justify-between hover:border-blue-400"
+                                 style={{fontFamily: selProps.fontFamily}}>
+                                 <span className="truncate">{selProps.fontFamily}</span>
+                                 <span className="text-gray-400 text-[9px]">{fontDropOpen ? "\u25B2" : "\u25BC"}</span>
+                               </button>
+                               {fontDropOpen && createPortal(
+                                 <div className="fixed z-[9999] bg-white border rounded-lg shadow-2xl flex flex-col"
+                                   style={{
+                                     top: (fontBtnRef.current?.getBoundingClientRect().bottom ?? 0) + 4,
+                                     left: fontBtnRef.current?.getBoundingClientRect().left ?? 0,
+                                     width: fontBtnRef.current?.getBoundingClientRect().width ?? 260,
+                                     maxHeight: "min(480px, calc(100vh - " + ((fontBtnRef.current?.getBoundingClientRect().bottom ?? 200) + 20) + "px))",
+                                   }}>
+                                   {/* Backdrop */}
+                                   <div className="fixed inset-0 z-[-1]" onClick={() => { setFontDropOpen(false); setFontSearch(""); }} />
+                                   <div className="p-1.5 border-b shrink-0">
+                                     <input ref={fontSearchRef} value={fontSearch} onChange={e => setFontSearch(e.target.value)}
+                                       placeholder="Search fonts..." className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-400" />
+                                   </div>
+                                   <div className="flex border-b shrink-0">
+                                     {(["all","en","ko","ja"] as const).map(cat => (
+                                       <button key={cat} onClick={() => setFontCategory(cat)}
+                                         className={"px-2 py-1 text-[10px] border-b-2 " + (fontCategory===cat?"border-blue-500 text-blue-600":"border-transparent text-gray-500")}>
+                                         {cat==="all"?"All":cat==="en"?"English":cat==="ko"?"Korean":"Japanese"}
+                                       </button>
+                                     ))}
+                                   </div>
+                                   <div className="overflow-y-auto flex-1">
+                                     {(() => {
+                                       const enPriority = ["Inter","Roboto","Open Sans","Lato","Montserrat","Poppins","Oswald","Raleway","Merriweather","Playfair Display","Source Sans 3","Nunito","Ubuntu","Rubik","Work Sans","Quicksand","Barlow","Mulish","Karla","Libre Baskerville","DM Sans","Manrope","Space Grotesk","Archivo","Bitter","Crimson Text","Cormorant Garamond","Josefin Sans","Cabin","Overpass","Fira Sans","PT Sans","Dosis","Titillium Web","Oxygen","Catamaran","Comfortaa","Abel","Asap","Exo 2","Maven Pro","Prompt","Signika","Varela Round","Heebo","Outfit","Lexend","Figtree","Sora","Plus Jakarta Sans","Albert Sans","Red Hat Display","Wix Madefor Display"];
+                                       let pool = googleFonts;
+                                       if (fontCategory === "en") pool = enPriority.filter(f => googleFonts.includes(f));
+                                       else if (fontCategory === "ko") pool = koFonts.length > 0 ? koFonts : ["Noto Sans KR","Noto Serif KR","Gothic A1","Nanum Gothic","Nanum Myeongjo"];
+                                       else if (fontCategory === "ja") pool = jaFonts.length > 0 ? jaFonts : ["Noto Sans JP","Noto Serif JP","M PLUS Rounded 1c","M PLUS 1p","Kosugi Maru"];
+                                       const filtered = pool.filter(f => !fontSearch || f.toLowerCase().includes(fontSearch.toLowerCase()));
+                                       return filtered.slice(0, 200).map(f => (
+                                         <button key={f} onClick={() => { loadGoogleFont(f); updateProp("fontFamily", f); setSelectedFont(f); setFontDropOpen(false); setFontSearch(""); }}
+                                           className={`w-full text-left px-3 py-2 text-xs hover:bg-blue-50 transition-colors ${selProps.fontFamily === f ? "bg-blue-100 text-blue-700 font-medium" : "text-gray-700"}`}
+                                           style={{fontFamily: f}}>
+                                           {f}
+                                         </button>
+                                       ));
+                                     })()}
+                                   </div>
+                                 </div>,
+                                 document.body
+                               )}
+                             </div>
+                            {/* Font size + style */}
+                            <div className="flex items-center gap-1.5">
+                              <input type="number" min={1} value={fSize} onChange={e => { const v = Math.max(1, Number(e.target.value)); setFSize(v); updateProp("fontSize", v * scaleRef.current); }} className="w-16 border rounded px-2 py-1 text-xs" />
+                              <button onClick={() => updateProp("fontWeight", selProps.fontWeight === "bold" ? "normal" : "bold")}
+                                className={`w-7 h-7 rounded text-xs font-bold ${selProps.fontWeight === "bold" ? "bg-blue-100 text-blue-700" : "hover:bg-gray-100"}`}>B</button>
+                              <button onClick={() => updateProp("fontStyle", selProps.fontStyle === "italic" ? "normal" : "italic")}
+                                className={`w-7 h-7 rounded text-xs italic ${selProps.fontStyle === "italic" ? "bg-blue-100 text-blue-700" : "hover:bg-gray-100"}`}>I</button>
+                            </div>
+                            {/* Text align */}
+                            <div className="flex gap-1">
+                              {(["left","center","right"] as const).map(a => (
+                                <button key={a} onClick={() => updateProp("textAlign", a)}
+                                  className={`flex-1 py-1 rounded text-[10px] ${selProps.textAlign === a ? "bg-blue-100 text-blue-700" : "hover:bg-gray-100 text-gray-500"}`}>
+                                  {a === "left" ? "◧" : a === "center" ? "◫" : "◨"}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-                          {/* HLC Colors */}
-                          {spotLib === "hlc" && (
-                            <>
-                              <div className="flex flex-wrap gap-1 mb-1">
-                                {HLC_HUE_CATEGORIES.map(h => (
-                                  <button key={h} onClick={() => setHlcHue(h)}
-                                    className={`px-1.5 py-0.5 rounded text-[9px] transition-colors ${
-                                      hlcHue === h ? "bg-purple-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                                    }`}>{h}</button>
-                                ))}
-                              </div>
-                              <div className="max-h-44 overflow-y-auto rounded-lg border border-gray-100 bg-gray-50 p-1">
-                                <div className="grid grid-cols-6 gap-1">
-                                  {HLC_COLORS.filter(c => hlcHue === "All" || c.hueName === hlcHue).map(c => (
-                                    <button key={c.id} onClick={() => updateProp("spotFill", {name:c.name, hex:c.hex})} title={`${c.name}\n${c.hex}`}
-                                      className="w-full aspect-square rounded border border-gray-200 hover:scale-110 transition-transform hover:shadow-md"
-                                      style={{backgroundColor: c.hex}} />
-                                  ))}
-                                </div>
-                              </div>
-                              <div className="text-[8px] text-gray-400 text-center">Color data: CIELAB HLC Colour Atlas © freieFarbe e.V., CC BY 4.0</div>
-                            </>
-                          )}
-
-                          {/* Custom Spot Colors */}
-                          {spotLib === "custom" && (
-                            <>
-                              <div className="space-y-1.5 p-2 bg-gray-50 rounded-lg border border-gray-100">
-                                <input value={customName} onChange={e => setCustomName(e.target.value)} placeholder="Color name" className="w-full border border-gray-200 rounded px-2 py-1 text-[10px] focus:border-blue-400 outline-none" />
-                                <div className="flex gap-1">
-                                  <input value={customHex} onChange={e => setCustomHex(e.target.value)} placeholder="#FF0000" className="flex-1 border border-gray-200 rounded px-2 py-1 text-[10px] focus:border-blue-400 outline-none" />
-                                  <input type="color" value={customHex.match(/^#[0-9a-fA-F]{6}$/) ? customHex : "#000000"} onChange={e => setCustomHex(e.target.value)} className="w-7 h-7 rounded border border-gray-200 cursor-pointer" title="Pick color" />
-                                </div>
-                                <input value={customPantoneRef} onChange={e => setCustomPantoneRef(e.target.value)} placeholder="Pantone ref (optional)" className="w-full border border-gray-200 rounded px-2 py-1 text-[10px] focus:border-blue-400 outline-none" />
-                                <button onClick={() => {
-                                  if (!customName.trim() || !customHex.match(/^#[0-9a-fA-F]{6}$/)) return;
-                                  const newColor = { id: "custom-"+Date.now(), name: customName.trim(), hex: customHex, cmyk: hexToCmyk(customHex) as [number,number,number,number], pantoneRef: customPantoneRef.trim() || undefined };
-                                  const updated = [...customSpotColors, newColor];
-                                  setCustomSpotColors(updated);
-                                  localStorage.setItem("packive-custom-spots", JSON.stringify(updated));
-                                  setCustomName(""); setCustomHex("#FF0000"); setCustomPantoneRef("");
-                                }} className="w-full py-1.5 bg-purple-600 text-white rounded text-[10px] font-medium hover:bg-purple-700 transition-colors">Add Color</button>
-                              </div>
-                              <div className="max-h-32 overflow-y-auto space-y-1">
-                                {customSpotColors.map(s => (
-                                  <div key={s.id} className="flex items-center gap-2 p-1.5 bg-white rounded border group hover:border-purple-300">
-                                    <div className="w-5 h-5 rounded border" style={{backgroundColor: s.hex}} />
-                                    <span className="text-[10px] flex-1 truncate">{s.name}</span>
-                                    <button onClick={() => updateProp("spotFill", {name:s.name, hex:s.hex})} className="text-[9px] text-purple-600 hover:underline">Fill</button>
-                                    <button onClick={() => updateProp("spotStroke", {name:s.name, hex:s.hex})} className="text-[9px] text-blue-600 hover:underline">Stroke</button>
-                                    <button onClick={() => { const u = customSpotColors.filter(c => c.id !== s.id); setCustomSpotColors(u); localStorage.setItem("packive-custom-spots", JSON.stringify(u)); }}
-                                      className="text-[9px] text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100">×</button>
+                    {/* ▶ Color Accordion */}
+                    <div className="border rounded-lg overflow-hidden">
+                      <button onClick={() => toggleAcc("color")} className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors">
+                        <span className="text-[10px] font-semibold text-gray-600">Color</span>
+                        <div className="flex items-center gap-1">
+                          <div className="w-4 h-4 rounded border" style={{ backgroundColor: selProps.fill || "#000" }} />
+                          <span className="text-[9px] text-gray-400">{accOpen.color ? "▲" : "▼"}</span>
+                        </div>
+                      </button>
+                      {accOpen.color && (
+                        <div className="p-2 space-y-2 border-t">
+                          {/* Color mode tabs */}
+                          <div className="flex bg-gray-100 rounded-lg p-0.5">
+                            {(["cmyk","spot"] as ColorMode[]).map(m => (
+                              <button key={m} onClick={() => setColorMode(m)}
+                                className={`flex-1 py-1 rounded text-[10px] font-medium transition-colors ${colorMode === m ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
+                                {m.toUpperCase()}
+                              </button>
+                            ))}
+                          </div>
+                          {/* CMYK */}
+                          {colorMode === "cmyk" && selProps.fill && (() => {
+                            const fc = (fcRef.current?.getActiveObject() as any)?._cmykFill || (() => { const h = typeof selProps.fill === "string" ? selProps.fill : "#000000"; const cm = hexToCmyk(h); return {c:cm[0],m:cm[1],y:cm[2],k:cm[3]}; })();
+                            const sc = (fcRef.current?.getActiveObject() as any)?._cmykStroke || (() => { const h = selProps.stroke || "#000000"; const cm = hexToCmyk(h); return {c:cm[0],m:cm[1],y:cm[2],k:cm[3]}; })();
+                            return (
+                              <div className="space-y-3">
+                                {/* Fill 2D Color Picker */}
+                                <div>
+                                  <div className="text-[10px] font-medium text-gray-600 mb-1">Fill Color</div>
+                                  <div ref={cmykPickRef} className="relative w-full h-40 rounded cursor-crosshair border border-gray-200 select-none"
+                                    style={{ background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${fillHue}, 100%, 50%))` }}
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      cmykDragging.current = true;
+                                      const rect = e.currentTarget.getBoundingClientRect();
+                                      const s = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+                                      const v = Math.max(0, Math.min(100, (1 - (e.clientY - rect.top) / rect.height) * 100));
+                                      setCmykPickPos({s, v});
+                                      const hex = hsvToHex(fillHue, s/100, v/100);
+                                      const cmyk = hexToCmyk(hex);
+                                      updateProp("fillCmyk", {c:cmyk[0],m:cmyk[1],y:cmyk[2],k:cmyk[3]});
+                                      const onMove = (ev: MouseEvent) => {
+                                        if (!cmykDragging.current) return;
+                                        const r = cmykPickRef.current?.getBoundingClientRect();
+                                        if (!r) return;
+                                        const ms = Math.max(0, Math.min(100, ((ev.clientX - r.left) / r.width) * 100));
+                                        const mv = Math.max(0, Math.min(100, (1 - (ev.clientY - r.top) / r.height) * 100));
+                                        setCmykPickPos({s: ms, v: mv});
+                                        const mhex = hsvToHex(fillHue, ms/100, mv/100);
+                                        const mcmyk = hexToCmyk(mhex);
+                                        updateProp("fillCmyk", {c:mcmyk[0],m:mcmyk[1],y:mcmyk[2],k:mcmyk[3]});
+                                      };
+                                      const onUp = () => {
+                                        cmykDragging.current = false;
+                                        document.removeEventListener("mousemove", onMove);
+                                        document.removeEventListener("mouseup", onUp);
+                                      };
+                                      document.addEventListener("mousemove", onMove);
+                                      document.addEventListener("mouseup", onUp);
+                                    }}>
+                                    <div className="absolute w-4 h-4 border-2 border-white rounded-full shadow-md pointer-events-none" style={{
+                                      left: `calc(${cmykPickPos.s}% - 8px)`, top: `calc(${100 - cmykPickPos.v}% - 8px)`,
+                                      backgroundColor: cmykToHex(fc.c,fc.m,fc.y,fc.k),
+                                      boxShadow: "0 0 0 1px rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.3)"
+                                    }} />
                                   </div>
+                                  <div className="relative mt-2">
+                                    <input type="range" min="0" max="360" value={fillHue}
+                                      onChange={(e) => {
+                                        const h = Number(e.target.value);
+                                        setFillHue(h);
+                                        const hex = hsvToHex(h, cmykPickPos.s/100, cmykPickPos.v/100);
+                                        const cmyk = hexToCmyk(hex);
+                                        updateProp("fillCmyk", {c:cmyk[0],m:cmyk[1],y:cmyk[2],k:cmyk[3]});
+                                      }}
+                                      className="w-full h-3 rounded-full cursor-pointer appearance-none"
+                                      style={{background: "linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)"}}
+                                    />
+                                  </div>
+                                </div>
+                                {/* Fill CMYK Sliders */}
+                                <div>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-[10px] font-medium text-gray-600">Fill</span>
+                                    <div className="w-6 h-6 rounded border border-gray-300" style={{backgroundColor: cmykToHex(fc.c,fc.m,fc.y,fc.k)}} />
+                                    <span className="text-[9px] text-gray-400 font-mono">{cmykToHex(fc.c,fc.m,fc.y,fc.k)}</span>
+                                  </div>
+                                  {(["c","m","y","k"] as const).map(ch => {
+                                    const colors = {c:"#00BCD4",m:"#E91E63",y:"#FFC107",k:"#424242"};
+                                    return (
+                                      <div key={ch} className="flex items-center gap-2 mb-1">
+                                        <span className="text-[9px] w-4 font-bold" style={{color:colors[ch]}}>{ch.toUpperCase()}</span>
+                                        <input type="range" min="0" max="100" value={fc[ch]}
+                                          onChange={e => updateProp("fillCmyk", {...fc, [ch]: Number(e.target.value)})}
+                                          className="flex-1 h-1.5 rounded-full cursor-pointer" style={{accentColor:colors[ch]}} />
+                                        <input type="number" min="0" max="100" value={fc[ch]}
+                                          onChange={e => updateProp("fillCmyk", {...fc, [ch]: Math.max(0,Math.min(100,Number(e.target.value)))})}
+                                          className="w-10 border rounded px-1 py-0.5 text-[9px] text-center" />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                {/* Stroke 2D Color Picker */}
+                                <div>
+                                  <div className="text-[10px] font-medium text-gray-600 mb-1">Stroke Color</div>
+                                  <div ref={strokePickRef} className="relative w-full h-32 rounded cursor-crosshair border border-gray-200 select-none"
+                                    style={{ background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${strokeHue}, 100%, 50%))` }}
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      strokeDragging.current = true;
+                                      const rect = e.currentTarget.getBoundingClientRect();
+                                      const s = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+                                      const v = Math.max(0, Math.min(100, (1 - (e.clientY - rect.top) / rect.height) * 100));
+                                      setStrokePickPos({s, v});
+                                      const hex = hsvToHex(strokeHue, s/100, v/100);
+                                      const cmyk = hexToCmyk(hex);
+                                      updateProp("strokeCmyk", {c:cmyk[0],m:cmyk[1],y:cmyk[2],k:cmyk[3]});
+                                      const onMove = (ev: MouseEvent) => {
+                                        if (!strokeDragging.current) return;
+                                        const r = strokePickRef.current?.getBoundingClientRect();
+                                        if (!r) return;
+                                        const ms = Math.max(0, Math.min(100, ((ev.clientX - r.left) / r.width) * 100));
+                                        const mv = Math.max(0, Math.min(100, (1 - (ev.clientY - r.top) / r.height) * 100));
+                                        setStrokePickPos({s: ms, v: mv});
+                                        const mhex = hsvToHex(strokeHue, ms/100, mv/100);
+                                        const mcmyk = hexToCmyk(mhex);
+                                        updateProp("strokeCmyk", {c:mcmyk[0],m:mcmyk[1],y:mcmyk[2],k:mcmyk[3]});
+                                      };
+                                      const onUp = () => {
+                                        strokeDragging.current = false;
+                                        document.removeEventListener("mousemove", onMove);
+                                        document.removeEventListener("mouseup", onUp);
+                                      };
+                                      document.addEventListener("mousemove", onMove);
+                                      document.addEventListener("mouseup", onUp);
+                                    }}>
+                                    <div className="absolute w-4 h-4 border-2 border-white rounded-full shadow-md pointer-events-none" style={{
+                                      left: `calc(${strokePickPos.s}% - 8px)`, top: `calc(${100 - strokePickPos.v}% - 8px)`,
+                                      backgroundColor: cmykToHex(sc.c,sc.m,sc.y,sc.k),
+                                      boxShadow: "0 0 0 1px rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.3)"
+                                    }} />
+                                  </div>
+                                  <div className="relative mt-2">
+                                    <input type="range" min="0" max="360" value={strokeHue}
+                                      onChange={(e) => {
+                                        const h = Number(e.target.value);
+                                        setStrokeHue(h);
+                                        const hex = hsvToHex(h, strokePickPos.s/100, strokePickPos.v/100);
+                                        const cmyk = hexToCmyk(hex);
+                                        updateProp("strokeCmyk", {c:cmyk[0],m:cmyk[1],y:cmyk[2],k:cmyk[3]});
+                                      }}
+                                      className="w-full h-3 rounded-full cursor-pointer appearance-none"
+                                      style={{background: "linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)"}}
+                                    />
+                                  </div>
+                                </div>
+                                {/* Stroke CMYK Sliders */}
+                                <div>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-[10px] font-medium text-gray-600">Stroke</span>
+                                    <div className="w-6 h-6 rounded border border-gray-300" style={{backgroundColor: cmykToHex(sc.c,sc.m,sc.y,sc.k)}} />
+                                    <span className="text-[9px] text-gray-400 font-mono">{cmykToHex(sc.c,sc.m,sc.y,sc.k)}</span>
+                                    <input type="number" value={selProps.strokeWidth || 0} onChange={e => updateProp("strokeWidth", e.target.value)} className="w-12 border rounded px-1 py-0.5 text-[9px]" min="0" step="0.25" />
+                                  </div>
+                                  {(["c","m","y","k"] as const).map(ch => {
+                                    const colors = {c:"#00BCD4",m:"#E91E63",y:"#FFC107",k:"#424242"};
+                                    return (
+                                      <div key={ch} className="flex items-center gap-2 mb-1">
+                                        <span className="text-[9px] w-4 font-bold" style={{color:colors[ch]}}>{ch.toUpperCase()}</span>
+                                        <input type="range" min="0" max="100" value={sc[ch]}
+                                          onChange={e => updateProp("strokeCmyk", {...sc, [ch]: Number(e.target.value)})}
+                                          className="flex-1 h-1.5 rounded-full cursor-pointer" style={{accentColor:colors[ch]}} />
+                                        <input type="number" min="0" max="100" value={sc[ch]}
+                                          onChange={e => updateProp("strokeCmyk", {...sc, [ch]: Math.max(0,Math.min(100,Number(e.target.value)))})}
+                                          className="w-10 border rounded px-1 py-0.5 text-[9px] text-center" />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                          {/* SPOT */}
+                          {colorMode === "spot" && (
+                            <div className="space-y-2">
+                              <div className="flex bg-gray-100 rounded p-0.5">
+                                {(["packive","hlc","custom"] as const).map(t => (
+                                  <button key={t} onClick={() => setSpotLib(t)}
+                                    className={`flex-1 py-1 rounded text-[10px] font-medium transition-colors ${spotLib === t ? "bg-white text-purple-600 shadow-sm" : "text-gray-500"}`}>
+                                    {t === "packive" ? "Packive" : t === "hlc" ? "HLC" : "Custom"}
+                                  </button>
                                 ))}
                               </div>
-                            </>
-                          )}
+                              {/* Fill/Stroke target toggle */}
+                              <div className="flex bg-gray-100 rounded p-0.5">
+                                <button onClick={() => setSpotTarget("fill")}
+                                  className={`flex-1 py-1 rounded text-[10px] font-medium transition-colors ${spotTarget === "fill" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500"}`}>Fill</button>
+                                <button onClick={() => setSpotTarget("stroke")}
+                                  className={`flex-1 py-1 rounded text-[10px] font-medium transition-colors ${spotTarget === "stroke" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500"}`}>Stroke</button>
+                              </div>
+                               {spotLib === "packive" && (
+                                 <>
+                                   {/* Search bar */}
+                                   <div className="relative">
+                                     <input value={spotSearch} onChange={e => { setSpotSearch(e.target.value); setSpotCategory("All"); }}
+                                       placeholder="Search by name, HEX, ID..."
+                                       className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[10px] focus:border-purple-400 outline-none pr-7" />
+                                     {spotSearch && <button onClick={() => setSpotSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs">×</button>}
+                                   </div>
 
-                          {/* Current spot info */}
-                          {selProps._spotFillName && <div className="text-[9px] bg-purple-50 text-purple-700 px-2 py-1 rounded">Fill: {selProps._spotFillName}</div>}
-                          {selProps._spotStrokeName && <div className="text-[9px] bg-purple-50 text-purple-700 px-2 py-1 rounded">Stroke: {selProps._spotStrokeName}</div>}
-                          {(selProps._spotFillName || selProps._spotStrokeName) && (
-                            <button onClick={() => { updateProp("clearSpotFill", null); updateProp("clearSpotStroke", null); }} className="text-[9px] text-red-500 hover:underline">Clear Spot Colors</button>
+                                   {/* Category color chips */}
+                                   <div className="flex gap-1 flex-wrap">
+                                     <button onClick={() => { setSpotCategory("All"); setSpotSearch(""); }}
+                                       className={`px-2 py-0.5 rounded-full text-[9px] font-medium transition-all ${spotCategory === "All" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>All</button>
+                                     {["Red","Orange","Yellow","Green","Blue","Purple","Pink","Brown","Neutral","Metallic","Pastel"].map(cat => {
+                                       const catColors: Record<string, string> = { Red:"#E03C31", Orange:"#FF6B35", Yellow:"#FFD700", Green:"#228B22", Blue:"#0047AB", Purple:"#7F00FF", Pink:"#FF69B4", Brown:"#7B3F00", Neutral:"#808080", Metallic:"#D4AF37", Pastel:"#FFD1DC" };
+                                       const isActive = spotCategory === cat;
+                                       return (
+                                         <button key={cat} onClick={() => { setSpotCategory(cat); setSpotSearch(""); }}
+                                           className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-medium transition-all ${isActive ? "ring-2 ring-purple-400 bg-white shadow-sm" : "bg-gray-50 text-gray-500 hover:bg-gray-100"}`}>
+                                           <span className="w-3 h-3 rounded-full border border-gray-300 shrink-0" style={{backgroundColor: catColors[cat]}} />
+                                           <span className={isActive ? "text-purple-700" : ""}>{cat}</span>
+                                         </button>
+                                       );
+                                     })}
+                                   </div>
+
+                                   {/* Color grid - sorted light to dark */}
+                                   {(() => {
+                                     const filtered = PACKIVE_SPOT_COLORS.filter(c => {
+                                       const catMatch = spotCategory === "All" || c.category === spotCategory;
+                                       if (!spotSearch) return catMatch;
+                                       const q = spotSearch.toLowerCase();
+                                       return catMatch && (c.name.toLowerCase().includes(q) || c.nameKo.includes(q) || c.id.toLowerCase().includes(q) || c.hex.toLowerCase().includes(q));
+                                     }).sort((a, b) => {
+                                       // Sort by lightness (lighter first)
+                                       const lum = (hex: string) => { const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), bl = parseInt(hex.slice(5,7),16); return 0.299*r + 0.587*g + 0.114*bl; };
+                                       return lum(b.hex) - lum(a.hex);
+                                     });
+                                     return (
+                                       <>
+                                         <div className="text-[9px] text-gray-400">{filtered.length} colors</div>
+                                         <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-100 bg-gray-50 p-1.5">
+                                           <div className="grid grid-cols-6 gap-1">
+                                             {filtered.map(c => (
+                                               <button key={c.id}
+                                                 onClick={() => { updateProp(spotTarget === "fill" ? "spotFill" : "spotStroke", {name:c.name, hex:c.hex}); setSpotPreview(c); }}
+                                                 
+                                                 title={`${c.name}${locale === "ko" ? ` (${c.nameKo})` : ""}\n${c.id}\n${c.hex}`}
+                                                 className={`w-full aspect-square rounded-md border-2 transition-all hover:scale-110 hover:shadow-lg hover:z-10 ${
+                                                   (spotTarget === "fill" && selProps._spotFillName === c.name) || (spotTarget === "stroke" && selProps._spotStrokeName === c.name)
+                                                     ? "border-purple-500 ring-1 ring-purple-300 scale-110" : "border-gray-200 hover:border-gray-400"}`}
+                                                 style={{backgroundColor: c.hex}} />
+                                             ))}
+                                           </div>
+                                         </div>
+                                       </>
+                                     );
+                                   })()}
+
+                                   {/* Preview card */}
+                                   {spotPreview && (
+                                     <div className="flex items-center gap-2 p-2 bg-white rounded-lg border border-purple-100 shadow-sm animate-in fade-in duration-150">
+                                       <div className="w-10 h-10 rounded-lg border border-gray-200 shrink-0" style={{backgroundColor: spotPreview.hex}} />
+                                       <div className="flex-1 min-w-0">
+                                         <div className="text-[11px] font-semibold text-gray-800 truncate">{spotPreview.name}</div>
+                                         {locale === "ko" && <div className="text-[9px] text-gray-500">{spotPreview.nameKo}</div>}
+                                         <div className="flex gap-2 mt-0.5">
+                                           <span className="text-[8px] font-mono text-gray-400">{spotPreview.id}</span>
+                                           <span className="text-[8px] font-mono text-gray-400">{spotPreview.hex}</span>
+                                           <span className="text-[8px] font-mono text-gray-400">C{spotPreview.cmyk[0]} M{spotPreview.cmyk[1]} Y{spotPreview.cmyk[2]} K{spotPreview.cmyk[3]}</span>
+                                         </div>
+                                       </div>
+                                     </div>
+                                   )}
+                                 </>
+                               )}
+                               {spotLib === "hlc" && (
+                                 <>
+                                   {/* Search */}
+                                   <div className="relative">
+                                     <input value={hlcSearch} onChange={e => { setHlcSearch(e.target.value); setHlcHue("All"); }}
+                                       placeholder="Search by name, HEX, ID..."
+                                       className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[10px] focus:border-purple-400 outline-none pr-7" />
+                                     {hlcSearch && <button onClick={() => setHlcSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs">×</button>}
+                                   </div>
+
+                                   {/* Hue category chips */}
+                                   <div className="flex gap-1 flex-wrap">
+                                     {(() => {
+                                       const hueColors: Record<string, string> = { "All":"#808080", "Red":"#C83232", "Orange":"#E07020", "Yellow":"#D4C020", "Yellow-Green":"#80B030", "Green":"#30A050", "Cyan":"#20A0A0", "Blue":"#2060C0", "Violet":"#5030A0", "Purple":"#8020A0", "Magenta":"#C020A0", "Pink":"#E06080" };
+                                       return HLC_HUE_CATEGORIES.map(cat => (
+                                         <button key={cat} onClick={() => { setHlcHue(cat); setHlcSearch(""); }}
+                                           className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-medium transition-all ${hlcHue === cat ? "ring-2 ring-purple-400 bg-white shadow-sm" : "bg-gray-50 text-gray-500 hover:bg-gray-100"}`}>
+                                           {cat !== "All" && <span className="w-3 h-3 rounded-full border border-gray-300 shrink-0" style={{backgroundColor: hueColors[cat]}} />}
+                                           <span className={hlcHue === cat ? "text-purple-700" : ""}>{cat}</span>
+                                         </button>
+                                       ));
+                                     })()}
+                                   </div>
+
+                                   {/* Lightness presets */}
+                                   <div className="flex gap-1">
+                                     {([
+                                       { label: "All", range: [10, 95] },
+                                       { label: "Light", range: [65, 95] },
+                                       { label: "Mid", range: [35, 65] },
+                                       { label: "Dark", range: [10, 35] },
+                                     ] as { label: string; range: number[] }[]).map(p => (
+                                       <button key={p.label} onClick={() => setHlcLightness(p.range)}
+                                         className={`flex-1 py-1 rounded text-[9px] font-medium transition-all ${
+                                           hlcLightness[0] === p.range[0] && hlcLightness[1] === p.range[1]
+                                             ? "bg-purple-100 text-purple-700 ring-1 ring-purple-300"
+                                             : "bg-gray-50 text-gray-500 hover:bg-gray-100"}`}>
+                                         {p.label}
+                                       </button>
+                                     ))}
+                                   </div>
+
+
+                                   {/* Color grid */}
+                                   {(() => {
+                                     const filtered = HLC_COLORS.filter(c => {
+                                       const hueMatch = hlcHue === "All" || c.hueName === hlcHue;
+                                       const lightMatch = c.l >= hlcLightness[0] && c.l <= hlcLightness[1];
+                                       if (!hlcSearch) return hueMatch && lightMatch;
+                                       const q = hlcSearch.toLowerCase();
+                                       return hueMatch && lightMatch && (c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q) || c.hex.toLowerCase().includes(q));
+                                     }).sort((a, b) => {
+                                       const lum = (hex: string) => { const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), bl = parseInt(hex.slice(5,7),16); return 0.299*r + 0.587*g + 0.114*bl; };
+                                       return lum(b.hex) - lum(a.hex);
+                                     });
+                                     const display = filtered.slice(0, 200);
+                                     return (
+                                       <>
+                                         <div className="text-[9px] text-gray-400">{filtered.length} colors{filtered.length > 200 ? ` (showing 200)` : ""}</div>
+                                         <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-100 bg-gray-50 p-1.5">
+                                           <div className="grid grid-cols-8 gap-0.5">
+                                             {display.map(c => (
+                                               <button key={c.id}
+                                                 onClick={() => { updateProp(spotTarget === "fill" ? "spotFill" : "spotStroke", {name:c.name, hex:c.hex}); setHlcPreview(c); }}
+                                                 
+                                                 title={`${c.name}\nH${c.h} L${c.l} C${c.c}\n${c.hex}`}
+                                                 className={`w-full aspect-square rounded-sm border transition-all hover:scale-125 hover:shadow-lg hover:z-10 ${
+                                                   (spotTarget === "fill" && selProps._spotFillName === c.name) || (spotTarget === "stroke" && selProps._spotStrokeName === c.name)
+                                                     ? "border-purple-500 ring-1 ring-purple-300 scale-110" : "border-transparent hover:border-gray-400"}`}
+                                                 style={{backgroundColor: c.hex}} />
+                                             ))}
+                                           </div>
+                                         </div>
+                                       </>
+                                     );
+                                   })()}
+
+                                   {/* Preview card */}
+                                   {hlcPreview && (
+                                     <div className="flex items-center gap-2 p-2 bg-white rounded-lg border border-purple-100 shadow-sm">
+                                       <div className="w-10 h-10 rounded-lg border border-gray-200 shrink-0" style={{backgroundColor: hlcPreview.hex}} />
+                                       <div className="flex-1 min-w-0">
+                                         <div className="text-[11px] font-semibold text-gray-800">{hlcPreview.name}</div>
+                                         <div className="flex gap-2 mt-0.5">
+                                           <span className="text-[9px] text-gray-500">H{hlcPreview.h}</span>
+                                           <span className="text-[9px] text-gray-500">L{hlcPreview.l}</span>
+                                           <span className="text-[9px] text-gray-500">C{hlcPreview.c}</span>
+                                         </div>
+                                         <div className="flex gap-2 mt-0.5">
+                                           <span className="text-[8px] font-mono text-gray-400">{hlcPreview.hex}</span>
+                                           <span className="text-[8px] font-mono text-gray-400">C{hlcPreview.cmyk[0]} M{hlcPreview.cmyk[1]} Y{hlcPreview.cmyk[2]} K{hlcPreview.cmyk[3]}</span>
+                                         </div>
+                                       </div>
+                                     </div>
+                                   )}
+
+                                   <div className="text-[8px] text-gray-400 text-center">CIELAB HLC Colour Atlas — freieFarbe e.V. (CC BY 4.0)</div>
+                                 </>
+                               )}
+                              {spotLib === "custom" && (
+                                <>
+                                  {/* Save current spot color to custom */}
+                                  <div className="p-2 bg-gray-50 rounded-lg border border-gray-100 space-y-2">
+                                    <div className="text-[10px] font-semibold text-gray-600">Save to My Colors</div>
+                                    <p className="text-[9px] text-gray-400">Packive 또는 HLC에서 색상을 선택한 후 여기에 저장하세요.</p>
+                               {/* Fill spot info */}
+                               {selProps._spotFillName && (
+                                 <div className="flex items-center gap-2 p-1.5 bg-white rounded border border-blue-100">
+                                   <div className="w-5 h-5 rounded border" style={{backgroundColor: selProps.fill}} />
+                                   <div className="flex-1">
+                                     <div className="text-[9px] text-blue-500 font-medium">Fill</div>
+                                     <div className="text-[10px] text-gray-700">{selProps._spotFillName}</div>
+                                   </div>
+                                 </div>
+                               )}
+                               {/* Stroke spot info */}
+                               {selProps._spotStrokeName && (
+                                 <div className="flex items-center gap-2 p-1.5 bg-white rounded border border-purple-100">
+                                   <div className="w-5 h-5 rounded border" style={{backgroundColor: selProps.stroke}} />
+                                   <div className="flex-1">
+                                     <div className="text-[9px] text-purple-500 font-medium">Stroke</div>
+                                     <div className="text-[10px] text-gray-700">{selProps._spotStrokeName}</div>
+                                   </div>
+                                 </div>
+                               )}
+                               <input value={customName} onChange={e => setCustomName(e.target.value)} placeholder="Save as name (e.g. Brand Red)" className="w-full border border-gray-200 rounded px-2 py-1 text-[10px] focus:border-purple-400 outline-none" />
+                               <input value={customPantoneRef} onChange={e => setCustomPantoneRef(e.target.value)} placeholder="Pantone ref (e.g. 485 C)" className="w-full border border-gray-200 rounded px-2 py-1 text-[10px] focus:border-purple-400 outline-none" />
+                               {/* Save Fill button */}
+                               {selProps._spotFillName && (
+                                 <button onClick={() => {
+                                   const saveName = customName.trim() || selProps._spotFillName;
+                                   const newColor = { id: Date.now().toString(), name: saveName, hex: selProps.fill, cmyk: [0,0,0,0] as [number,number,number,number], pantoneRef: customPantoneRef.trim() || undefined };
+                                   const updated = [...customSpotColors, newColor];
+                                   setCustomSpotColors(updated);
+                                   localStorage.setItem("packive-custom-spots", JSON.stringify(updated));
+                                   setCustomName(""); setCustomPantoneRef("");
+                                 }}
+                                   className="w-full py-1.5 bg-blue-600 text-white rounded text-[10px] font-medium hover:bg-blue-700 transition-colors">
+                                   Save Fill Color
+                                 </button>
+                               )}
+                               {/* Save Stroke button */}
+                               {selProps._spotStrokeName && (
+                                 <button onClick={() => {
+                                   const saveName = customName.trim() || selProps._spotStrokeName;
+                                   const newColor = { id: Date.now().toString() + "s", name: saveName, hex: selProps.stroke, cmyk: [0,0,0,0] as [number,number,number,number], pantoneRef: customPantoneRef.trim() || undefined };
+                                   const updated = [...customSpotColors, newColor];
+                                   setCustomSpotColors(updated);
+                                   localStorage.setItem("packive-custom-spots", JSON.stringify(updated));
+                                   setCustomName(""); setCustomPantoneRef("");
+                                 }}
+                                   className="w-full py-1.5 bg-purple-600 text-white rounded text-[10px] font-medium hover:bg-purple-700 transition-colors">
+                                   Save Stroke Color
+                                 </button>
+                               )}
+                                  </div>
+                                  {/* Saved custom colors list */}
+                                  {customSpotColors.length > 0 && (
+                                    <div className="space-y-1">
+                                      <div className="text-[10px] font-semibold text-gray-600">My Colors ({customSpotColors.length})</div>
+                                      <div className="max-h-40 overflow-y-auto space-y-1">
+                                        {customSpotColors.map(s => (
+                                          <div key={s.id} className="flex items-center gap-2 group hover:bg-gray-50 rounded p-1.5 border border-transparent hover:border-gray-200">
+                                            <div className="w-6 h-6 rounded border" style={{backgroundColor: s.hex}} />
+                                            <div className="flex-1 min-w-0">
+                                              <span className="text-[10px] text-gray-700 block truncate font-medium">{s.name}</span>
+                                              {s.pantoneRef && <span className="text-[8px] text-purple-500 block">Pantone {s.pantoneRef}</span>}
+                                            </div>
+                                            <button onClick={() => updateProp(spotTarget === "fill" ? "spotFill" : "spotStroke", {name:s.name, hex:s.hex})}
+                                              className="text-[9px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100">Apply</button>
+                                            <button onClick={() => { const u = customSpotColors.filter(c => c.id !== s.id); setCustomSpotColors(u); localStorage.setItem("packive-custom-spots", JSON.stringify(u)); }}
+                                              className="text-[9px] text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100">×</button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                              {selProps._spotStrokeName && <div className="text-[9px] bg-purple-50 text-purple-700 px-2 py-1 rounded">Stroke: {selProps._spotStrokeName}</div>}
+                              {(selProps._spotFillName || selProps._spotStrokeName) && (
+                                <button onClick={() => { updateProp("clearSpotFill", null); updateProp("clearSpotStroke", null); }} className="text-[9px] text-red-500 hover:underline">Clear Spot Colors</button>
+                              )}
+                            </div>
                           )}
                         </div>
                       )}
                     </div>
-                    {/* Text properties (if text) */}
-                    {(selProps.type === "i-text" || selProps.type === "textbox" || selProps.type === "text") && (
-                      <div className="space-y-1.5 pt-2 border-t">
-                        <label className="text-[10px] text-gray-500">Font
-                <div className="relative">
-                  <button onClick={() => { setFontDropOpen(p => !p); setTimeout(() => fontSearchRef.current?.focus(), 100); }} className="w-full border rounded px-2 py-1 text-xs text-left flex items-center justify-between hover:border-blue-400" style={{fontFamily: selProps.fontFamily}}>
-                    <span className="truncate">{selProps.fontFamily}</span>
-                    <span className="text-gray-400 text-[9px]">{fontDropOpen ? "\u25B2" : "\u25BC"}</span>
-                  </button>
-                  {fontDropOpen && (
-                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-xl max-h-64 flex flex-col">
-                      <div className="p-1.5 border-b">
-                        <input ref={fontSearchRef} value={fontSearch} onChange={e => setFontSearch(e.target.value)} placeholder="Search fonts..." className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-400" />
-                      </div>
-                      <div className="overflow-y-auto flex-1">
-              {/* Category tabs */}
-              <div className="flex border-b mb-1">
-                {(["all","en","ko","ja"] as const).map(cat => (
-                  <button key={cat} onClick={() => setFontCategory(cat)}
-                    className={"px-2 py-0.5 text-[10px] border-b-2 " + (fontCategory===cat?"border-blue-500 text-blue-600":"border-transparent text-gray-500")}>
-                    {cat==="all"?"All":cat==="en"?"English":cat==="ko"?"Korean":"Japanese"}
-                  </button>
-                ))}
-              </div>
-              {(() => {
-                const enPriority = ["Inter","Roboto","Open Sans","Lato","Montserrat","Poppins","Oswald","Raleway","Merriweather","Playfair Display","Source Sans 3","Nunito","Ubuntu","Rubik","Work Sans","Quicksand","Barlow","Mulish","Karla","Libre Baskerville","DM Sans","Manrope","Space Grotesk","Archivo","Bitter","Crimson Text","Cormorant Garamond","Josefin Sans","Cabin","Overpass","Fira Sans","PT Sans","Dosis","Titillium Web","Oxygen","Catamaran","Comfortaa","Abel","Asap","Exo 2","Maven Pro","Prompt","Signika","Varela Round","Heebo","Outfit","Lexend","Figtree","Sora","Plus Jakarta Sans","Albert Sans","Red Hat Display","Wix Madefor Display"];
-                let pool = googleFonts;
-                if (fontCategory === "en") pool = enPriority.filter(f => googleFonts.includes(f));
-                else if (fontCategory === "ko") pool = koFonts.length > 0 ? koFonts : ["Noto Sans KR","Noto Serif KR","Gothic A1","Nanum Gothic","Nanum Myeongjo"];
-                else if (fontCategory === "ja") pool = jaFonts.length > 0 ? jaFonts : ["Noto Sans JP","Noto Serif JP","M PLUS Rounded 1c","M PLUS 1p","Kosugi Maru"];
-                const filtered = pool.filter(f => !fontSearch || f.toLowerCase().includes(fontSearch.toLowerCase()));
-                return filtered.slice(0, fontSearch ? 200 : 200).map(f => (
-                          <button key={f} onClick={() => { loadGoogleFont(f); updateProp("fontFamily", f); setSelectedFont(f); setFontDropOpen(false); setFontSearch(""); }}
-                            className={`w-full text-left px-2 py-1.5 text-xs hover:bg-blue-50 transition-colors ${selProps.fontFamily === f ? "bg-blue-100 text-blue-700 font-medium" : "text-gray-700"}`}
-                            style={{fontFamily: f}}>
-                            {f}
-                          </button>
-                    ));
-               })()}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                        </label>
-                        <div className="flex gap-2">
-                          <label className="text-[10px] text-gray-500 flex-1">Size<input type="number" value={selProps.fontSize} onChange={e => updateProp("fontSize", e.target.value)} className="w-full border rounded px-1.5 py-1 text-xs mt-0.5" min="1" /></label>
-                          <div className="flex gap-0.5 items-end pb-0.5">
-                            <button onClick={() => updateProp("fontWeight", selProps.fontWeight === "bold" ? "normal" : "bold")}
-                              className={`w-7 h-7 rounded text-xs font-bold ${selProps.fontWeight === "bold" ? "bg-blue-100 text-blue-700" : "hover:bg-gray-100"}`}>B</button>
-                            <button onClick={() => updateProp("fontStyle", selProps.fontStyle === "italic" ? "normal" : "italic")}
-                              className={`w-7 h-7 rounded text-xs italic ${selProps.fontStyle === "italic" ? "bg-blue-100 text-blue-700" : "hover:bg-gray-100"}`}>I</button>
-                          </div>
-                        </div>
-                        <div className="flex gap-0.5">
-                          {(["left","center","right"] as const).map(a => (
-                            <button key={a} onClick={() => updateProp("textAlign", a)}
-                              className={`flex-1 py-1 rounded text-[10px] ${selProps.textAlign === a ? "bg-blue-100 text-blue-700" : "hover:bg-gray-100 text-gray-500"}`}>
-                              {a === "left" ? "≡←" : a === "center" ? "≡↔" : "≡→"}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+
                   </>
                 ) : (
                   <div className="text-center py-8">
@@ -1587,89 +2069,121 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
               </div>
             )}
 
-            {/* ─── AI Copy Tab ─── */}
-            {rightTab === "aiCopy" && (
+            {/* ─── AI Tab (unified) ─── */}
+            {rightTab === "ai" && (
               <div className="space-y-3">
-                <div className="text-xs font-semibold text-gray-700">AI Copy Generator</div>
-                <input value={copyProduct} onChange={e => setCopyProduct(e.target.value)} placeholder="Product name" className="w-full border rounded-lg px-3 py-2 text-sm" />
-                <input value={copyBrand} onChange={e => setCopyBrand(e.target.value)} placeholder="Brand name (optional)" className="w-full border rounded-lg px-3 py-2 text-sm" />
-                <button onClick={handleAiCopy} disabled={copyLoading || !copyProduct.trim()}
-                  className="w-full py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 disabled:opacity-50">
-                  {copyLoading ? "Generating..." : "Generate Copy"}
-                </button>
-                {copyResult && (
-                  <div className="space-y-2 pt-2 border-t">
-                    {Object.entries(copyResult).filter(([k]) => k !== "error").map(([key, val]) => (
-                      <div key={key} className="bg-gray-50 rounded-lg p-2">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-[10px] font-semibold text-gray-500 uppercase">{key}</span>
-                          <button onClick={() => applyCopyToCanvas(key, val as string)} className="text-[10px] text-blue-600 hover:text-blue-800">+ Add</button>
-                        </div>
-                        <div className="text-xs text-gray-700">{val as string}</div>
+                {aiSubView === "menu" && (
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-gray-700">AI Assistant</div>
+                    <button onClick={() => setAiSubView("copy")} className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-purple-400 hover:bg-purple-50/50 transition-all group">
+                      <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center text-lg group-hover:bg-purple-200 transition-colors">✍</div>
+                      <div className="text-left">
+                        <div className="text-xs font-semibold text-gray-700">Copy Generator</div>
+                        <div className="text-[10px] text-gray-400">AI가 제품 카피를 생성합니다</div>
                       </div>
-                    ))}
+                    </button>
+                    <button onClick={() => setAiSubView("review")} className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-green-400 hover:bg-green-50/50 transition-all group">
+                      <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center text-lg group-hover:bg-green-200 transition-colors">🔍</div>
+                      <div className="text-left">
+                        <div className="text-xs font-semibold text-gray-700">Design Review</div>
+                        <div className="text-[10px] text-gray-400">디자인 품질을 AI가 분석합니다</div>
+                      </div>
+                    </button>
+                    <button onClick={() => setAiSubView("image")} className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-indigo-400 hover:bg-indigo-50/50 transition-all group">
+                      <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center text-lg group-hover:bg-indigo-200 transition-colors">🎨</div>
+                      <div className="text-left">
+                        <div className="text-xs font-semibold text-gray-700">Image Generator</div>
+                        <div className="text-[10px] text-gray-400">AI 이미지를 생성합니다</div>
+                      </div>
+                    </button>
                   </div>
                 )}
-              </div>
-            )}
 
-            {/* ─── AI Review Tab ─── */}
-            {rightTab === "aiReview" && (
-              <div className="space-y-3">
-                <div className="text-xs font-semibold text-gray-700">AI Design Review</div>
-                <p className="text-[10px] text-gray-400">Analyze your current design for quality, readability, and packaging best practices.</p>
-                <button onClick={handleAiReview} disabled={reviewLoading}
-                  className="w-full py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50">
-                  {reviewLoading ? "Analyzing..." : "Review Design"}
-                </button>
-                {reviewResult && (
-                  <div className="space-y-2 pt-2 border-t">
-                    {reviewResult.score != null && (
-                      <div className="text-center py-2">
-                        <div className={`text-3xl font-bold ${reviewResult.score >= 80 ? "text-green-600" : reviewResult.score >= 60 ? "text-yellow-600" : "text-red-600"}`}>{reviewResult.score}</div>
-                        <div className="text-[10px] text-gray-400">/ 100</div>
-                      </div>
-                    )}
-                    {reviewResult.feedback && <div className="text-xs text-gray-700 bg-gray-50 rounded-lg p-2">{reviewResult.feedback}</div>}
-                    {reviewResult.suggestions && Array.isArray(reviewResult.suggestions) && (
-                      <div className="space-y-1">
-                        {reviewResult.suggestions.map((s: string, i: number) => (
-                          <div key={i} className="text-xs text-gray-600 bg-yellow-50 rounded p-1.5">&#8226; {s}</div>
+                {aiSubView === "copy" && (
+                  <div className="space-y-3">
+                    <button onClick={() => setAiSubView("menu")} className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-700">← Back</button>
+                    <div className="text-xs font-semibold text-gray-700">AI Copy Generator</div>
+                    <input value={copyProduct} onChange={e => setCopyProduct(e.target.value)} placeholder="Product name" className="w-full border rounded-lg px-3 py-2 text-sm" />
+                    <input value={copyBrand} onChange={e => setCopyBrand(e.target.value)} placeholder="Brand name (optional)" className="w-full border rounded-lg px-3 py-2 text-sm" />
+                    <button onClick={handleAiCopy} disabled={copyLoading || !copyProduct.trim()}
+                      className="w-full py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 disabled:opacity-50">
+                      {copyLoading ? "Generating..." : "Generate Copy"}
+                    </button>
+                    {copyResult && (
+                      <div className="space-y-2 pt-2 border-t">
+                        {Object.entries(copyResult).filter(([k]) => k !== "error").map(([key, val]) => (
+                          <div key={key} className="bg-gray-50 rounded-lg p-2">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] font-semibold text-gray-500 uppercase">{key}</span>
+                              <button onClick={() => applyCopyToCanvas(key, val as string)} className="text-[10px] text-blue-600 hover:text-blue-800">+ Add</button>
+                            </div>
+                            <div className="text-xs text-gray-700">{val as string}</div>
+                          </div>
                         ))}
                       </div>
                     )}
                   </div>
                 )}
-              </div>
-            )}
 
-            {/* ─── AI Image Tab ─── */}
-            {rightTab === "aiImage" && (
-              <div className="space-y-3">
-                <div className="text-xs font-semibold text-gray-700">AI Image Generator</div>
-                <select value={aiImgCategory} onChange={e => setAiImgCategory(e.target.value as any)} className="w-full border rounded-lg px-3 py-2 text-sm">
-                  <option value="logo">Logo</option><option value="product">Product</option><option value="background">Background</option>
-                  <option value="illustration">Illustration</option><option value="icon">Icon</option><option value="free">Free Prompt</option>
-                </select>
-                <textarea value={aiImgPrompt} onChange={e => setAiImgPrompt(e.target.value)} placeholder="Describe the image..." rows={3} className="w-full border rounded-lg px-3 py-2 text-sm resize-none" />
-                <label className="flex items-center gap-2 text-xs text-gray-600">
-                  <input type="checkbox" checked={aiImgTransparent} onChange={e => setAiImgTransparent(e.target.checked)} className="rounded" />
-                  Transparent background
-                </label>
-                <button onClick={handleAiImage} disabled={aiImgLoading || !aiImgPrompt.trim()}
-                  className="w-full py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50">
-                  {aiImgLoading ? "Generating..." : "Generate Image"}
-                </button>
-                {aiImgResults.length > 0 && (
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t">
-                    {aiImgResults.map((src, i) => (
-                      <div key={i} className="relative group cursor-pointer rounded-lg overflow-hidden border hover:border-blue-400" onClick={() => addAiImageToCanvas(src)}>
-                        <img src={src} alt="" className="w-full h-24 object-cover" />
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 flex items-center justify-center transition-colors">
-                          <span className="text-white text-xs font-medium opacity-0 group-hover:opacity-100">+ Add</span>
-                        </div>
+                {aiSubView === "review" && (
+                  <div className="space-y-3">
+                    <button onClick={() => setAiSubView("menu")} className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-700">← Back</button>
+                    <div className="text-xs font-semibold text-gray-700">AI Design Review</div>
+                    <p className="text-[10px] text-gray-400">Analyze your current design for quality, readability, and packaging best practices.</p>
+                    <button onClick={handleAiReview} disabled={reviewLoading}
+                      className="w-full py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50">
+                      {reviewLoading ? "Analyzing..." : "Review Design"}
+                    </button>
+                    {reviewResult && (
+                      <div className="space-y-2 pt-2 border-t">
+                        {reviewResult.score != null && (
+                          <div className="text-center py-2">
+                            <div className={`text-3xl font-bold ${reviewResult.score >= 80 ? "text-green-600" : reviewResult.score >= 60 ? "text-yellow-600" : "text-red-600"}`}>{reviewResult.score}</div>
+                            <div className="text-[10px] text-gray-400">/ 100</div>
+                          </div>
+                        )}
+                        {reviewResult.feedback && <div className="text-xs text-gray-700 bg-gray-50 rounded-lg p-2">{reviewResult.feedback}</div>}
+                        {reviewResult.suggestions && Array.isArray(reviewResult.suggestions) && (
+                          <div className="space-y-1">
+                            {reviewResult.suggestions.map((s: string, i: number) => (
+                              <div key={i} className="text-xs text-gray-600 bg-yellow-50 rounded p-1.5">&#8226; {s}</div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    ))}
+                    )}
+                  </div>
+                )}
+
+                {aiSubView === "image" && (
+                  <div className="space-y-3">
+                    <button onClick={() => setAiSubView("menu")} className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-700">← Back</button>
+                    <div className="text-xs font-semibold text-gray-700">AI Image Generator</div>
+                    <select value={aiImgCategory} onChange={e => setAiImgCategory(e.target.value as any)} className="w-full border rounded-lg px-3 py-2 text-sm">
+                      <option value="logo">Logo</option><option value="product">Product</option><option value="background">Background</option>
+                      <option value="illustration">Illustration</option><option value="icon">Icon</option><option value="free">Free Prompt</option>
+                    </select>
+                    <textarea value={aiImgPrompt} onChange={e => setAiImgPrompt(e.target.value)} placeholder="Describe the image..." rows={3} className="w-full border rounded-lg px-3 py-2 text-sm resize-none" />
+                    <label className="flex items-center gap-2 text-xs text-gray-600">
+                      <input type="checkbox" checked={aiImgTransparent} onChange={e => setAiImgTransparent(e.target.checked)} className="rounded" />
+                      Transparent background
+                    </label>
+                    <button onClick={handleAiImage} disabled={aiImgLoading || !aiImgPrompt.trim()}
+                      className="w-full py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+                      {aiImgLoading ? "Generating..." : "Generate Image"}
+                    </button>
+                    {aiImgResults.length > 0 && (
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t">
+                        {aiImgResults.map((src, i) => (
+                          <div key={i} className="relative group cursor-pointer rounded-lg overflow-hidden border hover:border-blue-400" onClick={() => addAiImageToCanvas(src)}>
+                            <img src={src} alt="" className="w-full h-24 object-cover" />
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 flex items-center justify-center transition-colors">
+                              <span className="text-white text-xs font-medium opacity-0 group-hover:opacity-100">+ Add</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1708,8 +2222,9 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             <h3 className="text-lg font-bold text-gray-800 mb-4">Export Design</h3>
             <div className="space-y-3">
               {[
+                { type: "pdf" as const, label: "PDF (CMYK Print-Ready)", desc: "Vector CMYK PDF with dieline", icon: "📄" },
                 { type: "png" as const, label: "PNG (High-Res)", desc: "Full net image at 4x resolution", icon: "🖼" },
-                { type: "pdf" as const, label: "PDF (Print-Ready)", desc: "300 DPI print-quality PDF", icon: "📄" },
+                { type: "svg" as const, label: "SVG (Vector)", desc: "Scalable vector graphics", icon: "🔷" },
                 { type: "dieline" as const, label: "Dieline Only", desc: "Cut & fold lines PDF", icon: "✂" },
               ].map(opt => (
                 <button key={opt.type} onClick={() => handleExport(opt.type)} disabled={!!exporting}
@@ -1727,6 +2242,34 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           </div>
         </div>
       )}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
       {/* ═══ Shortcuts Modal ═══ */}
       {showShortcuts && (

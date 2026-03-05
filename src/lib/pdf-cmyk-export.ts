@@ -30,21 +30,39 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) };
 }
 
+let _cmykEngine: any = null;
+async function loadCmykEngine() {
+  if (!_cmykEngine) {
+    _cmykEngine = await import("./cmyk-engine");
+    if (!_cmykEngine.isReverseLUTReady()) {
+      await _cmykEngine.loadFOGRA39LUT();
+    }
+  }
+  return _cmykEngine;
+}
+
 function rgbToCmyk(r: number, g: number, b: number): CMYKColor {
+  // Simple fallback (used synchronously in buildColorMap)
   const r1 = r / 255, g1 = g / 255, b1 = b / 255;
   const k = 1 - Math.max(r1, g1, b1);
   if (k === 1) return { c: 0, m: 0, y: 0, k: 100 };
-
   const c = (1 - r1 - k) / (1 - k);
   const m = (1 - g1 - k) / (1 - k);
   const y = (1 - b1 - k) / (1 - k);
+  return { c: Math.round(c * 100), m: Math.round(m * 100), y: Math.round(y * 100), k: Math.round(k * 100) };
+}
 
-  return {
-    c: Math.round(c * 100),
-    m: Math.round(m * 100),
-    y: Math.round(y * 100),
-    k: Math.round(k * 100),
-  };
+function iccRgbToCmyk(engine: any, r: number, g: number, b: number): CMYKColor {
+  if (engine && engine.isReverseLUTReady()) {
+    const [c, m, y, k] = engine.srgbToCmyk(r, g, b);
+    return {
+      c: Math.max(0, Math.min(100, Math.round(c))),
+      m: Math.max(0, Math.min(100, Math.round(m))),
+      y: Math.max(0, Math.min(100, Math.round(y))),
+      k: Math.max(0, Math.min(100, Math.round(k)))
+    };
+  }
+  return rgbToCmyk(r, g, b);
 }
 
 function normalizeColor(color: string): string | null {
@@ -158,14 +176,8 @@ function replacePdfColorsInString(pdf: string, colorMap: Map<string, CMYKColor>)
       replaced++;
       return c + " " + m + " " + y + " " + k + " " + cmykOp;
     }
-    const maxV = Math.max(ri, gi, bi) / 255;
-    const kVal = 1 - maxV;
-    const cVal = maxV === 0 ? 0 : (1 - ri / 255 - kVal) / (1 - kVal);
-    const mVal = maxV === 0 ? 0 : (1 - gi / 255 - kVal) / (1 - kVal);
-    const yVal = maxV === 0 ? 0 : (1 - bi / 255 - kVal) / (1 - kVal);
-    const cmykOp2 = op === "rg" ? "k" : "K";
-    replaced++;
-    return cVal.toFixed(4) + " " + mVal.toFixed(4) + " " + yVal.toFixed(4) + " " + kVal.toFixed(4) + " " + cmykOp2;
+    // Keep original RGB - no forced conversion for unmapped colors
+    return match;
   });
 
   const grayFillRe = new RegExp("(?<=\\n|^)" + NUM + "\\s+(g|G)(?=\\n|$)", "gm");
@@ -198,7 +210,40 @@ export async function exportCmykPdf(
   const canvasH = canvas.getHeight();
   console.log("[PDF] Step 1: Canvas size", canvasW, "x", canvasH);
 
+  // Load ICC FOGRA39 engine for accurate color conversion
+  const cmykEngine = await loadCmykEngine();
+  const iccReady = cmykEngine && cmykEngine.isReverseLUTReady();
+  console.log("[PDF] ICC FOGRA39 engine ready:", iccReady);
+
   const { colorMap, spotMap } = buildColorMap(canvas);
+  // Collect which hex values have explicit _cmykFill/_cmykStroke (user-set CMYK)
+  const userCmykHexes = new Set<string>();
+  canvas.getObjects().forEach((obj: any) => {
+    if (obj._cmykFill && obj.fill) { const h = normalizeColor(obj.fill); if (h) userCmykHexes.add(h); }
+    if (obj._cmykStroke && obj.stroke) { const h = normalizeColor(obj.stroke); if (h) userCmykHexes.add(h); }
+    if (obj._objects) obj._objects.forEach((sub: any) => {
+      if (sub._cmykFill && sub.fill) { const h = normalizeColor(sub.fill); if (h) userCmykHexes.add(h); }
+      if (sub._cmykStroke && sub.stroke) { const h = normalizeColor(sub.stroke); if (h) userCmykHexes.add(h); }
+    });
+  });
+  // Upgrade only non-user-set colors with ICC FOGRA39
+  if (iccReady) {
+    let upgraded = 0, skipped = 0;
+    colorMap.forEach((cmyk, hex) => {
+      // Skip user-set CMYK colors
+      if (userCmykHexes.has(hex)) { skipped++; return; }
+      // Special: pure black → K100
+      if (hex === "#000000") { colorMap.set(hex, { c: 0, m: 0, y: 0, k: 100 }); upgraded++; return; }
+      // Special: pure white → no ink
+      if (hex === "#ffffff") { colorMap.set(hex, { c: 0, m: 0, y: 0, k: 0 }); upgraded++; return; }
+      const rgb = hexToRgb(hex);
+      if (rgb) {
+        colorMap.set(hex, iccRgbToCmyk(cmykEngine, rgb.r, rgb.g, rgb.b));
+        upgraded++;
+      }
+    });
+    console.log("[PDF] ICC FOGRA39 color upgrade:", upgraded, "converted,", skipped, "user-set preserved");
+  }
   console.log("[PDF] Step 2: Color map built,", colorMap.size, "colors");
   colorMap.forEach((cmyk, hex) => {
     console.log("  " + hex + " -> C" + cmyk.c + " M" + cmyk.m + " Y" + cmyk.y + " K" + cmyk.k);
@@ -212,17 +257,21 @@ export async function exportCmykPdf(
   const savedVisibility: boolean[] = [];
   objects.forEach((obj: any, idx: number) => {
     savedVisibility[idx] = obj.visible !== false;
-    if (obj._isGuideLayer) {
-      obj.set({ visible: false });
-    }
+    const isDieLineObj = obj._isDieLine || obj._isDieLineGroup || obj._isFoldLine;
+    const isPanelLabel = obj._isPanelLabel;
+
     if (dielineOnly) {
-      const isDieline = obj._isDieline || obj._isDielineGroup || (obj.type === "group" && !obj._cmykFill);
-      if (!isDieline) obj.set({ visible: false });
-    }
-    if (!includeDieline && !dielineOnly) {
-      if (obj._isDieline || obj._isDielineGroup) {
-        obj.set({ visible: false });
-      }
+      // Dieline-only mode: show only dieline objects
+      if (!isDieLineObj) { obj.set({ visible: false }); }
+      else { obj.set({ visible: true }); }
+    } else if (includeDieline) {
+      // Include dieline: hide panel labels and non-guide layers keep as-is
+      if (isPanelLabel) { obj.set({ visible: false }); }
+      // Dieline objects stay visible, other guide elements hidden
+      if (obj._isGuideLayer && !isDieLineObj) { obj.set({ visible: false }); }
+    } else {
+      // No dieline: hide all guide layer objects
+      if (obj._isGuideLayer) { obj.set({ visible: false }); }
     }
   });
   canvas.renderAll();
