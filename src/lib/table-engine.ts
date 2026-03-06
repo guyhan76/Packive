@@ -1,98 +1,219 @@
-﻿// ─── Table Data Model ───
-export interface TableCell {
+﻿// ─── Packive Table Engine v4 ───
+// Canvas2D 렌더링 → FabricImage 방식
+
+export interface TableCellData {
+  row: number; col: number;
+  rowSpan: number; colSpan: number;
   text: string;
-  fontFamily: string;
-  fontSize: number;
+  bgColor: string; textColor: string;
+  fontSize: number; fontFamily: string;
   fontWeight: "normal" | "bold";
+  fontStyle: "normal" | "italic";
   textAlign: "left" | "center" | "right";
   verticalAlign: "top" | "middle" | "bottom";
-  fill: string;
-  textColor: string;
-  borderColor: string;
-  colspan: number;
-  rowspan: number;
+  padding: number;
   merged: boolean;
   mergedBy: [number, number] | null;
-  padding: number;
 }
 
-export interface TableData {
-  rows: number;
-  cols: number;
-  colWidths: number[];
-  rowHeights: number[];
-  cells: TableCell[][];
-  borderWidth: number;
-  borderColor: string;
+export interface TableConfig {
+  rows: number; cols: number;
+  colWidths: number[]; rowHeights: number[];
+  cells: TableCellData[][];
+  borderColor: string; borderWidth: number;
   outerBorderWidth: number;
 }
 
-export function createDefaultCell(isHeader: boolean = false): TableCell {
+export function createDefaultCell(row: number, col: number): TableCellData {
   return {
-    text: "",
-    fontFamily: "Inter",
-    fontSize: 11,
-    fontWeight: isHeader ? "bold" : "normal",
-    textAlign: "center",
-    verticalAlign: "middle",
-    fill: isHeader ? "#e8edf2" : "#ffffff",
-    textColor: "#222222",
-    borderColor: "#999999",
-    colspan: 1,
-    rowspan: 1,
-    merged: false,
-    mergedBy: null,
-    padding: 4,
+    row, col, rowSpan: 1, colSpan: 1,
+    text: "", bgColor: "#ffffff", textColor: "#222222",
+    fontSize: 12, fontFamily: "Arial",
+    fontWeight: "normal", fontStyle: "normal",
+    textAlign: "center", verticalAlign: "middle",
+    padding: 4, merged: false, mergedBy: null,
   };
 }
 
-export function createTableData(rows: number, cols: number): TableData {
-  const cells: TableCell[][] = [];
+export function createTableConfig(rows: number, cols: number, cellW = 90, cellH = 32): TableConfig {
+  const cells: TableCellData[][] = [];
   for (let r = 0; r < rows; r++) {
-    const row: TableCell[] = [];
-    for (let c = 0; c < cols; c++) {
-      row.push(createDefaultCell(r === 0));
-    }
+    const row: TableCellData[] = [];
+    for (let c = 0; c < cols; c++) row.push(createDefaultCell(r, c));
     cells.push(row);
   }
   return {
     rows, cols,
-    colWidths: Array(cols).fill(90),
-    rowHeights: Array(rows).fill(32),
-    cells,
-    borderWidth: 1,
-    borderColor: "#666666",
-    outerBorderWidth: 2,
+    colWidths: Array(cols).fill(cellW),
+    rowHeights: Array(rows).fill(cellH),
+    cells, borderColor: "#333333",
+    borderWidth: 0.5, outerBorderWidth: 1.5,
   };
 }
 
-export function mergeCells(td: TableData, sr: number, sc: number, er: number, ec: number): TableData {
-  const d = structuredClone(td);
-  const anchor = d.cells[sr][sc];
-  const rs = er - sr + 1;
-  const cs = ec - sc + 1;
-  if (rs <= 1 && cs <= 1) return d;
-  anchor.colspan = cs;
-  anchor.rowspan = rs;
-  for (let r = sr; r <= er; r++) {
-    for (let c = sc; c <= ec; c++) {
-      if (r === sr && c === sc) continue;
+// ─── Canvas2D로 표 이미지 생성 ───
+export function renderTableToDataURL(config: TableConfig, scale = 2): string {
+  const { rows, cols, cells, colWidths, rowHeights, borderColor, borderWidth, outerBorderWidth } = config;
+  const totalW = colWidths.reduce((a, b) => a + b, 0);
+  const totalH = rowHeights.reduce((a, b) => a + b, 0);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = totalW * scale;
+  canvas.height = totalH * scale;
+  const ctx = canvas.getContext("2d")!;
+  ctx.scale(scale, scale);
+
+  // 1) White background
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, totalW, totalH);
+
+  // 2) Cell backgrounds + text
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cell = cells[r][c];
+      if (cell.merged) continue;
+
+      let x = 0; for (let i = 0; i < c; i++) x += colWidths[i];
+      let y = 0; for (let i = 0; i < r; i++) y += rowHeights[i];
+      let cw = 0; for (let i = c; i < Math.min(c + cell.colSpan, cols); i++) cw += colWidths[i];
+      let ch = 0; for (let i = r; i < Math.min(r + cell.rowSpan, rows); i++) ch += rowHeights[i];
+
+      // bg
+      if (cell.bgColor && cell.bgColor !== "#ffffff") {
+        ctx.fillStyle = cell.bgColor;
+        ctx.fillRect(x, y, cw, ch);
+      }
+
+      // text
+      if (cell.text) {
+        const fs = cell.fontSize;
+        const style = cell.fontStyle === "italic" ? "italic " : "";
+        const weight = cell.fontWeight === "bold" ? "bold " : "";
+        ctx.font = `${style}${weight}${fs}px ${cell.fontFamily}`;
+        ctx.fillStyle = cell.textColor;
+
+        // horizontal align
+        let tx: number;
+        if (cell.textAlign === "left") { ctx.textAlign = "left"; tx = x + cell.padding; }
+        else if (cell.textAlign === "right") { ctx.textAlign = "right"; tx = x + cw - cell.padding; }
+        else { ctx.textAlign = "center"; tx = x + cw / 2; }
+
+        // vertical align
+        ctx.textBaseline = "middle";
+        let ty: number;
+        if (cell.verticalAlign === "top") ty = y + cell.padding + fs / 2;
+        else if (cell.verticalAlign === "bottom") ty = y + ch - cell.padding - fs / 2;
+        else ty = y + ch / 2;
+
+        ctx.fillText(cell.text, tx, ty, cw - cell.padding * 2);
+      }
+    }
+  }
+
+  // 3) Grid lines - skip merged cell interiors
+  ctx.strokeStyle = borderColor;
+
+  // Helper: check if a grid line segment is inside a merged cell
+  const isMergedH = (r: number, c: number): boolean => {
+    // Is horizontal line at row r, column c inside a merged cell?
+    for (let mr = 0; mr < rows; mr++) {
+      for (let mc = 0; mc < cols; mc++) {
+        const cell = cells[mr][mc];
+        if (cell.merged || (cell.rowSpan <= 1 && cell.colSpan <= 1)) continue;
+        if (r > mr && r < mr + cell.rowSpan && c >= mc && c < mc + cell.colSpan) return true;
+      }
+    }
+    return false;
+  };
+  const isMergedV = (r: number, c: number): boolean => {
+    for (let mr = 0; mr < rows; mr++) {
+      for (let mc = 0; mc < cols; mc++) {
+        const cell = cells[mr][mc];
+        if (cell.merged || (cell.rowSpan <= 1 && cell.colSpan <= 1)) continue;
+        if (c > mc && c < mc + cell.colSpan && r >= mr && r < mr + cell.rowSpan) return true;
+      }
+    }
+    return false;
+  };
+
+  // inner horizontal lines (segment by segment)
+  for (let r = 1; r < rows; r++) {
+    let y = 0; for (let i = 0; i < r; i++) y += rowHeights[i];
+    ctx.lineWidth = borderWidth;
+    for (let c = 0; c < cols; c++) {
+      if (isMergedH(r, c)) continue;
+      let x = 0; for (let i = 0; i < c; i++) x += colWidths[i];
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + colWidths[c], y); ctx.stroke();
+    }
+  }
+
+  // inner vertical lines (segment by segment)
+  for (let c = 1; c < cols; c++) {
+    let x = 0; for (let i = 0; i < c; i++) x += colWidths[i];
+    ctx.lineWidth = borderWidth;
+    for (let r = 0; r < rows; r++) {
+      if (isMergedV(r, c)) continue;
+      let y = 0; for (let i = 0; i < r; i++) y += rowHeights[i];
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + rowHeights[r]); ctx.stroke();
+    }
+  }
+
+  // outer border
+  ctx.lineWidth = outerBorderWidth;
+  ctx.strokeRect(outerBorderWidth / 2, outerBorderWidth / 2, totalW - outerBorderWidth, totalH - outerBorderWidth);
+
+  return canvas.toDataURL("image/png");
+}
+
+// ─── Fabric.js Image 객체로 변환 ───
+export async function buildTableImage(
+  config: TableConfig,
+  FabricModule: any
+): Promise<any> {
+  const dataURL = renderTableToDataURL(config);
+  const totalW = config.colWidths.reduce((a, b) => a + b, 0);
+  const totalH = config.rowHeights.reduce((a, b) => a + b, 0);
+
+  const img = await FabricModule.FabricImage.fromURL(dataURL);
+  img.set({
+    scaleX: totalW / img.width,
+    scaleY: totalH / img.height,
+    _isTable: true,
+    _tableConfig: JSON.stringify(config),
+    name: `Table ${config.rows}×${config.cols}`,
+  });
+  return img;
+}
+
+// ─── Cell operations ───
+export function mergeCells(config: TableConfig, sr: number, sc: number, er: number, ec: number): TableConfig {
+  const d = structuredClone(config);
+  const startR = Math.min(sr, er), endR = Math.max(sr, er);
+  const startC = Math.min(sc, ec), endC = Math.max(sc, ec);
+  if (startR === endR && startC === endC) return d;
+  const anchor = d.cells[startR][startC];
+  anchor.colSpan = endC - startC + 1;
+  anchor.rowSpan = endR - startR + 1;
+  let mergedText = anchor.text;
+  for (let r = startR; r <= endR; r++) {
+    for (let c = startC; c <= endC; c++) {
+      if (r === startR && c === startC) continue;
+      if (d.cells[r][c].text && !mergedText) mergedText = d.cells[r][c].text;
       d.cells[r][c].merged = true;
-      d.cells[r][c].mergedBy = [sr, sc];
+      d.cells[r][c].mergedBy = [startR, startC];
       d.cells[r][c].text = "";
     }
   }
+  anchor.text = mergedText;
   return d;
 }
 
-export function unmergeCells(td: TableData, row: number, col: number): TableData {
-  const d = structuredClone(td);
+export function unmergeCells(config: TableConfig, row: number, col: number): TableConfig {
+  const d = structuredClone(config);
   const anchor = d.cells[row][col];
-  if (anchor.colspan <= 1 && anchor.rowspan <= 1) return d;
-  const er = row + anchor.rowspan - 1;
-  const ec = col + anchor.colspan - 1;
-  anchor.colspan = 1;
-  anchor.rowspan = 1;
+  if (anchor.colSpan <= 1 && anchor.rowSpan <= 1) return d;
+  const er = row + anchor.rowSpan - 1, ec = col + anchor.colSpan - 1;
+  anchor.colSpan = 1; anchor.rowSpan = 1;
   for (let r = row; r <= er; r++) {
     for (let c = col; c <= ec; c++) {
       if (r === row && c === col) continue;
@@ -103,187 +224,56 @@ export function unmergeCells(td: TableData, row: number, col: number): TableData
   return d;
 }
 
-export function addRow(td: TableData, afterIndex: number): TableData {
-  const d = structuredClone(td);
-  const newRow: TableCell[] = [];
-  for (let c = 0; c < d.cols; c++) newRow.push(createDefaultCell(false));
-  d.cells.splice(afterIndex + 1, 0, newRow);
-  d.rowHeights.splice(afterIndex + 1, 0, 32);
+export function addRow(config: TableConfig, afterIndex: number): TableConfig {
+  const d = structuredClone(config);
   d.rows++;
+  const newRow: TableCellData[] = [];
+  for (let c = 0; c < d.cols; c++) newRow.push(createDefaultCell(afterIndex + 1, c));
+  d.cells.splice(afterIndex + 1, 0, newRow);
+  d.rowHeights.splice(afterIndex + 1, 0, d.rowHeights[afterIndex] || 32);
   return d;
 }
 
-export function addCol(td: TableData, afterIndex: number): TableData {
-  const d = structuredClone(td);
-  for (let r = 0; r < d.rows; r++) {
-    d.cells[r].splice(afterIndex + 1, 0, createDefaultCell(r === 0));
-  }
-  d.colWidths.splice(afterIndex + 1, 0, 90);
+export function addCol(config: TableConfig, afterIndex: number): TableConfig {
+  const d = structuredClone(config);
   d.cols++;
+  for (let r = 0; r < d.rows; r++) d.cells[r].splice(afterIndex + 1, 0, createDefaultCell(r, afterIndex + 1));
+  d.colWidths.splice(afterIndex + 1, 0, d.colWidths[afterIndex] || 90);
   return d;
 }
 
-export function deleteRow(td: TableData, index: number): TableData {
-  if (td.rows <= 1) return td;
-  const d = structuredClone(td);
+export function deleteRow(config: TableConfig, index: number): TableConfig {
+  if (config.rows <= 1) return config;
+  const d = structuredClone(config);
+  d.rows--;
   d.cells.splice(index, 1);
   d.rowHeights.splice(index, 1);
-  d.rows--;
   return d;
 }
 
-export function deleteCol(td: TableData, index: number): TableData {
-  if (td.cols <= 1) return td;
-  const d = structuredClone(td);
+export function deleteCol(config: TableConfig, index: number): TableConfig {
+  if (config.cols <= 1) return config;
+  const d = structuredClone(config);
+  d.cols--;
   for (let r = 0; r < d.rows; r++) d.cells[r].splice(index, 1);
   d.colWidths.splice(index, 1);
-  d.cols--;
   return d;
 }
 
-export function setCellFill(td: TableData, row: number, col: number, color: string): TableData {
-  const d = structuredClone(td);
-  d.cells[row][col].fill = color;
+export function updateCell(
+  config: TableConfig, row: number, col: number,
+  props: Partial<TableCellData>
+): TableConfig {
+  const d = structuredClone(config);
+  Object.assign(d.cells[row][col], props);
   return d;
 }
 
-export function setCellTextColor(td: TableData, row: number, col: number, color: string): TableData {
-  const d = structuredClone(td);
-  d.cells[row][col].textColor = color;
-  return d;
-}
-
-export function setCellFontSize(td: TableData, row: number, col: number, size: number): TableData {
-  const d = structuredClone(td);
-  d.cells[row][col].fontSize = size;
-  return d;
-}
-
-export function setCellFontWeight(td: TableData, row: number, col: number, weight: "normal" | "bold"): TableData {
-  const d = structuredClone(td);
-  d.cells[row][col].fontWeight = weight;
-  return d;
-}
-
-export function setCellTextAlign(td: TableData, row: number, col: number, align: "left" | "center" | "right"): TableData {
-  const d = structuredClone(td);
-  d.cells[row][col].textAlign = align;
-  return d;
-}
-
-// ─── High quality SVG for canvas display ───
-export function tableDataToSVG(td: TableData): string {
-  const totalW = td.colWidths.reduce((a, b) => a + b, 0);
-  const totalH = td.rowHeights.reduce((a, b) => a + b, 0);
-  const p = td.outerBorderWidth;
-  const W = totalW + p * 2;
-  const H = totalH + p * 2;
-
-  const parts: string[] = [];
-  parts.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '">');
-  parts.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#ffffff"/>');
-
-  // Cell fills
-  let y = p;
-  for (let r = 0; r < td.rows; r++) {
-    let x = p;
-    for (let c = 0; c < td.cols; c++) {
-      const cell = td.cells[r][c];
-      if (!cell.merged) {
-        let cw = 0; for (let i = c; i < c + cell.colspan; i++) cw += td.colWidths[i];
-        let ch = 0; for (let i = r; i < r + cell.rowspan; i++) ch += td.rowHeights[i];
-        parts.push('<rect x="' + x + '" y="' + y + '" width="' + cw + '" height="' + ch + '" fill="' + cell.fill + '"/>');
-        if (cell.text) {
-          const lines = cell.text.split("\\n");
-          const lineH = cell.fontSize * 1.3;
-          const totalTextH = lines.length * lineH;
-          let startY = y + ch / 2 - totalTextH / 2 + cell.fontSize * 0.85;
-          if (cell.verticalAlign === "top") startY = y + cell.padding + cell.fontSize;
-          if (cell.verticalAlign === "bottom") startY = y + ch - cell.padding - totalTextH + cell.fontSize;
-          let tx = x + cw / 2;
-          const anchor = cell.textAlign === "left" ? "start" : cell.textAlign === "right" ? "end" : "middle";
-          if (cell.textAlign === "left") tx = x + cell.padding;
-          if (cell.textAlign === "right") tx = x + cw - cell.padding;
-          for (let li = 0; li < lines.length; li++) {
-            const ly = startY + li * lineH;
-            parts.push('<text x="' + tx + '" y="' + ly + '" font-family="' + cell.fontFamily + ',sans-serif" font-size="' + cell.fontSize + '" font-weight="' + cell.fontWeight + '" fill="' + cell.textColor + '" text-anchor="' + anchor + '">' + esc(lines[li]) + '</text>');
-          }
-        }
-      }
-      x += td.colWidths[c];
-    }
-    y += td.rowHeights[r];
-  }
-
-  // Grid lines (skip inside merged areas)
-  const drawn = new Set<string>();
-  y = p;
-  for (let r = 0; r <= td.rows; r++) {
-    let x = p;
-    for (let c = 0; c <= td.cols; c++) {
-      if (c < td.cols && r <= td.rows) {
-        // horizontal line at top of cell [r][c]
-        if (r < td.rows) {
-          const cell = td.cells[r][c < td.cols ? c : c - 1];
-          if (!cell.merged || r === 0) {
-            // check if this segment should be drawn
-          }
-        }
-      }
-      if (c < td.cols) x += td.colWidths[c];
-    }
-    if (r < td.rows) y += td.rowHeights[r];
-  }
-
-  // Simple approach: draw all grid lines, then overlay merged cell rects
-  // Horizontal lines
-  y = p;
-  for (let r = 0; r <= td.rows; r++) {
-    const sw = (r === 0 || r === td.rows) ? td.outerBorderWidth : td.borderWidth;
-    parts.push('<line x1="' + p + '" y1="' + y + '" x2="' + (totalW + p) + '" y2="' + y + '" stroke="' + td.borderColor + '" stroke-width="' + sw + '" shape-rendering="crispEdges"/>');
-    if (r < td.rows) y += td.rowHeights[r];
-  }
-  // Vertical lines
-  let x2 = p;
-  for (let c = 0; c <= td.cols; c++) {
-    const sw = (c === 0 || c === td.cols) ? td.outerBorderWidth : td.borderWidth;
-    parts.push('<line x1="' + x2 + '" y1="' + p + '" x2="' + x2 + '" y2="' + (totalH + p) + '" stroke="' + td.borderColor + '" stroke-width="' + sw + '" shape-rendering="crispEdges"/>');
-    if (c < td.cols) x2 += td.colWidths[c];
-  }
-
-  // Merged cell overlay (cover internal lines)
-  y = p;
-  for (let r = 0; r < td.rows; r++) {
-    let x = p;
-    for (let c = 0; c < td.cols; c++) {
-      const cell = td.cells[r][c];
-      if (!cell.merged && (cell.colspan > 1 || cell.rowspan > 1)) {
-        let cw = 0; for (let i = c; i < c + cell.colspan; i++) cw += td.colWidths[i];
-        let ch = 0; for (let i = r; i < r + cell.rowspan; i++) ch += td.rowHeights[i];
-        parts.push('<rect x="' + (x + 1) + '" y="' + (y + 1) + '" width="' + (cw - 2) + '" height="' + (ch - 2) + '" fill="' + cell.fill + '"/>');
-        if (cell.text) {
-          const lines = cell.text.split("\\n");
-          const lineH = cell.fontSize * 1.3;
-          const totalTextH = lines.length * lineH;
-          let startY = y + ch / 2 - totalTextH / 2 + cell.fontSize * 0.85;
-          let tx = x + cw / 2;
-          const anchor = cell.textAlign === "left" ? "start" : cell.textAlign === "right" ? "end" : "middle";
-          if (cell.textAlign === "left") tx = x + cell.padding;
-          if (cell.textAlign === "right") tx = x + cw - cell.padding;
-          for (let li = 0; li < lines.length; li++) {
-            parts.push('<text x="' + tx + '" y="' + (startY + li * lineH) + '" font-family="' + cell.fontFamily + ',sans-serif" font-size="' + cell.fontSize + '" font-weight="' + cell.fontWeight + '" fill="' + cell.textColor + '" text-anchor="' + anchor + '">' + esc(lines[li]) + '</text>');
-          }
-        }
-      }
-      x += td.colWidths[c];
-    }
-    y += td.rowHeights[r];
-  }
-
-  parts.push('</svg>');
-  return parts.join("");
-}
-
-function esc(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+export function getCellBounds(config: TableConfig, row: number, col: number): { x: number; y: number; w: number; h: number } {
+  let x = 0; for (let i = 0; i < col; i++) x += config.colWidths[i];
+  let y = 0; for (let i = 0; i < row; i++) y += config.rowHeights[i];
+  const cell = config.cells[row][col];
+  let w = 0; for (let i = col; i < Math.min(col + cell.colSpan, config.cols); i++) w += config.colWidths[i];
+  let h = 0; for (let i = row; i < Math.min(row + cell.rowSpan, config.rows); i++) h += config.rowHeights[i];
+  return { x, y, w, h };
 }

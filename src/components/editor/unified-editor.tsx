@@ -208,6 +208,15 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [tableCols, setTableCols] = useState(2);
   const [layersList, setLayersList] = useState<{id:string;type:string;name:string;visible:boolean;locked:boolean}[]>([]);
   const [selectedPanel, setSelectedPanel] = useState<string | null>(null);
+  const [tableEditCell, setTableEditCell] = useState<{row:number;col:number}|null>(null);
+  const [tableSelStart, setTableSelStart] = useState<{row:number;col:number}|null>(null);
+  const [tableSelEnd, setTableSelEnd] = useState<{row:number;col:number}|null>(null);
+  const tableSelection = tableSelStart && tableSelEnd ? {
+    sr: Math.min(tableSelStart.row, tableSelEnd.row),
+    sc: Math.min(tableSelStart.col, tableSelEnd.col),
+    er: Math.max(tableSelStart.row, tableSelEnd.row),
+    ec: Math.max(tableSelStart.col, tableSelEnd.col),
+  } : tableEditCell ? { sr: tableEditCell.row, sc: tableEditCell.col, er: tableEditCell.row, ec: tableEditCell.col } : null;
   const [showExport, setShowExport] = useState(false);
   const [exporting, setExporting] = useState<string | null>(null);
 
@@ -281,7 +290,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   // ─── History ───
   const pushHistory = useCallback(() => {
     const c = fcRef.current; if (!c || loadingRef.current) return;
-    const json = JSON.stringify(c.toJSON(["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone"]));
+    const json = JSON.stringify(c.toJSON(["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isTable","_tableConfig","_tableRole","_tableRow","_tableCol"]));
     const h = historyRef.current;
     h.splice(historyIdxRef.current + 1);
     h.push(json);
@@ -314,7 +323,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   // ─── Temp Save / Load ───
   const SAVE_KEY = "packive-temp-design";
   const SAVE_META_KEY = "packive-temp-meta";
-  const JSON_PROPS = ["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone"];
+  const JSON_PROPS = ["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isTable","_tableConfig","_tableRole","_tableRow","_tableCol"];
 
   const [saveStatus, setSaveStatus] = useState<string|null>(null);
 
@@ -522,6 +531,72 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
       // Event handlers
       canvas.on("object:modified", () => { if (!loadingRef.current) { pushHistory(); refreshLayers(); } });
+
+    // ─── Table double-click: enter group for cell editing ───
+    canvas.on("mouse:dblclick", (e: any) => {
+      const target = e.target;
+      if (!target) return;
+      if ((target as any)._isTable && target.type === "group") {
+        // Enter the table group for sub-object interaction
+        const subTarget = e.subTargets?.[0];
+        if (subTarget && (subTarget as any)._tableRole === "cell-bg") {
+          const row = (subTarget as any)._tableRow;
+          const col = (subTarget as any)._tableCol;
+          // Find matching text object
+          const textObj = target._objects?.find((o: any) =>
+            o._tableRole === "cell-text" && o._tableRow === row && o._tableCol === col
+          );
+          if (textObj) {
+            // Highlight selected cell
+            target._objects?.forEach((o: any) => {
+              if (o._tableRole === "cell-bg") {
+                o.set({ strokeWidth: o._tableRow === row && o._tableCol === col ? 2 : 1 });
+                o.set({ stroke: o._tableRow === row && o._tableCol === col ? "#2563eb" : "#333333" });
+              }
+            });
+            // Store selected cell info
+            (target as any)._selectedCell = { row, col };
+            canvas.renderAll();
+            console.log("[TABLE] Cell selected:", row, col);
+          }
+        }
+        // If double-click on text, try to enter editing
+        if (subTarget && (subTarget as any)._tableRole === "cell-text") {
+          if (subTarget.type === "i-text" && typeof subTarget.enterEditing === "function") {
+            subTarget.set({ selectable: true, evented: true });
+            canvas.setActiveObject(subTarget);
+            subTarget.enterEditing();
+            subTarget.selectAll();
+            console.log("[TABLE] Editing cell text:", (subTarget as any)._tableRow, (subTarget as any)._tableCol);
+          }
+        }
+      }
+    });
+
+    // ─── Table: exit cell editing on click outside ───
+    canvas.on("mouse:down", (e: any) => {
+      const target = e.target;
+      // If clicking on canvas (not on table), reset any table cell highlights
+      const objs = canvas.getObjects();
+      objs.forEach((obj: any) => {
+        if ((obj as any)._isTable && obj.type === "group") {
+          const hadSelection = (obj as any)._selectedCell;
+          if (hadSelection && target !== obj) {
+            obj._objects?.forEach((o: any) => {
+              if (o._tableRole === "cell-bg") {
+                o.set({ strokeWidth: 1, stroke: "#333333" });
+              }
+              if (o._tableRole === "cell-text") {
+                o.set({ selectable: false, evented: false });
+                if (typeof o.exitEditing === "function") o.exitEditing();
+              }
+            });
+            delete (obj as any)._selectedCell;
+            canvas.renderAll();
+          }
+        }
+      });
+    });
       canvas.on("object:scaling", (e: any) => {
         const t = e.target;
         if (t && (t.type === "i-text" || t.type === "textbox") && t.fontSize && t.scaleX) {
@@ -797,26 +872,26 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     } catch (e: any) { alert("Barcode failed: " + (e.message || "Invalid")); }
   }, [barcodeType, barcodeValue, pushHistory]);
 
-  // ─── Table ───
+  // ─── Table (Vector Group) ───
   const addTableToCanvas = useCallback(async () => {
     const cv = fcRef.current; if (!cv) return;
     const F = await import("fabric");
+    const { createTableConfig, buildTableImage } = await import("@/lib/table-engine");
     const cellW = Math.min(100, Math.floor(cv.getWidth() * 0.4 / tableCols));
-    const cellH = 24;
-    const tw = cellW * tableCols, th = cellH * tableRows;
-    const sc = 3;
-    const off = document.createElement("canvas");
-    off.width = (tw + 1) * sc; off.height = (th + 1) * sc;
-    const ctx = off.getContext("2d")!; ctx.scale(sc, sc);
-    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, off.width, off.height);
-    ctx.strokeStyle = "#aaa"; ctx.lineWidth = 1;
-    for (let r = 0; r <= tableRows; r++) { const y = r * cellH + 0.5; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(tw, y); ctx.stroke(); }
-    for (let c = 0; c <= tableCols; c++) { const x = c * cellW + 0.5; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, th); ctx.stroke(); }
-    const img = await F.FabricImage.fromURL(off.toDataURL("image/png"));
-    img.set({ left: cv.getWidth() / 2, top: cv.getHeight() / 2, originX: "center", originY: "center", scaleX: 1 / sc, scaleY: 1 / sc });
-    (img as any)._isTable = true;
-    cv.add(img); cv.setActiveObject(img); cv.renderAll(); pushHistory();
+    const cellH = 32;
+    const config = createTableConfig(tableRows, tableCols, cellW, cellH);
+    const group = await buildTableImage(config, F);
+    group.set({
+      left: Math.floor(cv.getWidth() / 2 - (cellW * tableCols) / 2),
+      top: Math.floor(cv.getHeight() / 2 - (cellH * tableRows) / 2),
+      _tableConfig: JSON.stringify(config), name: `Table ${tableRows}×${tableCols}`,
+    });
+    cv.add(group);
+    cv.setActiveObject(group);
+    cv.renderAll();
+    pushHistory();
     setShowTablePanel(false);
+    console.log("[TABLE] Inserted", tableRows, "x", tableCols, "vector table");
   }, [tableRows, tableCols, pushHistory]);
 
   // ─── Packaging Marks (SVG-based) ───
@@ -958,6 +1033,11 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     const c = fcRef.current; if (!c) return null;
     const obj = c.getActiveObject();
     if (!obj || (obj as any)._isGuideLayer) return null;
+    const isTable = !!(obj as any)._isTable;
+    let tableConfig = null;
+    if (isTable && (obj as any)._tableConfig) {
+      try { tableConfig = JSON.parse((obj as any)._tableConfig); } catch {}
+    }
     return {
       type: obj.type || "object",
       fill: obj.fill || "#000000",
@@ -975,6 +1055,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       fontStyle: (obj as any).fontStyle || "normal",
       textAlign: (obj as any).textAlign || "left",
       name: (obj as any).name || "",
+      _isTable: isTable,
+      _tableConfig: tableConfig,
     };
   }, []);
 
@@ -1374,14 +1456,33 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
           {/* Table Popup */}
           {showTablePanel && (
-            <div className="absolute left-1 top-1 z-30 bg-white rounded-xl shadow-xl border p-3 w-52">
-              <div className="text-xs font-semibold text-gray-700 mb-2">Table</div>
-              <div className="flex gap-2 mb-2">
-                <label className="text-xs text-gray-500">Rows<input type="number" value={tableRows} onChange={e => setTableRows(Math.max(1,+e.target.value))} className="w-14 border rounded px-1 py-0.5 text-sm ml-1" /></label>
-                <label className="text-xs text-gray-500">Cols<input type="number" value={tableCols} onChange={e => setTableCols(Math.max(1,+e.target.value))} className="w-14 border rounded px-1 py-0.5 text-sm ml-1" /></label>
+            <div className="absolute left-1 top-1 z-30 bg-white rounded-xl shadow-2xl border p-4 w-60">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-sm font-bold text-gray-800">Insert Table</div>
+                <button onClick={() => setShowTablePanel(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">&times;</button>
               </div>
-              <button onClick={addTableToCanvas} className="w-full py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">Insert Table</button>
-              <button onClick={() => setShowTablePanel(false)} className="mt-2 text-xs text-gray-400 hover:text-gray-600 block">Close</button>
+              <div className="flex gap-3 mb-3">
+                <label className="flex-1">
+                  <span className="text-xs text-gray-500 block mb-1">Rows</span>
+                  <input type="number" value={tableRows} onChange={e => setTableRows(Math.max(1, Math.min(20, +e.target.value)))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-blue-500 focus:border-blue-500" min={1} max={20} />
+                </label>
+                <label className="flex-1">
+                  <span className="text-xs text-gray-500 block mb-1">Columns</span>
+                  <input type="number" value={tableCols} onChange={e => setTableCols(Math.max(1, Math.min(10, +e.target.value)))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-blue-500 focus:border-blue-500" min={1} max={10} />
+                </label>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-2 mb-3 text-center">
+                <div className="text-xs text-gray-400 mb-1">Preview</div>
+                <div className="inline-grid gap-px bg-gray-300 p-px rounded" style={{ gridTemplateColumns: `repeat(${Math.min(tableCols, 10)}, 1fr)` }}>
+                  {Array.from({ length: Math.min(tableRows, 6) * Math.min(tableCols, 10) }).map((_, i) => (
+                    <div key={i} className={`w-4 h-3 ${i < Math.min(tableCols, 10) ? "bg-blue-100" : "bg-white"} rounded-sm`} />
+                  ))}
+                </div>
+                {tableRows > 6 && <div className="text-[10px] text-gray-400 mt-1">+{tableRows - 6} more rows</div>}
+              </div>
+              <button onClick={addTableToCanvas} className="w-full py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors">
+                Insert {tableRows} &times; {tableCols} Table
+              </button>
             </div>
           )}
 
@@ -1505,7 +1606,164 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                       )}
                     </div>
 
-                    {/* ▶ Typography Accordion (text only) */}
+              {/* ▶ Table Editor */}
+              {selProps._isTable && selProps._tableConfig && (() => {
+                const tc = selProps._tableConfig;
+                const sel = tableSelection;
+                const isMulti = sel && (sel.sr !== sel.er || sel.sc !== sel.ec);
+                const rebuildTable = async (newCfg: any) => {
+                  try {
+                    console.log("[TABLE] rebuildTable called, rows:", newCfg.rows, "cols:", newCfg.cols);
+                    const obj = fcRef.current?.getActiveObject() as any;
+                    if (!obj) { console.error("[TABLE] No active object!"); return; }
+                    const { buildTableImage } = await import("@/lib/table-engine");
+                    const F = await import("fabric");
+                    const pos = { left: obj.left, top: obj.top };
+                    const newImg = await buildTableImage(newCfg, F);
+                    newImg.set({ ...pos, _tableConfig: JSON.stringify(newCfg), name: `Table ${newCfg.rows}×${newCfg.cols}` });
+                    const cv = fcRef.current!;
+                    cv.remove(obj);
+                    cv.add(newImg);
+                    cv.setActiveObject(newImg);
+                    cv.renderAll();
+                    pushHistory();
+                    setSelProps((p:any) => ({...p, _tableConfig: newCfg}));
+                    console.log("[TABLE] rebuildTable SUCCESS");
+                  } catch (err) {
+                    console.error("[TABLE] rebuildTable ERROR:", err);
+                  }
+                };
+                return (
+                  <div className="mb-3 border border-blue-200 rounded-xl p-3 bg-blue-50/30">
+                    <div className="text-[10px] font-semibold text-blue-700 mb-2">TABLE EDITOR ({tc.rows} × {tc.cols})</div>
+                    {/* Mini table grid */}
+                    <div className="bg-white rounded-lg p-2 mb-2 overflow-auto max-h-52 select-none">
+                      <table className="border-collapse w-full" style={{tableLayout:"fixed"}}>
+                        <tbody>
+                          {tc.cells.map((row: any[], ri: number) => (
+                            <tr key={ri}>
+                              {row.map((cell: any, ci: number) => {
+                                if (cell.merged) return null;
+                                const isSel = sel && ri >= sel.sr && ri <= sel.er && ci >= sel.sc && ci <= sel.ec;
+                                return (
+                                  <td key={ci} colSpan={cell.colSpan || 1} rowSpan={cell.rowSpan || 1}
+                                    onMouseDown={() => { setTableSelStart({row:ri,col:ci}); setTableSelEnd({row:ri,col:ci}); setTableEditCell({row:ri,col:ci}); }}
+                                    onMouseEnter={(e) => { if (e.buttons === 1 && tableSelStart) setTableSelEnd({row:ri,col:ci}); }}
+                                    onMouseUp={() => {}}
+                                    className={`border border-gray-300 text-[8px] p-0.5 cursor-pointer text-center min-w-[24px] h-5 transition-colors ${isSel ? "bg-blue-200 ring-1 ring-blue-500" : "hover:bg-gray-50"}`}
+                                    style={{backgroundColor: isSel ? undefined : cell.bgColor || "#fff", fontWeight: cell.fontWeight}}>
+                                    {cell.text || <span className="text-gray-300">·</span>}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {/* Merge/Unmerge buttons */}
+                    {sel && (
+                      <div className="flex gap-1 mb-2 flex-wrap items-center">
+                        {isMulti ? (
+                          <button onClick={async () => {
+                            const { mergeCells } = await import("@/lib/table-engine");
+                            const obj = fcRef.current?.getActiveObject() as any;
+                            const currentCfg = obj?._tableConfig ? JSON.parse(obj._tableConfig) : tc;
+                            const newCfg = mergeCells(currentCfg, sel.sr, sel.sc, sel.er, sel.ec);
+                            console.log("[TABLE] Merge:", sel);
+                            await rebuildTable(newCfg);
+                            setTableSelStart(null); setTableSelEnd(null); setTableEditCell({row:sel.sr,col:sel.sc});
+                          }} className="text-[9px] px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded font-medium">Merge Cells</button>
+                        ) : (
+                          tc.cells[sel.sr]?.[sel.sc]?.colSpan > 1 || tc.cells[sel.sr]?.[sel.sc]?.rowSpan > 1 ? (
+                            <button onClick={async () => {
+                              const { unmergeCells } = await import("@/lib/table-engine");
+                              const obj = fcRef.current?.getActiveObject() as any;
+                              const currentCfg = obj?._tableConfig ? JSON.parse(obj._tableConfig) : tc;
+                              const newCfg = unmergeCells(currentCfg, sel.sr, sel.sc);
+                              console.log("[TABLE] Unmerge:", sel.sr, sel.sc);
+                              await rebuildTable(newCfg);
+                            }} className="text-[9px] px-2 py-1 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded font-medium">Unmerge</button>
+                          ) : null
+                        )}
+                        <span className="text-[8px] text-gray-400 ml-1">
+                          {isMulti ? `[${sel.sr},${sel.sc}] → [${sel.er},${sel.ec}]` : `Cell [${sel.sr},${sel.sc}]`}
+                        </span>
+                      </div>
+                    )}
+                    {/* Cell editing controls */}
+                    {tableEditCell && tc.cells[tableEditCell.row]?.[tableEditCell.col] && (() => {
+                      const cell = tc.cells[tableEditCell.row][tableEditCell.col];
+                      const updateAndRebuild = (prop: string, value: any) => {
+                        const obj = fcRef.current?.getActiveObject() as any;
+                        if (!obj?._tableConfig) return;
+                        const cfg = JSON.parse(obj._tableConfig);
+                        cfg.cells[tableEditCell.row][tableEditCell.col][prop] = value;
+                        rebuildTable(cfg);
+                      };
+                      return (
+                        <div className="space-y-2 border-t pt-2">
+                          <input type="text" defaultValue={cell.text || ""} placeholder="Cell text..."
+                            key={`${tableEditCell.row}-${tableEditCell.col}-${cell.text}`}
+                            onBlur={e => updateAndRebuild("text", e.target.value)}
+                            onKeyDown={e => { if (e.key === "Enter") { (e.target as HTMLInputElement).blur(); } }}
+                            className="w-full border rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500" />
+                          <div className="flex gap-1 items-center flex-wrap">
+                            <label className="text-[9px] text-gray-500 flex items-center gap-1">BG
+                              <input type="color" value={cell.bgColor || "#ffffff"}
+                                onChange={e => updateAndRebuild("bgColor", e.target.value)}
+                                className="w-6 h-6 border rounded cursor-pointer" />
+                            </label>
+                            <label className="text-[9px] text-gray-500 flex items-center gap-1">Text
+                              <input type="color" value={cell.textColor || "#222222"}
+                                onChange={e => updateAndRebuild("textColor", e.target.value)}
+                                className="w-6 h-6 border rounded cursor-pointer" />
+                            </label>
+                            <select value={cell.fontWeight || "normal"}
+                              onChange={e => updateAndRebuild("fontWeight", e.target.value)}
+                              className="text-[9px] border rounded px-1 py-0.5">
+                              <option value="normal">Normal</option>
+                              <option value="bold">Bold</option>
+                            </select>
+                            <select value={cell.fontFamily || "Arial"}
+                              onChange={e => updateAndRebuild("fontFamily", e.target.value)}
+                              className="text-[9px] border rounded px-1 py-0.5">
+                              <option value="Arial">Arial</option>
+                              <option value="Georgia">Georgia</option>
+                              <option value="NotoSansKR">Noto Sans KR</option>
+                              <option value="Malgun Gothic">맑은 고딕</option>
+                            </select>
+                            <input type="number" value={cell.fontSize || 12} min={8} max={48}
+                              onChange={e => updateAndRebuild("fontSize", Math.max(8, Math.min(48, +e.target.value)))}
+                              className="w-10 text-[9px] border rounded px-1 py-0.5 text-center" />
+                          </div>
+                          {/* Text alignment */}
+                          <div className="flex gap-0.5">
+                            {(["left","center","right"] as const).map(a => (
+                              <button key={a} onClick={() => updateAndRebuild("textAlign", a)}
+                                className={`flex-1 py-1 rounded text-[9px] ${cell.textAlign === a ? "bg-blue-100 text-blue-700 font-bold" : "hover:bg-gray-100 text-gray-500"}`}>
+                                {a === "left" ? "◀" : a === "right" ? "▶" : "◆"}
+                              </button>
+                            ))}
+                          </div>
+                          {/* Row/Col actions */}
+                          <div className="flex gap-1 flex-wrap border-t pt-2">
+                            <button onClick={async () => { const { addRow } = await import("@/lib/table-engine"); await rebuildTable(addRow(tc, tableEditCell.row)); }}
+                              className="text-[9px] px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">+Row</button>
+                            <button onClick={async () => { const { addCol } = await import("@/lib/table-engine"); await rebuildTable(addCol(tc, tableEditCell.col)); }}
+                              className="text-[9px] px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">+Col</button>
+                            <button onClick={async () => { if (tc.rows <= 1) return; const { deleteRow } = await import("@/lib/table-engine"); await rebuildTable(deleteRow(tc, tableEditCell.row)); setTableEditCell(null); }}
+                              className="text-[9px] px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded">-Row</button>
+                            <button onClick={async () => { if (tc.cols <= 1) return; const { deleteCol } = await import("@/lib/table-engine"); await rebuildTable(deleteCol(tc, tableEditCell.col)); setTableEditCell(null); }}
+                              className="text-[9px] px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded">-Col</button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                );
+              })()}
+
                     {(selProps.type === "i-text" || selProps.type === "textbox" || selProps.type === "text") && (
                       <div className="border rounded-lg overflow-hidden">
                         <button onClick={() => toggleAcc("typography")} className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors">
@@ -1609,8 +1867,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                           </div>
                           {/* CMYK */}
                           {colorMode === "cmyk" && selProps.fill && (() => {
-                            const fc = (fcRef.current?.getActiveObject() as any)?._cmykFill || (() => { const h = typeof selProps.fill === "string" ? selProps.fill : "#000000"; const cm = hexToCmyk(h); return {c:cm[0],m:cm[1],y:cm[2],k:cm[3]}; })();
-                            const sc = (fcRef.current?.getActiveObject() as any)?._cmykStroke || (() => { const h = selProps.stroke || "#000000"; const cm = hexToCmyk(h); return {c:cm[0],m:cm[1],y:cm[2],k:cm[3]}; })();
+                const fc = (fcRef.current?.getActiveObject() as any)?._cmykFill || (() => { try { const h = typeof selProps.fill === "string" ? selProps.fill : "#000000"; const r=parseInt(h.slice(1,3),16)||0,g=parseInt(h.slice(3,5),16)||0,b=parseInt(h.slice(5,7),16)||0; const k2=1-Math.max(r,g,b)/255; if(k2>=1)return{c:0,m:0,y:0,k:100}; return{c:Math.round((1-r/255-k2)/(1-k2)*100),m:Math.round((1-g/255-k2)/(1-k2)*100),y:Math.round((1-b/255-k2)/(1-k2)*100),k:Math.round(k2*100)}; } catch { return {c:0,m:0,y:0,k:0}; } })();
+                const sc = (fcRef.current?.getActiveObject() as any)?._cmykStroke || (() => { try { const h = selProps.stroke || "#000000"; const r=parseInt(h.slice(1,3),16)||0,g=parseInt(h.slice(3,5),16)||0,b=parseInt(h.slice(5,7),16)||0; const k2=1-Math.max(r,g,b)/255; if(k2>=1)return{c:0,m:0,y:0,k:100}; return{c:Math.round((1-r/255-k2)/(1-k2)*100),m:Math.round((1-g/255-k2)/(1-k2)*100),y:Math.round((1-b/255-k2)/(1-k2)*100),k:Math.round(k2*100)}; } catch { return {c:0,m:0,y:0,k:0}; } })();
                             return (
                               <div className="space-y-3">
                                 {/* Fill 2D Color Picker */}
