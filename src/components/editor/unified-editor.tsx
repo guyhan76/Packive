@@ -1611,26 +1611,25 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 const tc = selProps._tableConfig;
                 const sel = tableSelection;
                 const isMulti = sel && (sel.sr !== sel.er || sel.sc !== sel.ec);
+                const _rebuildLock = { current: false };
                 const rebuildTable = async (newCfg: any) => {
+                  if (_rebuildLock.current) return;
+                  _rebuildLock.current = true;
                   try {
-                    console.log("[TABLE] rebuildTable called, rows:", newCfg.rows, "cols:", newCfg.cols);
                     const obj = fcRef.current?.getActiveObject() as any;
-                    if (!obj) { console.error("[TABLE] No active object!"); return; }
+                    if (!obj) return;
                     const { buildTableImage } = await import("@/lib/table-engine");
                     const F = await import("fabric");
                     const pos = { left: obj.left, top: obj.top };
-                    const newImg = await buildTableImage(newCfg, F);
-                    newImg.set({ ...pos, _tableConfig: JSON.stringify(newCfg), name: `Table ${newCfg.rows}×${newCfg.cols}` });
+                    const group = await buildTableImage(newCfg, F);
+                    group.set({ ...pos, _tableConfig: JSON.stringify(newCfg), name: `Table ${newCfg.rows}×${newCfg.cols}` });
                     const cv = fcRef.current!;
-                    cv.remove(obj);
-                    cv.add(newImg);
-                    cv.setActiveObject(newImg);
-                    cv.renderAll();
-                    pushHistory();
+                    cv.remove(obj); cv.add(group); cv.setActiveObject(group); cv.renderAll(); pushHistory();
                     setSelProps((p:any) => ({...p, _tableConfig: newCfg}));
-                    console.log("[TABLE] rebuildTable SUCCESS");
                   } catch (err) {
                     console.error("[TABLE] rebuildTable ERROR:", err);
+                  } finally {
+                    _rebuildLock.current = false;
                   }
                 };
                 return (
@@ -1663,30 +1662,29 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     </div>
                     {/* Merge/Unmerge buttons */}
                     {sel && (
-                      <div className="flex gap-1 mb-2 flex-wrap items-center">
-                        {isMulti ? (
+                      <div className="flex gap-1 mb-2">
+                        {isMulti && (
                           <button onClick={async () => {
                             const { mergeCells } = await import("@/lib/table-engine");
                             const obj = fcRef.current?.getActiveObject() as any;
                             const currentCfg = obj?._tableConfig ? JSON.parse(obj._tableConfig) : tc;
                             const newCfg = mergeCells(currentCfg, sel.sr, sel.sc, sel.er, sel.ec);
-                            console.log("[TABLE] Merge:", sel);
+                            console.log("[TABLE] Merge:", sel, "cells merged:", newCfg.cells[sel.sr][sel.sc].colSpan, "x", newCfg.cells[sel.sr][sel.sc].rowSpan);
                             await rebuildTable(newCfg);
                             setTableSelStart(null); setTableSelEnd(null); setTableEditCell({row:sel.sr,col:sel.sc});
                           }} className="text-[9px] px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded font-medium">Merge Cells</button>
-                        ) : (
-                          tc.cells[sel.sr]?.[sel.sc]?.colSpan > 1 || tc.cells[sel.sr]?.[sel.sc]?.rowSpan > 1 ? (
-                            <button onClick={async () => {
-                              const { unmergeCells } = await import("@/lib/table-engine");
-                              const obj = fcRef.current?.getActiveObject() as any;
-                              const currentCfg = obj?._tableConfig ? JSON.parse(obj._tableConfig) : tc;
-                              const newCfg = unmergeCells(currentCfg, sel.sr, sel.sc);
-                              console.log("[TABLE] Unmerge:", sel.sr, sel.sc);
-                              await rebuildTable(newCfg);
-                            }} className="text-[9px] px-2 py-1 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded font-medium">Unmerge</button>
-                          ) : null
                         )}
-                        <span className="text-[8px] text-gray-400 ml-1">
+                        {!isMulti && tc.cells[sel.sr]?.[sel.sc] && (tc.cells[sel.sr][sel.sc].colSpan > 1 || tc.cells[sel.sr][sel.sc].rowSpan > 1) && (
+                          <button onClick={async () => {
+                            const obj = fcRef.current?.getActiveObject() as any;
+                            const { unmergeCells } = await import("@/lib/table-engine");
+                            const currentCfg = obj?._tableConfig ? JSON.parse(obj._tableConfig) : tc;
+                            const newCfg = unmergeCells(currentCfg, sel.sr, sel.sc);
+                            console.log("[TABLE] Unmerge:", sel.sr, sel.sc);
+                            await rebuildTable(newCfg);
+                          }} className="text-[9px] px-2 py-1 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded font-medium">Unmerge</button>
+                        )}
+                        <span className="text-[8px] text-gray-400 self-center ml-1">
                           {isMulti ? `[${sel.sr},${sel.sc}] → [${sel.er},${sel.ec}]` : `Cell [${sel.sr},${sel.sc}]`}
                         </span>
                       </div>
@@ -1745,6 +1743,105 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                                 {a === "left" ? "◀" : a === "right" ? "▶" : "◆"}
                               </button>
                             ))}
+                          </div>
+                          {/* Vertical alignment */}
+                          <div className="flex gap-0.5">
+                            {(["top","middle","bottom"] as const).map(v => (
+                              <button key={v} onClick={() => updateAndRebuild("verticalAlign", v)}
+                                className={`flex-1 py-1 rounded text-[9px] ${cell.verticalAlign === v ? "bg-green-100 text-green-700 font-bold" : "hover:bg-gray-100 text-gray-500"}`}
+                              >{v === "top" ? "▲" : v === "bottom" ? "▼" : "■"}</button>
+                            ))}
+                          </div>
+                          {/* Border Style */}
+                          <div className="border-t pt-2 mt-1">
+                            <div className="text-[9px] font-medium text-gray-500 mb-1">Border Style</div>
+                            <div className="flex gap-0.5 mb-1">
+                              {([
+                                {label:"□",t:1,r:1,b:1,l:1},
+                                {label:"═",t:1,r:0,b:1,l:0},
+                                {label:"▁",t:0,r:0,b:1,l:0},
+                                {label:"▏",t:0,r:0,b:0,l:1},
+                                {label:"⊘",t:0,r:0,b:0,l:0}
+                              ] as const).map((p,idx) => (
+                                <button key={idx} onClick={() => {
+                                  const obj = fcRef.current?.getActiveObject() as any;
+                                  if (!obj?._tableConfig) return;
+                                  const cfg = JSON.parse(obj._tableConfig);
+                                  const bw = cfg.borderWidth || 0.5;
+                                  const sr = sel ? sel.sr : tableEditCell.row, er = sel ? sel.er : tableEditCell.row;
+                                  const sc = sel ? sel.sc : tableEditCell.col, ec = sel ? sel.ec : tableEditCell.col;
+                                  for (let r = sr; r <= er; r++) for (let cc = sc; cc <= ec; cc++) {
+                                    if (cfg.cells[r]?.[cc]) {
+                                      cfg.cells[r][cc].borderTop = p.t * bw;
+                                      cfg.cells[r][cc].borderRight = p.r * bw;
+                                      cfg.cells[r][cc].borderBottom = p.b * bw;
+                                      cfg.cells[r][cc].borderLeft = p.l * bw;
+                                    }
+                                  }
+                                  rebuildTable(cfg);
+                                }} className={`flex-1 py-1 rounded text-[11px] hover:bg-gray-100 border ${idx===0?"font-bold":""}`}>{p.label}</button>
+                              ))}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[8px] text-gray-400">Width</span>
+                              <input type="range" min={0} max={4} step={0.5}
+                                value={cell.borderTop || 0}
+                                onChange={e => {
+                                  const obj = fcRef.current?.getActiveObject() as any;
+                                  if (!obj?._tableConfig) return;
+                                  const cfg = JSON.parse(obj._tableConfig);
+                                  const v = +e.target.value;
+                                  const sr2 = sel ? sel.sr : tableEditCell.row, er2 = sel ? sel.er : tableEditCell.row;
+                                  const sc2 = sel ? sel.sc : tableEditCell.col, ec2 = sel ? sel.ec : tableEditCell.col;
+                                  for (let r = sr2; r <= er2; r++) for (let cc = sc2; cc <= ec2; cc++) {
+                                    if (cfg.cells[r]?.[cc]) {
+                                      if (cfg.cells[r][cc].borderTop > 0) cfg.cells[r][cc].borderTop = v;
+                                      if (cfg.cells[r][cc].borderRight > 0) cfg.cells[r][cc].borderRight = v;
+                                      if (cfg.cells[r][cc].borderBottom > 0) cfg.cells[r][cc].borderBottom = v;
+                                      if (cfg.cells[r][cc].borderLeft > 0) cfg.cells[r][cc].borderLeft = v;
+                                    }
+                                  }
+                                  rebuildTable(cfg);
+                                }} className="flex-1 h-1.5" />
+                              <span className="text-[8px] text-gray-500 w-4">{cell.borderTop || 0}</span>
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-[8px] text-gray-400">Color</span>
+                              <input type="color" value={cell.cellBorderColor || "#000000"}
+                                onChange={e => updateAndRebuild("cellBorderColor", e.target.value)}
+                                className="w-6 h-5 border rounded cursor-pointer" />
+                              <span className="text-[8px] text-gray-500">{cell.cellBorderColor || "#000000"}</span>
+                            </div>
+                          </div>
+                          {/* Row/Col Resize */}
+                          <div className="border-t pt-2 mt-1">
+                            <div className="text-[9px] font-medium text-gray-500 mb-1">Row/Col Size</div>
+                            <div className="flex items-center gap-1 mb-1">
+                              <span className="text-[8px] text-gray-400 w-10">Row H</span>
+                              <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); cfg.rowHeights[tableEditCell.row] = Math.max(16, (cfg.rowHeights[tableEditCell.row]||32)-1); rebuildTable(cfg); }}
+                                className="w-7 h-7 rounded border text-sm hover:bg-gray-100 flex items-center justify-center select-none active:bg-gray-200">−</button>
+                              <input type="number" min={16} max={120} step={1}
+                                value={tc.rowHeights[tableEditCell.row] || 32}
+                                onChange={e => { const v = parseInt(e.target.value); if (isNaN(v)||v<16||v>120) return; const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); cfg.rowHeights[tableEditCell.row] = v; rebuildTable(cfg); }}
+                                className="w-14 text-center border rounded text-[11px] py-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                              <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); cfg.rowHeights[tableEditCell.row] = Math.min(120, (cfg.rowHeights[tableEditCell.row]||32)+1); rebuildTable(cfg); }}
+                                className="w-7 h-7 rounded border text-sm hover:bg-gray-100 flex items-center justify-center select-none active:bg-gray-200">+</button>
+                              <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); const avg = Math.round(cfg.rowHeights.reduce((a:number,b:number)=>a+b,0)/cfg.rows); cfg.rowHeights = cfg.rowHeights.map(()=>avg); rebuildTable(cfg); }}
+                                className="text-[7px] px-1.5 py-1 bg-gray-50 hover:bg-gray-100 rounded border ml-auto">Equal</button>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-[8px] text-gray-400 w-10">Col W</span>
+                              <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); cfg.colWidths[tableEditCell.col] = Math.max(20, (cfg.colWidths[tableEditCell.col]||90)-1); rebuildTable(cfg); }}
+                                className="w-7 h-7 rounded border text-sm hover:bg-gray-100 flex items-center justify-center select-none active:bg-gray-200">−</button>
+                              <input type="number" min={20} max={300} step={1}
+                                value={tc.colWidths[tableEditCell.col] || 90}
+                                onChange={e => { const v = parseInt(e.target.value); if (isNaN(v)||v<20||v>300) return; const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); cfg.colWidths[tableEditCell.col] = v; rebuildTable(cfg); }}
+                                className="w-14 text-center border rounded text-[11px] py-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                              <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); cfg.colWidths[tableEditCell.col] = Math.min(300, (cfg.colWidths[tableEditCell.col]||90)+1); rebuildTable(cfg); }}
+                                className="w-7 h-7 rounded border text-sm hover:bg-gray-100 flex items-center justify-center select-none active:bg-gray-200">+</button>
+                              <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); const avg = Math.round(cfg.colWidths.reduce((a:number,b:number)=>a+b,0)/cfg.cols); cfg.colWidths = cfg.colWidths.map(()=>avg); rebuildTable(cfg); }}
+                                className="text-[7px] px-1.5 py-1 bg-gray-50 hover:bg-gray-100 rounded border ml-auto">Equal</button>
+                            </div>
                           </div>
                           {/* Row/Col actions */}
                           <div className="flex gap-1 flex-wrap border-t pt-2">

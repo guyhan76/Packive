@@ -14,6 +14,8 @@ export interface TableCellData {
   padding: number;
   merged: boolean;
   mergedBy: [number, number] | null;
+  borderTop: number; borderRight: number; borderBottom: number; borderLeft: number;
+  cellBorderColor: string;
 }
 
 export interface TableConfig {
@@ -31,7 +33,7 @@ export function createDefaultCell(row: number, col: number): TableCellData {
     fontSize: 12, fontFamily: "Arial",
     fontWeight: "normal", fontStyle: "normal",
     textAlign: "center", verticalAlign: "middle",
-    padding: 4, merged: false, mergedBy: null,
+    padding: 4, merged: false, mergedBy: null, borderTop: 0, borderRight: 0, borderBottom: 0, borderLeft: 0, cellBorderColor: "#000000",
   };
 }
 
@@ -107,6 +109,26 @@ export function renderTableToDataURL(config: TableConfig, scale = 2): string {
 
         ctx.fillText(cell.text, tx, ty, cw - cell.padding * 2);
       }
+    }
+  }
+
+
+  // 2.5) Cell-specific borders
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cell = cells[r][c];
+      if (cell.merged) continue;
+      const hasBorder = cell.borderTop > 0 || cell.borderRight > 0 || cell.borderBottom > 0 || cell.borderLeft > 0;
+      if (!hasBorder) continue;
+      let x = 0; for (let i = 0; i < c; i++) x += colWidths[i];
+      let y = 0; for (let i = 0; i < r; i++) y += rowHeights[i];
+      let cw = 0; for (let i = c; i < Math.min(c + cell.colSpan, cols); i++) cw += colWidths[i];
+      let ch = 0; for (let i = r; i < Math.min(r + cell.rowSpan, rows); i++) ch += rowHeights[i];
+      ctx.strokeStyle = cell.cellBorderColor || borderColor;
+      if (cell.borderTop > 0) { ctx.lineWidth = cell.borderTop; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + cw, y); ctx.stroke(); }
+      if (cell.borderBottom > 0) { ctx.lineWidth = cell.borderBottom; ctx.beginPath(); ctx.moveTo(x, y + ch); ctx.lineTo(x + cw, y + ch); ctx.stroke(); }
+      if (cell.borderLeft > 0) { ctx.lineWidth = cell.borderLeft; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + ch); ctx.stroke(); }
+      if (cell.borderRight > 0) { ctx.lineWidth = cell.borderRight; ctx.beginPath(); ctx.moveTo(x + cw, y); ctx.lineTo(x + cw, y + ch); ctx.stroke(); }
     }
   }
 
