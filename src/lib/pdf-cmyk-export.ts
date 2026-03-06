@@ -3,7 +3,7 @@
 // Uses Fabric.js toSVG() + svg2pdf.js for accurate vector rendering
 // Then post-processes colors to CMYK
 
-import { convertTextToOutlines } from "./text-to-outlines";
+// text-to-outlines: dynamic import only (Turbopack compatibility)
 
 interface ExportOptions {
   width: number;
@@ -176,7 +176,7 @@ function replacePdfColorsInString(pdf: string, colorMap: Map<string, CMYKColor>)
       replaced++;
       return c + " " + m + " " + y + " " + k + " " + cmykOp;
     }
-    // Keep original RGB - no forced conversion for unmapped colors
+    // colorMap에 없는 색상은 RGB 유지 (PDF 뷰어가 정확히 표시)
     return match;
   });
 
@@ -252,6 +252,16 @@ export async function exportCmykPdf(
   spotMap.forEach((info, hex) => {
     console.log("  SPOT", hex, "->", info.name, "C" + info.cmyk.c + "M" + info.cmyk.m + "Y" + info.cmyk.y + "K" + info.cmyk.k);
   });
+
+  // ─── Spot Color CMYK → colorMap 우선 적용 ───
+  let spotOverrideCount = 0;
+  spotMap.forEach((info, hex) => {
+    if (info.cmyk) {
+      colorMap.set(hex, { c: info.cmyk.c, m: info.cmyk.m, y: info.cmyk.y, k: info.cmyk.k });
+      spotOverrideCount++;
+    }
+  });
+  if (spotOverrideCount > 0) console.log("[PDF] Spot color CMYK override applied:", spotOverrideCount, "colors");
 
   const objects = canvas.getObjects();
   const savedVisibility: boolean[] = [];
@@ -358,6 +368,7 @@ export async function exportCmykPdf(
 
   console.log("[PDF] Font-family normalized:", svgFontEls.length, "elements");
   // Convert text to outlines (vector paths) for perfect font rendering
+  const { convertTextToOutlines } = await import("./text-to-outlines");
   const outlineCount = await convertTextToOutlines(svgEl);
   console.log("[PDF] Step 3b: Text converted to outlines:", outlineCount, "elements");
 

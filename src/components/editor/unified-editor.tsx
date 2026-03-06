@@ -1054,8 +1054,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     else if (key === "angle") obj.set({ angle: Number(value) });
     else if (key === "fillCmyk") { const cm = value as {c:number;m:number;y:number;k:number}; obj.set({ fill: cmykToHex(cm.c,cm.m,cm.y,cm.k) }); (obj as any)._cmykFill = cm; }
     else if (key === "strokeCmyk") { const cm = value as {c:number;m:number;y:number;k:number}; obj.set({ stroke: cmykToHex(cm.c,cm.m,cm.y,cm.k) }); (obj as any)._cmykStroke = cm; }
-    else if (key === "spotFill") { const s = value as {name:string;hex:string}; obj.set({ fill: s.hex }); (obj as any)._spotFillName = s.name; }
-    else if (key === "spotStroke") { const s = value as {name:string;hex:string}; obj.set({ stroke: s.hex }); (obj as any)._spotStrokeName = s.name; if (!obj.strokeWidth || obj.strokeWidth < 0.5) obj.set({ strokeWidth: 1 }); }
+    else if (key === "spotFill") { const s = value as {name:string;hex:string;cmyk?:[number,number,number,number]}; obj.set({ fill: s.hex }); (obj as any)._spotFill = true; (obj as any)._spotFillName = s.name; if (s.cmyk) { (obj as any)._cmykFill = {c:s.cmyk[0],m:s.cmyk[1],y:s.cmyk[2],k:s.cmyk[3]}; } }
+    else if (key === "spotStroke") { const s = value as {name:string;hex:string;cmyk?:[number,number,number,number]}; obj.set({ stroke: s.hex }); (obj as any)._spotStroke = true; (obj as any)._spotStrokeName = s.name; if (s.cmyk) { (obj as any)._cmykStroke = {c:s.cmyk[0],m:s.cmyk[1],y:s.cmyk[2],k:s.cmyk[3]}; } if (!obj.strokeWidth || obj.strokeWidth < 0.5) obj.set({ strokeWidth: 1 }); }
     else if (key === "clearSpotFill") { delete (obj as any)._spotFillName; delete (obj as any)._spotFillPantone; }
     else if (key === "clearSpotStroke") { delete (obj as any)._spotStrokeName; delete (obj as any)._spotStrokePantone; }
     c.requestRenderAll();
@@ -1833,7 +1833,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                                            <div className="grid grid-cols-6 gap-1">
                                              {filtered.map(c => (
                                                <button key={c.id}
-                                                 onClick={() => { updateProp(spotTarget === "fill" ? "spotFill" : "spotStroke", {name:c.name, hex:c.hex}); setSpotPreview(c); }}
+                                                 onClick={() => { updateProp(spotTarget === "fill" ? "spotFill" : "spotStroke", {name:c.name, hex:c.hex, cmyk:c.cmyk}); setSpotPreview(c); }}
                                                  
                                                  title={`${c.name}${locale === "ko" ? ` (${c.nameKo})` : ""}\n${c.id}\n${c.hex}`}
                                                  className={`w-full aspect-square rounded-md border-2 transition-all hover:scale-110 hover:shadow-lg hover:z-10 ${
@@ -1927,7 +1927,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                                            <div className="grid grid-cols-8 gap-0.5">
                                              {display.map(c => (
                                                <button key={c.id}
-                                                 onClick={() => { updateProp(spotTarget === "fill" ? "spotFill" : "spotStroke", {name:c.name, hex:c.hex}); setHlcPreview(c); }}
+                                                 onClick={() => { updateProp(spotTarget === "fill" ? "spotFill" : "spotStroke", {name:c.name, hex:c.hex, cmyk:c.cmyk}); setHlcPreview(c); }}
                                                  
                                                  title={`${c.name}\nH${c.h} L${c.l} C${c.c}\n${c.hex}`}
                                                  className={`w-full aspect-square rounded-sm border transition-all hover:scale-125 hover:shadow-lg hover:z-10 ${
@@ -2032,7 +2032,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                                               <span className="text-[10px] text-gray-700 block truncate font-medium">{s.name}</span>
                                               {s.pantoneRef && <span className="text-[8px] text-purple-500 block">Pantone {s.pantoneRef}</span>}
                                             </div>
-                                            <button onClick={() => updateProp(spotTarget === "fill" ? "spotFill" : "spotStroke", {name:s.name, hex:s.hex})}
+                                            <button onClick={() => updateProp(spotTarget === "fill" ? "spotFill" : "spotStroke", {name:s.name, hex:s.hex, cmyk:(s as any).cmyk})}
                                               className="text-[9px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100">Apply</button>
                                             <button onClick={() => { const u = customSpotColors.filter(c => c.id !== s.id); setCustomSpotColors(u); localStorage.setItem("packive-custom-spots", JSON.stringify(u)); }}
                                               className="text-[9px] text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100">×</button>

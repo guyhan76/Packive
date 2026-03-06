@@ -1,36 +1,25 @@
 ﻿// src/lib/text-to-outlines.ts
 // Convert SVG <text> elements to <path> outlines using opentype.js
 // This ensures fonts render identically in any environment
+// NOTE: opentype.js must be dynamically imported (Turbopack compatibility)
 
-import opentype from "opentype.js";
-
-// Cache loaded fonts to avoid re-fetching
-const fontCache = new Map<string, opentype.Font>();
-
-// Google Fonts API base URL for TTF files
-const GOOGLE_FONTS_CSS_URL = "https://fonts.googleapis.com/css2?family=";
-
-async function fetchGoogleFontUrl(family: string, weight: string): Promise<string | null> {
-  try {
-    const w = weight === "bold" ? "700" : "400";
-    const url = `${GOOGLE_FONTS_CSS_URL}${encodeURIComponent(family)}:wght@${w}&display=swap`;
-    const resp = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
-    });
-    if (!resp.ok) return null;
-    const css = await resp.text();
-    const match = css.match(/src:\s*url\(([^)]+\.ttf[^)]*)\)/);
-    if (match) return match[1];
-    const woff2Match = css.match(/src:\s*url\(([^)]+)\)\s*format\(['"]woff2['"]\)/);
-    if (woff2Match) return woff2Match[1];
-    return null;
-  } catch {
-    return null;
+let opentype: any = null;
+async function getOpentype() {
+  if (!opentype) {
+    const mod = await import("opentype.js");
+    opentype = mod.default || mod;
   }
+  return opentype;
 }
 
-async function loadFont(family: string, weight: string): Promise<opentype.Font | null> {
-    // Normalize font family name - strip style suffixes for lookup
+// Cache loaded fonts to avoid re-fetching
+const fontCache = new Map<any, any>();
+
+async function loadFont(family: string, weight: string): Promise<any | null> {
+  const ot = await getOpentype();
+  if (!ot) return null;
+
+  // Normalize font family name - strip style suffixes
   const styleSuffix = family.match(/-(Regular|Bold|Italic|BoldItalic)$/i);
   const baseFamilyName = family.replace(/-(Regular|Bold|Italic|BoldItalic)$/i, "");
   if (styleSuffix) {
@@ -42,11 +31,7 @@ async function loadFont(family: string, weight: string): Promise<opentype.Font |
   const cacheKey = `${family}__${weight}`;
   if (fontCache.has(cacheKey)) return fontCache.get(cacheKey)!;
 
-  // Normalize family name
-  const familyNorm = family
-    .replace(/^['"]|['"]$/g, "")
-    .split(",")[0].trim();
-
+  const familyNorm = family.replace(/^['"]|['"]$/g, "").split(",")[0].trim();
   const normKey = `${familyNorm}__${weight}`;
   if (fontCache.has(normKey)) return fontCache.get(normKey)!;
 
@@ -54,16 +39,21 @@ async function loadFont(family: string, weight: string): Promise<opentype.Font |
   const localMap: Record<string, string> = {
     "NotoSansKR__normal": "/fonts/NotoSansKR-Regular.ttf",
     "NotoSansKR__bold": "/fonts/NotoSansKR-Bold.ttf",
+    "NotoSansKR-Regular__normal": "/fonts/NotoSansKR-Regular.ttf",
+    "NotoSansKR-Bold__bold": "/fonts/NotoSansKR-Bold.ttf",
     "Noto Sans KR__normal": "/fonts/NotoSansKR-Regular.ttf",
     "Noto Sans KR__bold": "/fonts/NotoSansKR-Bold.ttf",
     "Arial__normal": "/fonts/arial.ttf",
     "Arial__bold": "/fonts/arialbd.ttf",
+    "Arial-Bold__bold": "/fonts/arialbd.ttf",
+    "Arial-Italic__normal": "/fonts/ariali.ttf",
     "Georgia__normal": "/fonts/georgia.ttf",
     "Georgia__bold": "/fonts/georgiab.ttf",
+    "Georgia-Bold__bold": "/fonts/georgiab.ttf",
     "Malgun Gothic__normal": "/fonts/malgun.ttf",
     "Malgun Gothic__bold": "/fonts/malgunbd.ttf",
-    "Inter__normal": "/fonts/Inter-Regular.ttf",
-    "Inter__bold": "/fonts/Inter-Bold.ttf",
+    "Inter__normal": "/fonts/NotoSansKR-Regular.ttf",
+    "Inter__bold": "/fonts/NotoSansKR-Bold.ttf",
   };
 
   for (const tryKey of [cacheKey, normKey]) {
@@ -73,7 +63,7 @@ async function loadFont(family: string, weight: string): Promise<opentype.Font |
         const resp = await fetch(localPath);
         if (resp.ok) {
           const buf = await resp.arrayBuffer();
-          const font = opentype.parse(buf);
+          const font = ot.parse(buf);
           fontCache.set(cacheKey, font);
           fontCache.set(normKey, font);
           console.log("[OUTLINE] Loaded local font:", tryKey);
@@ -83,63 +73,37 @@ async function loadFont(family: string, weight: string): Promise<opentype.Font |
     }
   }
 
-  // Try Google Fonts CSS API to get TTF URL
-  const tryFamilies = [familyNorm, family];
-  for (const tryFamily of tryFamilies) {
-    try {
-      const w = weight === "bold" ? "700" : "400";
-      const apiUrl = `/api/google-font-css?family=${encodeURIComponent(family)}&weight=${w}`;
-const resp = await fetch(apiUrl);
-if (!resp.ok) {
-  console.warn("[OUTLINE] API route failed for:", family);
-  return null;
-}
-const data = await resp.json();
-const fontUrl = data.fontUrl;
-if (fontUrl) {
+  // Try Google Fonts via API route
   try {
-    const fontResp = await fetch(fontUrl);
-    if (fontResp.ok) {
-      const buf = await fontResp.arrayBuffer();
-      const font = opentype.parse(buf);
-      fontCache.set(cacheKey, font);
-      console.log("[OUTLINE] Loaded Google font via API route:", cacheKey);
-      return font;
+    const w = weight === "bold" ? "700" : "400";
+    const apiUrl = `/api/google-font-css?family=${encodeURIComponent(familyNorm)}&weight=${w}`;
+    const resp = await fetch(apiUrl);
+    if (resp.ok) {
+      const data = await resp.json();
+      const fontUrl = data.fontUrl;
+      if (fontUrl) {
+        const fontResp = await fetch(fontUrl);
+        if (fontResp.ok) {
+          const buf = await fontResp.arrayBuffer();
+          const font = ot.parse(buf);
+          fontCache.set(cacheKey, font);
+          fontCache.set(normKey, font);
+          console.log("[OUTLINE] Loaded Google font via API:", familyNorm, weight);
+          return font;
+        }
+      }
     }
   } catch (e) {
-    console.warn("[OUTLINE] Failed to parse Google font:", family, e);
-  }
-}
-
-      if (!cssResp.ok) continue;
-      const css = await cssResp.text();
-
-      // Extract TTF or WOFF2 URL
-      const ttfMatch = css.match(/src:\s*url\(([^)]+)\)\s*format\(['"](?:truetype|woff2)['"]\)/);
-      const urlMatch = ttfMatch || css.match(/url\(([^)]+)\)/);
-      if (!urlMatch) continue;
-
-      const gFontUrl = urlMatch[1];
-      const fontResp = await fetch(gFontUrl);
-      if (!fontResp.ok) continue;
-
-      const buf = await fontResp.arrayBuffer();
-      const font = opentype.parse(buf);
-      fontCache.set(cacheKey, font);
-      fontCache.set(normKey, font);
-      console.log("[OUTLINE] Loaded Google font:", tryFamily, weight);
-      return font;
-    } catch { continue; }
+    console.warn("[OUTLINE] Google font API failed:", familyNorm, e);
   }
 
-  // Fallback: try Noto Sans KR for Korean characters
-  const fallbackKey = `NotoSansKR__${weight}`;
+  // Fallback: Noto Sans KR
   const fallbackPath = weight === "bold" ? "/fonts/NotoSansKR-Bold.ttf" : "/fonts/NotoSansKR-Regular.ttf";
   try {
     const resp = await fetch(fallbackPath);
     if (resp.ok) {
       const buf = await resp.arrayBuffer();
-      const font = opentype.parse(buf);
+      const font = ot.parse(buf);
       fontCache.set(cacheKey, font);
       fontCache.set(normKey, font);
       console.log("[OUTLINE] Loaded fallback NotoSansKR for:", familyNorm);
@@ -150,7 +114,6 @@ if (fontUrl) {
   console.warn("[OUTLINE] Failed to load font:", cacheKey);
   return null;
 }
-
 
 function getTextAttributes(el: Element): {
   x: number; y: number; fontSize: number;
@@ -185,13 +148,18 @@ function getTextAttributes(el: Element): {
 
 export async function convertTextToOutlines(svgEl: Element): Promise<number> {
   const textElements = svgEl.querySelectorAll("text");
+  console.log("[OUTLINE] Found", textElements.length, "text elements in SVG");
   let converted = 0;
 
   for (const textEl of Array.from(textElements)) {
     const attrs = getTextAttributes(textEl);
+    console.log("[OUTLINE] Processing text:", textEl.textContent?.substring(0, 30), "font:", attrs.fontFamily, attrs.fontWeight);
     const weight = (attrs.fontWeight === "bold" || parseInt(attrs.fontWeight) >= 700) ? "bold" : "normal";
     const font = await loadFont(attrs.fontFamily, weight);
-    if (!font) continue;
+    if (!font) {
+      console.warn("[OUTLINE] Skipping - no font loaded for:", attrs.fontFamily);
+      continue;
+    }
 
     const tspans = textEl.querySelectorAll("tspan");
     const doc = textEl.ownerDocument;
@@ -246,4 +214,3 @@ export async function convertTextToOutlines(svgEl: Element): Promise<number> {
   console.log("[OUTLINE] Converted", converted, "text elements to outlines");
   return converted;
 }
-
