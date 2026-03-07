@@ -1,0 +1,50 @@
+# 1. 서버사이드 API 라우트 확인
+Write-Host "=== API 라우트 목록 ==="
+Get-ChildItem "C:\Users\user\Desktop\dev\packive\src\app\api" -Recurse -Filter "route.ts" | ForEach-Object {
+    Write-Host $_.FullName.Replace("C:\Users\user\Desktop\dev\packive\", "")
+}
+
+# 2. pdfkit 사용 현황
+Write-Host "`n=== pdfkit 사용 파일 ==="
+Get-ChildItem "C:\Users\user\Desktop\dev\packive\src" -Recurse -Filter "*.ts" | ForEach-Object {
+    $content = Get-Content $_.FullName -Encoding UTF8 -Raw -ErrorAction SilentlyContinue
+    if ($content -match "pdfkit|PDFDocument") {
+        Write-Host $_.FullName.Replace("C:\Users\user\Desktop\dev\packive\", "")
+    }
+}
+Get-ChildItem "C:\Users\user\Desktop\dev\packive\src" -Recurse -Filter "*.tsx" | ForEach-Object {
+    $content = Get-Content $_.FullName -Encoding UTF8 -Raw -ErrorAction SilentlyContinue
+    if ($content -match "pdfkit|PDFDocument") {
+        Write-Host $_.FullName.Replace("C:\Users\user\Desktop\dev\packive\", "")
+    }
+}
+
+# 3. Fabric toSVG 사용 여부
+Write-Host "`n=== toSVG 사용 ==="
+$f = "C:\Users\user\Desktop\dev\packive\src\components\editor\unified-editor.tsx"
+$lines = Get-Content $f -Encoding UTF8
+for ($i = 0; $i -lt $lines.Length; $i++) {
+    if ($lines[$i] -match "toSVG") {
+        Write-Host "L$($i+1): $($lines[$i].Trim())"
+    }
+}
+
+# 4. Ghostscript / Inkscape 경로 확인
+Write-Host "`n=== Ghostscript/Inkscape ==="
+if (Test-Path "C:\Program Files\gs\gs10.06.0\bin\gswin64c.exe") { Write-Host "Ghostscript: OK" } else { Write-Host "Ghostscript: NOT FOUND" }
+if (Test-Path "C:\Program Files\Inkscape\bin\inkscape.com") { Write-Host "Inkscape: OK" } else { Write-Host "Inkscape: NOT FOUND" }
+
+# 5. svg2pdf 또는 관련 라이브러리 확인
+Write-Host "`n=== package.json PDF 관련 패키지 ==="
+$pkg = Get-Content "C:\Users\user\Desktop\dev\packive\package.json" -Encoding UTF8
+$pkg | ForEach-Object { 
+    if ($_ -match "pdf|svg2|canvg|puppeteer|playwright|sharp|inkscape|ghostscript|cairo") { 
+        Write-Host $_.Trim() 
+    } 
+}
+
+# 6. lib 폴더 확인
+Write-Host "`n=== lib 폴더 ==="
+Get-ChildItem "C:\Users\user\Desktop\dev\packive\src\lib" -Filter "*.ts" | ForEach-Object { Write-Host $_.Name }
+
+Write-Host "DONE"

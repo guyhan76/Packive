@@ -61,11 +61,11 @@ function panelPath(pid: string, p: {x:number;y:number;w:number;h:number}, geo: a
 
 // ─── CMYK Helpers ───
 function hexToCmyk(hex: string): [number,number,number,number] {
-  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
-  return srgbToCmyk(r, g, b);
+  const ri = parseInt(hex.slice(1,3),16), gi = parseInt(hex.slice(3,5),16), bi = parseInt(hex.slice(5,7),16);
+  if (ri <= 5 && gi <= 5 && bi <= 5) return [0,0,0,100]; if (ri >= 250 && gi >= 250 && bi >= 250) return [0,0,0,0]; const raw = srgbToCmyk(ri, gi, bi); return [Math.max(0,Math.round(raw[0])),Math.max(0,Math.round(raw[1])),Math.max(0,Math.round(raw[2])),Math.max(0,Math.round(raw[3]))] as [number,number,number,number];
 }
 function cmykToHex(c:number,m:number,y:number,k:number): string {
-  if (isLUTReady()) return iccCmykToHex(c, m, y, k);
+  if (c === 0 && m === 0 && y === 0 && k === 100) return "#000000"; if (c === 0 && m === 0 && y === 0 && k === 0) return "#ffffff"; if (isLUTReady()) return iccCmykToHex(c, m, y, k);
   const r = Math.round(255*(1-c/100)*(1-k/100)), g = Math.round(255*(1-m/100)*(1-k/100)), b = Math.round(255*(1-y/100)*(1-k/100));
   return "#" + [r,g,b].map(v => Math.max(0,Math.min(255,v)).toString(16).padStart(2,"0")).join("");
 }
@@ -210,6 +210,11 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [selectedPanel, setSelectedPanel] = useState<string | null>(null);
   const [tableEditCell, setTableEditCell] = useState<{row:number;col:number}|null>(null);
   const [tableSelStart, setTableSelStart] = useState<{row:number;col:number}|null>(null);
+  const [tableCmykOpen, setTableCmykOpen] = useState<"bg"|"text"|"border"|null>(null);
+  const [tblHue, setTblHue] = useState(0);
+  const [tblPickPos, setTblPickPos] = useState<{s:number;v:number}>({s:50,v:50});
+  const tblPickRef = useRef<HTMLDivElement>(null);
+  const tblDragging = useRef(false);
   const [tableSelEnd, setTableSelEnd] = useState<{row:number;col:number}|null>(null);
   const tableSelection = tableSelStart && tableSelEnd ? {
     sr: Math.min(tableSelStart.row, tableSelEnd.row),
@@ -290,7 +295,18 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   // ─── History ───
   const pushHistory = useCallback(() => {
     const c = fcRef.current; if (!c || loadingRef.current) return;
-    const json = JSON.stringify(c.toJSON(["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isTable","_tableConfig","_tableRole","_tableRow","_tableCol"]));
+    const jsonObj = c.toJSON(["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isTable","_tableConfig","_tableRole","_tableRow","_tableCol"]);
+    // Fabric toJSON may drop custom props on Image - inject manually
+    const objs = c.getObjects();
+    if (jsonObj.objects) {
+      objs.forEach((obj: any, i: number) => {
+        if (!jsonObj.objects[i]) return;
+        ["_isTable","_tableConfig","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","_tableRole","_tableRow","_tableCol","name"].forEach((k: string) => {
+          if ((obj as any)[k] !== undefined) jsonObj.objects[i][k] = (obj as any)[k];
+        });
+      });
+    }
+    const json = JSON.stringify(jsonObj);
     const h = historyRef.current;
     h.splice(historyIdxRef.current + 1);
     h.push(json);
@@ -298,15 +314,40 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     historyIdxRef.current = h.length - 1;
   }, []);
 
+  const restoreCustomProps = (canvas: any, snapshot: any) => {
+    const objs = canvas.getObjects();
+    const jsonObjs = snapshot.objects || [];
+    objs.forEach((obj: any, i: number) => {
+      const src = jsonObjs[i];
+      if (!src) return;
+      ["_isTable","_tableConfig","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","_tableRole","_tableRow","_tableCol","name","selectable","evented"].forEach(k => {
+        if (src[k] !== undefined) obj[k] = src[k];
+      });
+      // Group 내부 objects도 복원
+      if (obj._objects && src.objects) {
+        obj._objects.forEach((child: any, ci: number) => {
+          const csrc = src.objects[ci];
+          if (!csrc) return;
+          ["_isTable","_tableConfig","_tableRole","_tableRow","_tableCol","name","selectable","evented"].forEach(k => {
+            if (csrc[k] !== undefined) child[k] = csrc[k];
+          });
+        });
+      }
+    });
+  };
+
   const undo = useCallback(async () => {
     const c = fcRef.current; if (!c) return;
     if (historyIdxRef.current <= 0) return;
     historyIdxRef.current--;
     loadingRef.current = true;
-    await c.loadFromJSON(JSON.parse(historyRef.current[historyIdxRef.current]));
+    const snapshot = JSON.parse(historyRef.current[historyIdxRef.current]);
+    await c.loadFromJSON(snapshot);
+    restoreCustomProps(c, snapshot);
     c.requestRenderAll();
     loadingRef.current = false;
     refreshLayers();
+    setTimeout(() => { setSelProps(null); setTableEditCell(null); }, 30);
   }, []);
 
   const redo = useCallback(async () => {
@@ -314,13 +355,14 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     if (historyIdxRef.current >= historyRef.current.length - 1) return;
     historyIdxRef.current++;
     loadingRef.current = true;
-    await c.loadFromJSON(JSON.parse(historyRef.current[historyIdxRef.current]));
+    const snapshot = JSON.parse(historyRef.current[historyIdxRef.current]);
+    await c.loadFromJSON(snapshot);
+    restoreCustomProps(c, snapshot);
     c.requestRenderAll();
     loadingRef.current = false;
     refreshLayers();
+    setTimeout(() => { setSelProps(null); setTableEditCell(null); }, 30);
   }, []);
-
-  // ─── Temp Save / Load ───
   const SAVE_KEY = "packive-temp-design";
   const SAVE_META_KEY = "packive-temp-meta";
   const JSON_PROPS = ["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isTable","_tableConfig","_tableRole","_tableRow","_tableCol"];
@@ -388,13 +430,13 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   }, []);
 
   // ─── Zoom ───
-  const applyZoom = useCallback((newZoom: number) => {
+  const applyZoom = useCallback((newZoom: number, point?: {x: number, y: number}) => {
     const c = fcRef.current; if (!c) return;
     const z = Math.max(25, Math.min(800, newZoom));
     const vpt = c.viewportTransform || [1,0,0,1,0,0];
-    vpt[0] = z / 100;
-    vpt[3] = z / 100;
-    c.setViewportTransform(vpt);
+    if (point) { c.zoomToPoint(new (c as any).constructor.__proto__.constructor === Object ? {x: point.x, y: point.y} : point, z / 100); }
+    else { const vpt = c.viewportTransform || [1,0,0,1,0,0]; vpt[0] = z / 100; vpt[3] = z / 100; c.setViewportTransform(vpt); }
+    c.requestRenderAll();
     c.requestRenderAll();
     setZoom(z);
     zoomRef.current = z;
@@ -613,10 +655,36 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
       // Mouse wheel zoom
       canvas.on("mouse:wheel", (opt: any) => {
-        opt.e.preventDefault();
+        opt.e.preventDefault(); opt.e.stopPropagation();
         const delta = opt.e.deltaY > 0 ? -10 : 10;
         const newZ = Math.max(25, Math.min(800, zoomRef.current + delta));
-        applyZoom(newZ);
+        const pointer = canvas.getScenePoint(opt.e); applyZoom(newZ, pointer);
+      });
+
+      // Panning: Space+drag or middle mouse button
+      let _isPanning = false; let _panStart = {x:0, y:0};
+      const _spaceDown = new Set<string>();
+      const onKeyDown = (e: KeyboardEvent) => { const tag = (document.activeElement?.tagName || "").toLowerCase(); if (tag === "input" || tag === "textarea" || tag === "select" || (document.activeElement as any)?.contentEditable === "true") return; if (e.code === "Space") { _spaceDown.add("Space"); e.preventDefault(); } };
+      const onKeyUp = (e: KeyboardEvent) => { _spaceDown.delete(e.code); };
+      document.addEventListener("keydown", onKeyDown);
+      document.addEventListener("keyup", onKeyUp);
+
+      canvas.on("mouse:down", (opt: any) => {
+        if (_spaceDown.has("Space") || opt.e.button === 1) {
+          _isPanning = true; _panStart = {x: opt.e.clientX, y: opt.e.clientY};
+          canvas.selection = false; canvas.setCursor("grabbing"); opt.e.preventDefault();
+        }
+      });
+      canvas.on("mouse:move", (opt: any) => {
+        if (!_isPanning) return;
+        const vpt = canvas.viewportTransform || [1,0,0,1,0,0];
+        vpt[4] += opt.e.clientX - _panStart.x;
+        vpt[5] += opt.e.clientY - _panStart.y;
+        _panStart = {x: opt.e.clientX, y: opt.e.clientY};
+        canvas.setViewportTransform(vpt); canvas.requestRenderAll();
+      });
+      canvas.on("mouse:up", () => {
+        if (_isPanning) { _isPanning = false; canvas.selection = true; canvas.setCursor("default"); }
       });
 
       // Initial history snapshot
@@ -653,13 +721,13 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       else if ((e.ctrlKey||e.metaKey) && e.key==="c") {
         const cv=fcRef.current; if(!cv) return;
         const o=cv.getActiveObject(); if(!o) return;
-        const cloned = await o.clone(); (window as any).__pkClip=cloned;
+        const cloned = await o.clone(); ["_tableConfig","_isTable","_cmykFill","_cmykStroke","_spotFillName","_spotFillPantone","_spotStrokeName","_spotStrokePantone"].forEach(k => { if ((o as any)[k] !== undefined) (cloned as any)[k] = (o as any)[k]; }); (window as any).__pkClip=cloned;
       }
       else if ((e.ctrlKey||e.metaKey) && e.key==="v") {
         e.preventDefault();
         const cv=fcRef.current; if(!cv) return;
         const cl=(window as any).__pkClip; if(!cl) return;
-        const p = await cl.clone();
+        const p = await cl.clone(); ["_tableConfig","_isTable","_cmykFill","_cmykStroke","_spotFillName","_spotFillPantone","_spotStrokeName","_spotStrokePantone"].forEach(k => { if ((cl as any)[k] !== undefined) (p as any)[k] = (cl as any)[k]; });
         p.set({left:(p.left||0)+20,top:(p.top||0)+20});
         cv.add(p); cv.setActiveObject(p);
         cv.requestRenderAll(); pushHistory(); refreshLayers();
@@ -667,7 +735,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       else if ((e.ctrlKey||e.metaKey) && e.key==="x") {
         const cv=fcRef.current; if(!cv) return;
         const o=cv.getActiveObject(); if(!o) return;
-        const cloned = await o.clone(); (window as any).__pkClip=cloned;
+        const cloned = await o.clone(); ["_tableConfig","_isTable","_cmykFill","_cmykStroke","_spotFillName","_spotFillPantone","_spotStrokeName","_spotStrokePantone"].forEach(k => { if ((o as any)[k] !== undefined) (cloned as any)[k] = (o as any)[k]; }); (window as any).__pkClip=cloned;
         cv.remove(o); cv.requestRenderAll();
         pushHistory(); refreshLayers();
       }
@@ -688,6 +756,16 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
         }
       }
       else if (e.key === "F1") { e.preventDefault(); setShowShortcuts(prev => !prev); }
+      else if (e.key.startsWith("Arrow")) {
+        const obj = c.getActiveObject(); if (!obj) return;
+        e.preventDefault();
+        const step = e.ctrlKey ? 1 : 10;
+        if (e.key === "ArrowUp") obj.set("top", (obj.top || 0) - step);
+        else if (e.key === "ArrowDown") obj.set("top", (obj.top || 0) + step);
+        else if (e.key === "ArrowLeft") obj.set("left", (obj.left || 0) - step);
+        else if (e.key === "ArrowRight") obj.set("left", (obj.left || 0) + step);
+        obj.setCoords(); c.requestRenderAll(); pushHistory();
+      }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
@@ -1077,6 +1155,9 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           setFSize(objSize);
         }
       }
+        if (props?._isTable && props._tableConfig) {
+          setTableEditCell(prev => prev || {row: 0, col: 0});
+        }
     };
     c.on("selection:created", update);
     c.on("selection:updated", update);
@@ -1085,6 +1166,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       setSelectedFont("Inter");
       setFSize(24);
     });
+    c.on("mouse:down", () => { setTimeout(() => { const props = getSelectedProps(); if (props) { setSelProps(props); if (props._isTable && props._tableConfig) { setTableEditCell(prev => prev || {row: 0, col: 0}); } } }, 50); });
     c.on("object:modified", (e: any) => {
       const t = e.target;
       if (t && (t.type === "i-text" || t.type === "textbox") && t.scaleX && t.scaleX !== 1) {
@@ -1616,17 +1698,25 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                   if (_rebuildLock.current) return;
                   _rebuildLock.current = true;
                   try {
-                    const obj = fcRef.current?.getActiveObject() as any;
+                    const cv = fcRef.current!;
+                    const obj = cv.getActiveObject() as any;
                     if (!obj) return;
+                    const pos = { left: obj.left, top: obj.top, scaleX: obj.scaleX, scaleY: obj.scaleY };
                     const { buildTableImage } = await import("@/lib/table-engine");
                     const F = await import("fabric");
-                    const pos = { left: obj.left, top: obj.top };
                     const group = await buildTableImage(newCfg, F);
                     group.set({ ...pos, _tableConfig: JSON.stringify(newCfg), name: `Table ${newCfg.rows}×${newCfg.cols}` });
-                    const cv = fcRef.current!;
-                    cv.remove(obj); cv.add(group); cv.setActiveObject(group); cv.renderAll(); pushHistory();
+                    cv.discardActiveObject();
+                    cv.discardActiveObject();
+                    const removed = cv.remove(obj);
+                    cv.renderAll();
+                    cv.add(group);
+                    cv.setActiveObject(group);
+                    cv.requestRenderAll();
                     setSelProps((p:any) => ({...p, _tableConfig: newCfg}));
-                  } catch (err) {
+                    if (!loadingRef.current) pushHistory();
+                    refreshLayers();
+                  } catch (err: any) {
                     console.error("[TABLE] rebuildTable ERROR:", err);
                   } finally {
                     _rebuildLock.current = false;
@@ -1649,9 +1739,9 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                                     onMouseDown={() => { setTableSelStart({row:ri,col:ci}); setTableSelEnd({row:ri,col:ci}); setTableEditCell({row:ri,col:ci}); }}
                                     onMouseEnter={(e) => { if (e.buttons === 1 && tableSelStart) setTableSelEnd({row:ri,col:ci}); }}
                                     onMouseUp={() => {}}
-                                    className={`border border-gray-300 text-[8px] p-0.5 cursor-pointer text-center min-w-[24px] h-5 transition-colors ${isSel ? "bg-blue-200 ring-1 ring-blue-500" : "hover:bg-gray-50"}`}
-                                    style={{backgroundColor: isSel ? undefined : cell.bgColor || "#fff", fontWeight: cell.fontWeight}}>
-                                    {cell.text || <span className="text-gray-300">·</span>}
+                                    className={`border border-gray-300 text-[8px] p-0.5 cursor-pointer text-center min-w-[16px] transition-colors ${isSel ? "bg-blue-200 ring-1 ring-blue-500" : "hover:bg-gray-50"}`}
+                                    style={{height: `${(tc.rowHeights?.[ri] || 32) * 0.4}px`, width: `${(tc.colWidths?.[ci] || 80) * 0.4}px`, backgroundColor: isSel ? undefined : cell.bgColor || "#fff", fontWeight: cell.fontWeight}}>
+                                    <div style={{textAlign: cell.textAlign || "left", fontSize: "7px", lineHeight: "1.2", whiteSpace: "pre-wrap", wordBreak: "break-all", overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: cell.verticalAlign === "top" ? "flex-start" : cell.verticalAlign === "bottom" ? "flex-end" : "center", minHeight: "100%"}}><span style={{textAlign: cell.textAlign || "left", display: "block"}}>{cell.text || <span className="text-gray-300">·</span>}</span></div>
                                   </td>
                                 );
                               })}
@@ -1690,168 +1780,290 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                       </div>
                     )}
                     {/* Cell editing controls */}
+                    {/* Cell editing */}
                     {tableEditCell && tc.cells[tableEditCell.row]?.[tableEditCell.col] && (() => {
                       const cell = tc.cells[tableEditCell.row][tableEditCell.col];
                       const updateAndRebuild = (prop: string, value: any) => {
                         const obj = fcRef.current?.getActiveObject() as any;
                         if (!obj?._tableConfig) return;
                         const cfg = JSON.parse(obj._tableConfig);
-                        cfg.cells[tableEditCell.row][tableEditCell.col][prop] = value;
+                        const sr = tableSelStart && tableSelEnd ? Math.min(tableSelStart.row, tableSelEnd.row) : tableEditCell.row; const er = tableSelStart && tableSelEnd ? Math.max(tableSelStart.row, tableSelEnd.row) : tableEditCell.row; const sc = tableSelStart && tableSelEnd ? Math.min(tableSelStart.col, tableSelEnd.col) : tableEditCell.col; const ec = tableSelStart && tableSelEnd ? Math.max(tableSelStart.col, tableSelEnd.col) : tableEditCell.col; for (let r = sr; r <= er; r++) for (let c = sc; c <= ec; c++) { if (cfg.cells[r]?.[c] && !cfg.cells[r][c].merged) cfg.cells[r][c][prop] = value; }
                         rebuildTable(cfg);
                       };
                       return (
                         <div className="space-y-2 border-t pt-2">
-                          <input type="text" defaultValue={cell.text || ""} placeholder="Cell text..."
-                            key={`${tableEditCell.row}-${tableEditCell.col}-${cell.text}`}
-                            onBlur={e => updateAndRebuild("text", e.target.value)}
-                            onKeyDown={e => { if (e.key === "Enter") { (e.target as HTMLInputElement).blur(); } }}
-                            className="w-full border rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500" />
-                          <div className="flex gap-1 items-center flex-wrap">
-                            <label className="text-[9px] text-gray-500 flex items-center gap-1">BG
-                              <input type="color" value={cell.bgColor || "#ffffff"}
-                                onChange={e => updateAndRebuild("bgColor", e.target.value)}
-                                className="w-6 h-6 border rounded cursor-pointer" />
-                            </label>
-                            <label className="text-[9px] text-gray-500 flex items-center gap-1">Text
-                              <input type="color" value={cell.textColor || "#222222"}
-                                onChange={e => updateAndRebuild("textColor", e.target.value)}
-                                className="w-6 h-6 border rounded cursor-pointer" />
-                            </label>
-                            <select value={cell.fontWeight || "normal"}
-                              onChange={e => updateAndRebuild("fontWeight", e.target.value)}
-                              className="text-[9px] border rounded px-1 py-0.5">
-                              <option value="normal">Normal</option>
-                              <option value="bold">Bold</option>
-                            </select>
-                            <select value={cell.fontFamily || "Arial"}
-                              onChange={e => updateAndRebuild("fontFamily", e.target.value)}
-                              className="text-[9px] border rounded px-1 py-0.5">
-                              <option value="Arial">Arial</option>
-                              <option value="Georgia">Georgia</option>
-                              <option value="NotoSansKR">Noto Sans KR</option>
-                              <option value="Malgun Gothic">맑은 고딕</option>
-                            </select>
-                            <input type="number" value={cell.fontSize || 12} min={8} max={48}
-                              onChange={e => updateAndRebuild("fontSize", Math.max(8, Math.min(48, +e.target.value)))}
-                              className="w-10 text-[9px] border rounded px-1 py-0.5 text-center" />
+                            <textarea defaultValue={cell.text || ""} placeholder="Cell text..." rows={2}
+                              key={`cell-${tableEditCell.row}-${tableEditCell.col}`}
+                              onChange={e => { const val = e.target.value; clearTimeout((window as any).__txtTimer); (window as any).__txtTimer = setTimeout(() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); const r = tableEditCell.row, c = tableEditCell.col; if (cfg.cells[r]?.[c]) { cfg.cells[r][c].text = val; } rebuildTable(cfg); }, 300); }}
+                              onBlur={e => updateAndRebuild("text", e.target.value)}
+                              className="w-full border rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500 resize-none" />
+                            {tableCmykOpen && createPortal(
+                              <div className="fixed bg-white border border-gray-300 rounded-lg shadow-xl p-3 w-64 z-[9999]" style={{top: "80px", right: "16px"}} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}>
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-[10px] font-medium text-gray-600">{tableCmykOpen === "bg" ? "BG" : tableCmykOpen === "text" ? "Text" : "Border"} Color</span>
+                                  <button onClick={() => setTableCmykOpen(null)} className="text-gray-400 hover:text-gray-600 text-sm leading-none">✕</button>
+                                </div>
+                                {(() => {
+                                  const prop = tableCmykOpen === "bg" ? "bgColor" : tableCmykOpen === "text" ? "textColor" : "cellBorderColor";
+                                  const curHex = tableCmykOpen === "bg" ? (cell.bgColor || "#ffffff") : tableCmykOpen === "text" ? (cell.textColor || "#000000") : (cell.cellBorderColor || "#000000");
+                                  const cmyk = hexToCmyk(curHex);
+                                  return (<>
+                                    <div ref={tblPickRef} className="relative w-full h-36 rounded cursor-crosshair border border-gray-200"
+                                      style={{ background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, ${hsvToHex(tblHue, 1, 1)})` }}
+                                      onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        tblDragging.current = true;
+                                        const rect = e.currentTarget.getBoundingClientRect();
+                                        const s = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+                                        const v = Math.max(0, Math.min(100, (1 - (e.clientY - rect.top) / rect.height) * 100));
+                                        setTblPickPos({s, v});
+                                        const hex = hsvToHex(tblHue, s/100, v/100);
+                                        const ck = hexToCmyk(hex);
+                                        updateAndRebuild(prop, cmykToHex(ck[0],ck[1],ck[2],ck[3]));
+                                        const onMove = (ev: MouseEvent) => {
+                                          if (!tblDragging.current) return;
+                                          const r = tblPickRef.current?.getBoundingClientRect();
+                                          if (!r) return;
+                                          const ms = Math.max(0, Math.min(100, ((ev.clientX - r.left) / r.width) * 100));
+                                          const mv = Math.max(0, Math.min(100, (1 - (ev.clientY - r.top) / r.height) * 100));
+                                          setTblPickPos({s: ms, v: mv});
+                                          const mhex = hsvToHex(tblHue, ms/100, mv/100);
+                                          const mck = hexToCmyk(mhex);
+                                          updateAndRebuild(prop, cmykToHex(mck[0],mck[1],mck[2],mck[3]));
+                                        };
+                                        const onUp = () => {
+                                          tblDragging.current = false;
+                                          document.removeEventListener("mousemove", onMove);
+                                          document.removeEventListener("mouseup", onUp);
+                                        };
+                                        document.addEventListener("mousemove", onMove);
+                                        document.addEventListener("mouseup", onUp);
+                                      }}>
+                                      <div className="absolute w-4 h-4 border-2 border-white rounded-full shadow-md pointer-events-none" style={{
+                                        left: `calc(${tblPickPos.s}% - 8px)`, top: `calc(${100 - tblPickPos.v}% - 8px)`,
+                                        backgroundColor: curHex,
+                                        boxShadow: "0 0 0 1px rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.3)"
+                                      }} />
+                                    </div>
+                                    <div className="relative mt-2">
+                                      <input onMouseDown={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()} type="range" min="0" max="360" value={tblHue}
+                                        onChange={(e) => {
+                                          const h = Number(e.target.value);
+                                          setTblHue(h);
+                                          const hex = hsvToHex(h, tblPickPos.s/100, tblPickPos.v/100);
+                                          const ck = hexToCmyk(hex);
+                                          updateAndRebuild(prop, cmykToHex(ck[0],ck[1],ck[2],ck[3]));
+                                        }}
+                                        className="w-full h-3 rounded-full cursor-pointer appearance-none"
+                                        style={{background: "linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)"}}
+                                      />
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-2 mb-1">
+                                      <span className="text-[10px] font-medium text-gray-600">{tableCmykOpen === "bg" ? "BG" : tableCmykOpen === "text" ? "Text" : "Border"}</span>
+                                      <div className="w-6 h-6 rounded border border-gray-300" style={{backgroundColor: curHex}} />
+                                      <span className="text-[9px] text-gray-400 font-mono">{curHex}</span>
+                                    </div>
+                                    {(["C","M","Y","K"] as const).map((ch, ci) => {
+                                      const colors = ["#00BCD4","#E91E63","#FFC107","#424242"];
+                                      return (
+                                        <div key={ch} className="flex items-center gap-2 mb-1">
+                                          <span className="text-[9px] w-4 font-bold" style={{color:colors[ci]}}>{ch}</span>
+                                          <input onMouseDown={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()} type="range" min="0" max="100" value={cmyk[ci]}
+                                            onChange={e => { const nc = [...cmyk] as [number,number,number,number]; nc[ci] = Number(e.target.value); updateAndRebuild(prop, cmykToHex(nc[0],nc[1],nc[2],nc[3])); }}
+                                            className="flex-1 h-1.5 rounded-full cursor-pointer" style={{accentColor:colors[ci]}} />
+                                          <span className="w-8 text-[9px] text-right text-gray-600 font-mono">{cmyk[ci]}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </>);
+                                })()}
+                              </div>
+                            , document.body)}
+                          <div className="relative">
+                            <button onClick={() => setSelProps((p:any) => ({...p, _tableFontOpen: !p._tableFontOpen}))}
+                              className="w-full border rounded px-2 py-1.5 text-[10px] text-left hover:bg-gray-50 flex justify-between items-center">
+                              <span style={{fontFamily: cell.fontFamily || "Arial"}}>{cell.fontFamily || "Arial"}</span>
+                              <span className="text-gray-400">▼</span>
+                            </button>
+                            {selProps._tableFontOpen && (
+                              <div className="absolute z-50 w-full bg-white border rounded-lg shadow-lg max-h-48 flex flex-col mt-0.5">
+                                <input type="text" placeholder="Search fonts..." autoFocus
+                                  value={fontSearch} onChange={e => setFontSearch(e.target.value)}
+                                  className="border-b px-2 py-1.5 text-[10px] shrink-0 focus:outline-none" />
+                                <div className="overflow-auto">
+                                  {googleFonts.filter(f => !fontSearch || f.toLowerCase().includes(fontSearch.toLowerCase())).slice(0, 80).map(f => (
+                                    <button key={f} onClick={() => { loadGoogleFont(f); updateAndRebuild("fontFamily", f); setSelProps((p:any) => ({...p, _tableFontOpen: false})); setFontSearch(""); }}
+                                      className={`w-full text-left px-2 py-1.5 text-[10px] hover:bg-blue-50 ${(cell.fontFamily||"Arial")===f?"bg-blue-100 font-bold":""}`}
+                                      style={{fontFamily: f}}>{f}</button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                          {/* Text alignment */}
-                          <div className="flex gap-0.5">
-                            {(["left","center","right"] as const).map(a => (
-                              <button key={a} onClick={() => updateAndRebuild("textAlign", a)}
-                                className={`flex-1 py-1 rounded text-[9px] ${cell.textAlign === a ? "bg-blue-100 text-blue-700 font-bold" : "hover:bg-gray-100 text-gray-500"}`}>
-                                {a === "left" ? "◀" : a === "right" ? "▶" : "◆"}
-                              </button>
-                            ))}
-                          </div>
-                          {/* Vertical alignment */}
-                          <div className="flex gap-0.5">
-                            {(["top","middle","bottom"] as const).map(v => (
-                              <button key={v} onClick={() => updateAndRebuild("verticalAlign", v)}
-                                className={`flex-1 py-1 rounded text-[9px] ${cell.verticalAlign === v ? "bg-green-100 text-green-700 font-bold" : "hover:bg-gray-100 text-gray-500"}`}
-                              >{v === "top" ? "▲" : v === "bottom" ? "▼" : "■"}</button>
-                            ))}
-                          </div>
-                          {/* Border Style */}
-                          <div className="border-t pt-2 mt-1">
-                            <div className="text-[9px] font-medium text-gray-500 mb-1">Border Style</div>
-                            <div className="flex gap-0.5 mb-1">
-                              {([
-                                {label:"□",t:1,r:1,b:1,l:1},
-                                {label:"═",t:1,r:0,b:1,l:0},
-                                {label:"▁",t:0,r:0,b:1,l:0},
-                                {label:"▏",t:0,r:0,b:0,l:1},
-                                {label:"⊘",t:0,r:0,b:0,l:0}
-                              ] as const).map((p,idx) => (
-                                <button key={idx} onClick={() => {
-                                  const obj = fcRef.current?.getActiveObject() as any;
-                                  if (!obj?._tableConfig) return;
-                                  const cfg = JSON.parse(obj._tableConfig);
-                                  const bw = cfg.borderWidth || 0.5;
-                                  const sr = sel ? sel.sr : tableEditCell.row, er = sel ? sel.er : tableEditCell.row;
-                                  const sc = sel ? sel.sc : tableEditCell.col, ec = sel ? sel.ec : tableEditCell.col;
-                                  for (let r = sr; r <= er; r++) for (let cc = sc; cc <= ec; cc++) {
-                                    if (cfg.cells[r]?.[cc]) {
-                                      cfg.cells[r][cc].borderTop = p.t * bw;
-                                      cfg.cells[r][cc].borderRight = p.r * bw;
-                                      cfg.cells[r][cc].borderBottom = p.b * bw;
-                                      cfg.cells[r][cc].borderLeft = p.l * bw;
-                                    }
-                                  }
-                                  rebuildTable(cfg);
-                                }} className={`flex-1 py-1 rounded text-[11px] hover:bg-gray-100 border ${idx===0?"font-bold":""}`}>{p.label}</button>
+                          <div className="space-y-2">
+                            {/* Colors & Weight */}
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1">
+                                <span className="text-[9px] text-gray-400">BG</span>
+                      <div className="w-5 h-5 border border-gray-200 rounded cursor-pointer p-0" style={{backgroundColor: cell.bgColor || "#ffffff"}} onClick={() => setTableCmykOpen(tableCmykOpen === "bg" ? null : "bg")} />
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className="text-[9px] text-gray-400">Text</span>
+                      <div className="w-5 h-5 border border-gray-200 rounded cursor-pointer p-0" style={{backgroundColor: cell.textColor || "#000000"}} onClick={() => setTableCmykOpen(tableCmykOpen === "text" ? null : "text")} />
+                              </div>
+                              <select value={cell.fontWeight || "normal"}
+                                onChange={e => updateAndRebuild("fontWeight", e.target.value)}
+                                className="flex-1 h-6 text-[9px] border border-gray-200 rounded px-1">
+                                <option value="normal">Regular</option>
+                                <option value="bold">Bold</option>
+                                <option value="300">Light</option>
+                                <option value="500">Medium</option>
+                                <option value="600">SemiBold</option>
+                                <option value="800">ExtraBold</option>
+                              </select>
+                            </div>
+
+                            {/* Size & Line Height */}
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <span className="text-[9px] text-gray-400 block mb-0.5">Size</span>
+                                <div className="flex items-center border border-gray-200 rounded overflow-hidden h-7">
+                                  <input type="number" min={6} max={200} step={1}
+                                    key={`fs-${tableEditCell.row}-${tableEditCell.col}-${cell.fontSize}`}
+                                    defaultValue={cell.fontSize || 14}
+                                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const v = parseInt((e.target as any).value); if (v >= 6 && v <= 200) updateAndRebuild("fontSize", v); (e.target as any).blur(); } }}
+                                    onBlur={e => { const v = parseInt(e.target.value); if (v >= 6 && v <= 200) updateAndRebuild("fontSize", v); }}
+                                    className="w-full h-full text-center text-[11px] border-none outline-none bg-transparent" />
+                                  <div className="flex flex-col border-l border-gray-200">
+                                    <button onClick={() => updateAndRebuild("fontSize", Math.min(200, (cell.fontSize || 14) + 1))}
+                                      className="w-5 h-3.5 bg-gray-50 hover:bg-gray-200 text-[8px] leading-none flex items-center justify-center border-b border-gray-100">&#9650;</button>
+                                    <button onClick={() => updateAndRebuild("fontSize", Math.max(6, (cell.fontSize || 14) - 1))}
+                                      className="w-5 h-3.5 bg-gray-50 hover:bg-gray-200 text-[8px] leading-none flex items-center justify-center">&#9660;</button>
+                                  </div>
+                                </div>
+                              </div>
+                              <div>
+                                <span className="text-[9px] text-gray-400 block mb-0.5">Line H</span>
+                                <div className="flex items-center border border-gray-200 rounded overflow-hidden h-7">
+                                  <input type="number" min={0.8} max={3} step={0.1}
+                                    key={`lh-${tableEditCell?.row}-${tableEditCell?.col}-${cell.lineHeight}`}
+                                    defaultValue={cell.lineHeight || 1.4}
+                                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const v = parseFloat((e.target as any).value); if (v >= 0.8 && v <= 3) updateAndRebuild("lineHeight", v); (e.target as any).blur(); } }}
+                                    onBlur={e => { const v = parseFloat(e.target.value); if (v >= 0.8 && v <= 3) updateAndRebuild("lineHeight", v); }}
+                                    className="w-full h-full text-center text-[11px] border-none outline-none bg-transparent" />
+                                  <div className="flex flex-col border-l border-gray-200">
+                                    <button onClick={() => updateAndRebuild("lineHeight", Math.min(3, parseFloat(((cell.lineHeight || 1.4) + 0.1).toFixed(1))))}
+                                      className="w-5 h-3.5 bg-gray-50 hover:bg-gray-200 text-[8px] leading-none flex items-center justify-center border-b border-gray-100">&#9650;</button>
+                                    <button onClick={() => updateAndRebuild("lineHeight", Math.max(0.8, parseFloat(((cell.lineHeight || 1.4) - 0.1).toFixed(1))))}
+                                      className="w-5 h-3.5 bg-gray-50 hover:bg-gray-200 text-[8px] leading-none flex items-center justify-center">&#9660;</button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Alignment */}
+                            <div className="grid grid-cols-6 gap-0.5">
+                              {(["left","center","right"] as const).map(a => (
+                                <button key={a} onClick={() => updateAndRebuild("textAlign", a)}
+                                  className={`h-6 rounded text-[9px] font-medium transition-colors ${cell.textAlign === a ? "bg-blue-100 text-blue-700 font-bold" : "bg-gray-50 hover:bg-gray-100 text-gray-500"}`}>
+                                  {a === "left" ? "L" : a === "right" ? "R" : "C"}</button>
+                              ))}
+                              {(["top","middle","bottom"] as const).map(v => (
+                                <button key={v} onClick={() => updateAndRebuild("verticalAlign", v)}
+                                  className={`h-6 rounded text-[9px] font-medium transition-colors ${cell.verticalAlign === v ? "bg-green-100 text-green-700 font-bold" : "bg-gray-50 hover:bg-gray-100 text-gray-500"}`}>
+                                  {v === "top" ? "T" : v === "bottom" ? "B" : "M"}</button>
                               ))}
                             </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[8px] text-gray-400">Width</span>
-                              <input type="range" min={0} max={4} step={0.5}
-                                value={cell.borderTop || 0}
-                                onChange={e => {
-                                  const obj = fcRef.current?.getActiveObject() as any;
-                                  if (!obj?._tableConfig) return;
-                                  const cfg = JSON.parse(obj._tableConfig);
-                                  const v = +e.target.value;
-                                  const sr2 = sel ? sel.sr : tableEditCell.row, er2 = sel ? sel.er : tableEditCell.row;
-                                  const sc2 = sel ? sel.sc : tableEditCell.col, ec2 = sel ? sel.ec : tableEditCell.col;
-                                  for (let r = sr2; r <= er2; r++) for (let cc = sc2; cc <= ec2; cc++) {
-                                    if (cfg.cells[r]?.[cc]) {
-                                      if (cfg.cells[r][cc].borderTop > 0) cfg.cells[r][cc].borderTop = v;
-                                      if (cfg.cells[r][cc].borderRight > 0) cfg.cells[r][cc].borderRight = v;
-                                      if (cfg.cells[r][cc].borderBottom > 0) cfg.cells[r][cc].borderBottom = v;
-                                      if (cfg.cells[r][cc].borderLeft > 0) cfg.cells[r][cc].borderLeft = v;
-                                    }
-                                  }
-                                  rebuildTable(cfg);
-                                }} className="flex-1 h-1.5" />
-                              <span className="text-[8px] text-gray-500 w-4">{cell.borderTop || 0}</span>
-                            </div>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-[8px] text-gray-400">Color</span>
-                              <input type="color" value={cell.cellBorderColor || "#000000"}
-                                onChange={e => updateAndRebuild("cellBorderColor", e.target.value)}
-                                className="w-6 h-5 border rounded cursor-pointer" />
-                              <span className="text-[8px] text-gray-500">{cell.cellBorderColor || "#000000"}</span>
-                            </div>
-                          </div>
-                          {/* Row/Col Resize */}
-                          <div className="border-t pt-2 mt-1">
-                            <div className="text-[9px] font-medium text-gray-500 mb-1">Row/Col Size</div>
-                            <div className="flex items-center gap-1 mb-1">
-                              <span className="text-[8px] text-gray-400 w-10">Row H</span>
-                              <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); cfg.rowHeights[tableEditCell.row] = Math.max(16, (cfg.rowHeights[tableEditCell.row]||32)-1); rebuildTable(cfg); }}
-                                className="w-7 h-7 rounded border text-sm hover:bg-gray-100 flex items-center justify-center select-none active:bg-gray-200">−</button>
-                              <input type="number" min={16} max={120} step={1}
-                                value={tc.rowHeights[tableEditCell.row] || 32}
-                                onChange={e => { const v = parseInt(e.target.value); if (isNaN(v)||v<16||v>120) return; const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); cfg.rowHeights[tableEditCell.row] = v; rebuildTable(cfg); }}
-                                className="w-14 text-center border rounded text-[11px] py-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                              <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); cfg.rowHeights[tableEditCell.row] = Math.min(120, (cfg.rowHeights[tableEditCell.row]||32)+1); rebuildTable(cfg); }}
-                                className="w-7 h-7 rounded border text-sm hover:bg-gray-100 flex items-center justify-center select-none active:bg-gray-200">+</button>
-                              <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); const avg = Math.round(cfg.rowHeights.reduce((a:number,b:number)=>a+b,0)/cfg.rows); cfg.rowHeights = cfg.rowHeights.map(()=>avg); rebuildTable(cfg); }}
-                                className="text-[7px] px-1.5 py-1 bg-gray-50 hover:bg-gray-100 rounded border ml-auto">Equal</button>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <span className="text-[8px] text-gray-400 w-10">Col W</span>
-                              <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); cfg.colWidths[tableEditCell.col] = Math.max(20, (cfg.colWidths[tableEditCell.col]||90)-1); rebuildTable(cfg); }}
-                                className="w-7 h-7 rounded border text-sm hover:bg-gray-100 flex items-center justify-center select-none active:bg-gray-200">−</button>
-                              <input type="number" min={20} max={300} step={1}
-                                value={tc.colWidths[tableEditCell.col] || 90}
-                                onChange={e => { const v = parseInt(e.target.value); if (isNaN(v)||v<20||v>300) return; const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); cfg.colWidths[tableEditCell.col] = v; rebuildTable(cfg); }}
-                                className="w-14 text-center border rounded text-[11px] py-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                              <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); cfg.colWidths[tableEditCell.col] = Math.min(300, (cfg.colWidths[tableEditCell.col]||90)+1); rebuildTable(cfg); }}
-                                className="w-7 h-7 rounded border text-sm hover:bg-gray-100 flex items-center justify-center select-none active:bg-gray-200">+</button>
-                              <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); const avg = Math.round(cfg.colWidths.reduce((a:number,b:number)=>a+b,0)/cfg.cols); cfg.colWidths = cfg.colWidths.map(()=>avg); rebuildTable(cfg); }}
-                                className="text-[7px] px-1.5 py-1 bg-gray-50 hover:bg-gray-100 rounded border ml-auto">Equal</button>
+
+                            {/* Borders */}
+                            <div className="pt-1.5 mt-0.5 border-t border-gray-100">
+                              <div className="flex items-center justify-between mb-1.5">
+                                <span className="text-[9px] font-semibold text-gray-600">Borders</span>
+                      <div className="w-4 h-4 border border-gray-200 rounded cursor-pointer p-0" style={{backgroundColor: cell.cellBorderColor || "#000000"}} onClick={() => setTableCmykOpen(tableCmykOpen === "border" ? null : "border")} />
+                              </div>
+                              <div className="space-y-1 mb-1.5">
+                                {(["Outer","Inner"] as const).map(type => {
+                                  const isOuter = type === "Outer";
+                                  const val = isOuter ? (tc.cells[0]?.[0]?.borderTop || 0.5) : (tc.cells[Math.min(1, tc.rows-1)]?.[0]?.borderTop || 0.5);
+                                  return (
+                                    <div key={type} className="flex items-center">
+                                      <span className="text-[9px] text-gray-400 w-10">{type}</span>
+                                      <div className="flex items-center border border-gray-200 rounded overflow-hidden h-6 flex-1">
+                                        <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); for (let r = 0; r < cfg.rows; r++) for (let c = 0; c < cfg.cols; c++) { const cl = cfg.cells[r]?.[c]; if (!cl) continue; if (cl.merged) continue; const rs = cl.rowSpan || 1; const cs = cl.colSpan || 1; if (isOuter) { if (r===0) cl.borderTop=Math.max(0.25,(cl.borderTop??0.5)-0.25); if (r+rs>=cfg.rows) cl.borderBottom=Math.max(0.25,(cl.borderBottom??0.5)-0.25); if (c===0) cl.borderLeft=Math.max(0.25,(cl.borderLeft??0.5)-0.25); if (c+cs>=cfg.cols) cl.borderRight=Math.max(0.25,(cl.borderRight??0.5)-0.25); } else { if (r>0) cl.borderTop=Math.max(0.25,(cl.borderTop??0.5)-0.25); if (r+rs<cfg.rows) cl.borderBottom=Math.max(0.25,(cl.borderBottom??0.5)-0.25); if (c>0) cl.borderLeft=Math.max(0.25,(cl.borderLeft??0.5)-0.25); if (c+cs<cfg.cols) cl.borderRight=Math.max(0.25,(cl.borderRight??0.5)-0.25); } } rebuildTable(cfg);
+                                        }} className="w-6 h-full bg-gray-50 hover:bg-gray-200 text-[10px] flex items-center justify-center">-</button>
+                                        <span className="flex-1 text-center text-[10px] font-mono">{val.toFixed(2)}</span>
+                                        <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); for (let r = 0; r < cfg.rows; r++) for (let c = 0; c < cfg.cols; c++) { const cl = cfg.cells[r]?.[c]; if (!cl) continue; if (cl.merged) continue; const rs = cl.rowSpan || 1; const cs = cl.colSpan || 1; if (isOuter) { if (r===0) cl.borderTop=Math.min(5,(cl.borderTop??0.5)+0.25); if (r+rs>=cfg.rows) cl.borderBottom=Math.min(5,(cl.borderBottom??0.5)+0.25); if (c===0) cl.borderLeft=Math.min(5,(cl.borderLeft??0.5)+0.25); if (c+cs>=cfg.cols) cl.borderRight=Math.min(5,(cl.borderRight??0.5)+0.25); } else { if (r>0) cl.borderTop=Math.min(5,(cl.borderTop??0.5)+0.25); if (r+rs<cfg.rows) cl.borderBottom=Math.min(5,(cl.borderBottom??0.5)+0.25); if (c>0) cl.borderLeft=Math.min(5,(cl.borderLeft??0.5)+0.25); if (c+cs<cfg.cols) cl.borderRight=Math.min(5,(cl.borderRight??0.5)+0.25); } } rebuildTable(cfg);
+                                        }} className="w-6 h-full bg-gray-50 hover:bg-gray-200 text-[10px] flex items-center justify-center">+</button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+                                {(["Top","Right","Bottom","Left"] as const).map(side => {
+                                  const prop = `border${side}` as "borderTop"|"borderRight"|"borderBottom"|"borderLeft";
+                                  const val = cell[prop] ?? 0.5;
+                                  return (
+                                    <div key={side} className="flex items-center">
+                                      <span className="text-[9px] text-gray-400 w-4 mr-0.5">{side[0]}</span>
+                                      <div className="flex items-center border border-gray-200 rounded overflow-hidden h-5 flex-1">
+                                        <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); const sr = sel ? sel.sr : tableEditCell.row, er = sel ? sel.er : tableEditCell.row; const sc = sel ? sel.sc : tableEditCell.col, ec = sel ? sel.ec : tableEditCell.col; for (let r = sr; r <= er; r++) for (let cc = sc; cc <= ec; cc++) { if (cfg.cells[r]?.[cc]) cfg.cells[r][cc][prop] = Math.max(0.25, (cfg.cells[r][cc][prop]??0.5) - 0.25); } rebuildTable(cfg);
+                                        }} className="w-5 h-full bg-gray-50 hover:bg-gray-200 text-[9px] flex items-center justify-center">-</button>
+                                        <span className="flex-1 text-center text-[9px] font-mono">{val.toFixed(2)}</span>
+                                        <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); const sr = sel ? sel.sr : tableEditCell.row, er = sel ? sel.er : tableEditCell.row; const sc = sel ? sel.sc : tableEditCell.col, ec = sel ? sel.ec : tableEditCell.col; for (let r = sr; r <= er; r++) for (let cc = sc; cc <= ec; cc++) { if (cfg.cells[r]?.[cc]) cfg.cells[r][cc][prop] = Math.min(5, (cfg.cells[r][cc][prop]??0.5) + 0.25); } rebuildTable(cfg);
+                                        }} className="w-5 h-full bg-gray-50 hover:bg-gray-200 text-[9px] flex items-center justify-center">+</button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
                           </div>
-                          {/* Row/Col actions */}
-                          <div className="flex gap-1 flex-wrap border-t pt-2">
-                            <button onClick={async () => { const { addRow } = await import("@/lib/table-engine"); await rebuildTable(addRow(tc, tableEditCell.row)); }}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Row/Col Size + Actions - always visible */}
+                    {(() => {
+                      const editRow = tableEditCell ? tableEditCell.row : 0;
+                      const editCol = tableEditCell ? tableEditCell.col : 0;
+                      return (
+                        <div className="border-t pt-2 mt-1 space-y-2">
+                          <div className="text-[9px] font-medium text-gray-500">Row / Col Size</div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[8px] text-gray-400 w-10">Row H</span>
+                            <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); cfg.rowHeights[editRow] = Math.max(16, (cfg.rowHeights[editRow]||32)-1); rebuildTable(cfg); }}
+                              className="w-7 h-7 rounded border text-sm hover:bg-gray-100 flex items-center justify-center">-</button>
+                            <input type="number" min={16} max={120} step={1}
+                              defaultValue={tc.rowHeights[editRow] || 32} key={`rh-${editRow}-${tc.rowHeights[editRow]}`}
+                              onKeyDown={e => { if (e.key === "Enter") { const v = parseInt((e.target as HTMLInputElement).value); if (!isNaN(v)&&v>=16&&v<=120) { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); cfg.rowHeights[editRow] = v; rebuildTable(cfg); } } }} onBlur={e => { const v = parseInt(e.target.value); if (!isNaN(v)&&v>=16&&v<=120) { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); cfg.rowHeights[editRow] = v; rebuildTable(cfg); } }}
+                              className="w-14 text-center border rounded text-[11px] py-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                            <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); cfg.rowHeights[editRow] = Math.min(120, (cfg.rowHeights[editRow]||32)+1); rebuildTable(cfg); }}
+                              className="w-7 h-7 rounded border text-sm hover:bg-gray-100 flex items-center justify-center">+</button>
+                            <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); const avg = Math.round(cfg.rowHeights.reduce((a:number,b:number)=>a+b,0)/cfg.rows); cfg.rowHeights = cfg.rowHeights.map(()=>avg); rebuildTable(cfg); }}
+                              className="text-[7px] px-1.5 py-1 bg-gray-50 hover:bg-gray-100 rounded border ml-auto">Equal</button>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[8px] text-gray-400 w-10">Col W</span>
+                            <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); cfg.colWidths[editCol] = Math.max(20, (cfg.colWidths[editCol]||90)-1); rebuildTable(cfg); }}
+                              className="w-7 h-7 rounded border text-sm hover:bg-gray-100 flex items-center justify-center">-</button>
+                            <input type="number" min={20} max={300} step={1}
+                              defaultValue={tc.colWidths[editCol] || 90} key={`cw-${editCol}-${tc.colWidths[editCol]}`}
+                              onKeyDown={e => { if (e.key === "Enter") { const v = parseInt((e.target as HTMLInputElement).value); if (!isNaN(v)&&v>=20&&v<=300) { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); cfg.colWidths[editCol] = v; rebuildTable(cfg); } } }} onBlur={e => { const v = parseInt(e.target.value); if (!isNaN(v)&&v>=20&&v<=300) { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); cfg.colWidths[editCol] = v; rebuildTable(cfg); } }}
+                              className="w-14 text-center border rounded text-[11px] py-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                            <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); cfg.colWidths[editCol] = Math.min(300, (cfg.colWidths[editCol]||90)+1); rebuildTable(cfg); }}
+                              className="w-7 h-7 rounded border text-sm hover:bg-gray-100 flex items-center justify-center">+</button>
+                            <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); const avg = Math.round(cfg.colWidths.reduce((a:number,b:number)=>a+b,0)/cfg.cols); cfg.colWidths = cfg.colWidths.map(()=>avg); rebuildTable(cfg); }}
+                              className="text-[7px] px-1.5 py-1 bg-gray-50 hover:bg-gray-100 rounded border ml-auto">Equal</button>
+                          </div>
+                          <div className="flex gap-1 flex-wrap">
+                            <button onClick={async () => { const { addRow } = await import("@/lib/table-engine"); await rebuildTable(addRow(tc, tableEditCell ? tableEditCell.row : 0)); }}
                               className="text-[9px] px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">+Row</button>
-                            <button onClick={async () => { const { addCol } = await import("@/lib/table-engine"); await rebuildTable(addCol(tc, tableEditCell.col)); }}
+                            <button onClick={async () => { const { addCol } = await import("@/lib/table-engine"); await rebuildTable(addCol(tc, tableEditCell ? tableEditCell.col : 0)); }}
                               className="text-[9px] px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">+Col</button>
-                            <button onClick={async () => { if (tc.rows <= 1) return; const { deleteRow } = await import("@/lib/table-engine"); await rebuildTable(deleteRow(tc, tableEditCell.row)); setTableEditCell(null); }}
+                            <button onClick={async () => { if (tc.rows <= 1) return; const { deleteRow } = await import("@/lib/table-engine"); await rebuildTable(deleteRow(tc, tableEditCell ? tableEditCell.row : 0)); setTableEditCell(null); }}
                               className="text-[9px] px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded">-Row</button>
-                            <button onClick={async () => { if (tc.cols <= 1) return; const { deleteCol } = await import("@/lib/table-engine"); await rebuildTable(deleteCol(tc, tableEditCell.col)); setTableEditCell(null); }}
+                            <button onClick={async () => { if (tc.cols <= 1) return; const { deleteCol } = await import("@/lib/table-engine"); await rebuildTable(deleteCol(tc, tableEditCell ? tableEditCell.col : 0)); setTableEditCell(null); }}
                               className="text-[9px] px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded">-Col</button>
                           </div>
                         </div>
@@ -2634,7 +2846,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             <div className="space-y-1.5 text-xs">
               {[
                 ["Ctrl+Z","Undo"],["Ctrl+Y","Redo"],["Ctrl+A","Select All"],["Delete","Delete selected"],
-                ["F1","Toggle shortcuts"],["Mouse wheel","Zoom"],
+                ["F1","Toggle shortcuts"],["Mouse wheel","Zoom"],["Space+Drag","Pan canvas"],["Middle+Drag","Pan canvas"],
               ].map(([k,d]) => (
                 <div key={k} className="flex justify-between">
                   <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] font-mono">{k}</kbd>

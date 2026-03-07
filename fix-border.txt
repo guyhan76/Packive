@@ -1,0 +1,101 @@
+                          {/* ── Borders ── */}
+                          <div className="pt-1.5 mt-0.5 border-t border-gray-100">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-[9px] font-semibold text-gray-600">Borders</span>
+                              <div className="flex items-center gap-1">
+                                <input type="color" value={cell.cellBorderColor || "#000000"}
+                                  onChange={e => updateAndRebuild("cellBorderColor", e.target.value)}
+                                  className="w-4 h-4 border border-gray-200 rounded cursor-pointer p-0" />
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-0 mb-1.5">
+                              <span className="text-[7px] text-gray-400 w-10">Outer</span>
+                              <button onClick={() => {
+                                const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return;
+                                const cfg = JSON.parse(obj._tableConfig); const {rows:R, cols:C} = cfg;
+                                for (let r=0;r<R;r++) for (let c=0;c<C;c++) {
+                                  const cl = cfg.cells[r][c]; if (cl.merged) continue;
+                                  if (r===0) cl.borderTop = Math.max(0, (cl.borderTop||0.5) - 0.25);
+                                  if (r+(cl.rowSpan||1)>=R) cl.borderBottom = Math.max(0, (cl.borderBottom||0.5) - 0.25);
+                                  if (c===0) cl.borderLeft = Math.max(0, (cl.borderLeft||0.5) - 0.25);
+                                  if (c+(cl.colSpan||1)>=C) cl.borderRight = Math.max(0, (cl.borderRight||0.5) - 0.25);
+                                }
+                                rebuildTable(cfg);
+                              }} className="w-5 h-5 rounded-l bg-gray-50 hover:bg-gray-200 border border-gray-200 text-[10px] flex items-center justify-center">-</button>
+                              <span className="w-7 h-5 text-[9px] font-mono text-center leading-5 border-t border-b border-gray-200 bg-white">{(tc.cells[0]?.[0]?.borderTop || 0.5).toFixed(1)}</span>
+                              <button onClick={() => {
+                                const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return;
+                                const cfg = JSON.parse(obj._tableConfig); const {rows:R, cols:C} = cfg;
+                                for (let r=0;r<R;r++) for (let c=0;c<C;c++) {
+                                  const cl = cfg.cells[r][c]; if (cl.merged) continue;
+                                  if (r===0) cl.borderTop = Math.min(5, (cl.borderTop||0.5) + 0.25);
+                                  if (r+(cl.rowSpan||1)>=R) cl.borderBottom = Math.min(5, (cl.borderBottom||0.5) + 0.25);
+                                  if (c===0) cl.borderLeft = Math.min(5, (cl.borderLeft||0.5) + 0.25);
+                                  if (c+(cl.colSpan||1)>=C) cl.borderRight = Math.min(5, (cl.borderRight||0.5) + 0.25);
+                                }
+                                rebuildTable(cfg);
+                              }} className="w-5 h-5 rounded-r bg-gray-50 hover:bg-gray-200 border border-gray-200 text-[10px] flex items-center justify-center">+</button>
+                            </div>
+                            <div className="flex items-center gap-0 mb-1.5">
+                              <span className="text-[7px] text-gray-400 w-10">Inner</span>
+                              <button onClick={() => {
+                                const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return;
+                                const cfg = JSON.parse(obj._tableConfig); const {rows:R, cols:C} = cfg;
+                                for (let r=0;r<R;r++) for (let c=0;c<C;c++) {
+                                  const cl = cfg.cells[r][c]; if (cl.merged) continue;
+                                  if (r>0) cl.borderTop = Math.max(0, (cl.borderTop||0.5) - 0.25);
+                                  if (r+(cl.rowSpan||1)<R) cl.borderBottom = Math.max(0, (cl.borderBottom||0.5) - 0.25);
+                                  if (c>0) cl.borderLeft = Math.max(0, (cl.borderLeft||0.5) - 0.25);
+                                  if (c+(cl.colSpan||1)<C) cl.borderRight = Math.max(0, (cl.borderRight||0.5) - 0.25);
+                                }
+                                rebuildTable(cfg);
+                              }} className="w-5 h-5 rounded-l bg-gray-50 hover:bg-gray-200 border border-gray-200 text-[10px] flex items-center justify-center">-</button>
+                              <span className="w-7 h-5 text-[9px] font-mono text-center leading-5 border-t border-b border-gray-200 bg-white">{(() => { const c01 = tc.cells[0]?.[1]; return c01 ? (c01.borderLeft||0.5).toFixed(1) : "0.5"; })()}</span>
+                              <button onClick={() => {
+                                const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return;
+                                const cfg = JSON.parse(obj._tableConfig); const {rows:R, cols:C} = cfg;
+                                for (let r=0;r<R;r++) for (let c=0;c<C;c++) {
+                                  const cl = cfg.cells[r][c]; if (cl.merged) continue;
+                                  if (r>0) cl.borderTop = Math.min(5, (cl.borderTop||0.5) + 0.25);
+                                  if (r+(cl.rowSpan||1)<R) cl.borderBottom = Math.min(5, (cl.borderBottom||0.5) + 0.25);
+                                  if (c>0) cl.borderLeft = Math.min(5, (cl.borderLeft||0.5) + 0.25);
+                                  if (c+(cl.colSpan||1)<C) cl.borderRight = Math.min(5, (cl.borderRight||0.5) + 0.25);
+                                }
+                                rebuildTable(cfg);
+                              }} className="w-5 h-5 rounded-r bg-gray-50 hover:bg-gray-200 border border-gray-200 text-[10px] flex items-center justify-center">+</button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                              {(["Top","Right","Bottom","Left"] as const).map(side => {
+                                const prop = ("border" + side) as "borderTop"|"borderRight"|"borderBottom"|"borderLeft";
+                                const val = cell[prop] || 0;
+                                return (
+                                  <div key={side} className="flex items-center gap-0">
+                                    <span className="text-[7px] text-gray-400 w-3 text-right mr-0.5">{side[0]}</span>
+                                    <button onClick={() => {
+                                      const obj = fcRef.current?.getActiveObject() as any;
+                                      if (!obj?._tableConfig) return;
+                                      const cfg = JSON.parse(obj._tableConfig);
+                                      const sr2 = sel ? sel.sr : tableEditCell.row, er2 = sel ? sel.er : tableEditCell.row;
+                                      const sc2 = sel ? sel.sc : tableEditCell.col, ec2 = sel ? sel.ec : tableEditCell.col;
+                                      for (let rr = sr2; rr <= er2; rr++) for (let cc2 = sc2; cc2 <= ec2; cc2++) {
+                                        if (cfg.cells[rr]?.[cc2]) cfg.cells[rr][cc2][prop] = Math.max(0, (cfg.cells[rr][cc2][prop]||0)-0.25);
+                                      }
+                                      rebuildTable(cfg);
+                                    }} className="w-4 h-4 rounded-l bg-gray-50 hover:bg-gray-200 border border-gray-200 text-[8px] flex items-center justify-center">-</button>
+                                    <span className="w-5 h-4 text-[8px] font-mono text-center leading-4 border-t border-b border-gray-200 bg-white">{val}</span>
+                                    <button onClick={() => {
+                                      const obj = fcRef.current?.getActiveObject() as any;
+                                      if (!obj?._tableConfig) return;
+                                      const cfg = JSON.parse(obj._tableConfig);
+                                      const sr2 = sel ? sel.sr : tableEditCell.row, er2 = sel ? sel.er : tableEditCell.row;
+                                      const sc2 = sel ? sel.sc : tableEditCell.col, ec2 = sel ? sel.ec : tableEditCell.col;
+                                      for (let rr = sr2; rr <= er2; rr++) for (let cc2 = sc2; cc2 <= ec2; cc2++) {
+                                        if (cfg.cells[rr]?.[cc2]) cfg.cells[rr][cc2][prop] = Math.min(5, (cfg.cells[rr][cc2][prop]||0)+0.25);
+                                      }
+                                      rebuildTable(cfg);
+                                    }} className="w-4 h-4 rounded-r bg-gray-50 hover:bg-gray-200 border border-gray-200 text-[8px] flex items-center justify-center">+</button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>

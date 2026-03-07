@@ -1,0 +1,20 @@
+ <div className="flex items-center gap-1 flex-wrap">
+                            <span className="text-[8px] text-gray-500">BG</span>
+                            <input type="color" value={cell.bgColor || "#ffffff"}
+                              onChange={e => updateAndRebuild("bgColor", e.target.value)}
+                              className="w-5 h-5 border rounded cursor-pointer" />
+                            <span className="text-[8px] text-gray-500">Text</span>
+                            <input type="color" value={cell.textColor || "#222222"}
+                              onChange={e => updateAndRebuild("textColor", e.target.value)}
+                              className="w-5 h-5 border rounded cursor-pointer" />
+                            <select value={cell.fontWeight || "normal"}
+                              onChange={e => updateAndRebuild("fontWeight", e.target.value)}
+                              className="text-[9px] border rounded px-0.5 py-0.5 w-14">
+                              <option value="normal">Normal</option>
+                              <option value="bold">Bold</option>
+                            </select>
+                            <input type="number" value={cell.fontSize || 12} min={6} max={72}
+                              onChange={e => { const v = +e.target.value; if (v >= 6 && v <= 72) updateAndRebuild("fontSize", v); }}
+                              className="w-12 text-center border rounded text-[10px] py-0.5" />
+                            <span className="text-[8px] text-gray-400">px</span>
+                          </div>

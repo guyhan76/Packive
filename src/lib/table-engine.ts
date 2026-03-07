@@ -15,7 +15,7 @@ export interface TableCellData {
   merged: boolean;
   mergedBy: [number, number] | null;
   borderTop: number; borderRight: number; borderBottom: number; borderLeft: number;
-  cellBorderColor: string;
+  cellBorderColor: string; lineHeight: number;
 }
 
 export interface TableConfig {
@@ -33,7 +33,7 @@ export function createDefaultCell(row: number, col: number): TableCellData {
     fontSize: 12, fontFamily: "Arial",
     fontWeight: "normal", fontStyle: "normal",
     textAlign: "center", verticalAlign: "middle",
-    padding: 4, merged: false, mergedBy: null, borderTop: 0, borderRight: 0, borderBottom: 0, borderLeft: 0, cellBorderColor: "#000000",
+    padding: 4, merged: false, mergedBy: null, borderTop: 0.5, borderRight: 0.5, borderBottom: 0.5, borderLeft: 0.5, cellBorderColor: "#000000", lineHeight: 1.4,
   };
 }
 
@@ -48,26 +48,26 @@ export function createTableConfig(rows: number, cols: number, cellW = 90, cellH 
     rows, cols,
     colWidths: Array(cols).fill(cellW),
     rowHeights: Array(rows).fill(cellH),
-    cells, borderColor: "#333333",
-    borderWidth: 0.5, outerBorderWidth: 1.5,
+    cells, borderColor: "#000000",
+    borderWidth: 0, outerBorderWidth: 0,
   };
 }
 
 // ─── Canvas2D로 표 이미지 생성 ───
-export function renderTableToDataURL(config: TableConfig, scale = 2): string {
+export function renderTableToDataURL(config: TableConfig, scale = 4): string {
   const { rows, cols, cells, colWidths, rowHeights, borderColor, borderWidth, outerBorderWidth } = config;
   const totalW = colWidths.reduce((a, b) => a + b, 0);
   const totalH = rowHeights.reduce((a, b) => a + b, 0);
 
   const canvas = document.createElement("canvas");
-  canvas.width = totalW * scale;
-  canvas.height = totalH * scale;
+  canvas.width = (totalW + 2) * scale;
+  canvas.height = (totalH + 2) * scale;
   const ctx = canvas.getContext("2d")!;
-  ctx.scale(scale, scale);
+  ctx.scale(scale, scale); ctx.translate(1, 1);
 
   // 1) White background
   ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, totalW, totalH);
+  ctx.fillRect(-1, -1, totalW + 2, totalH + 2);
 
   // 2) Cell backgrounds + text
   for (let r = 0; r < rows; r++) {
@@ -90,7 +90,7 @@ export function renderTableToDataURL(config: TableConfig, scale = 2): string {
       if (cell.text) {
         const fs = cell.fontSize;
         const style = cell.fontStyle === "italic" ? "italic " : "";
-        const weight = cell.fontWeight === "bold" ? "bold " : "";
+        const weight = cell.fontWeight ? cell.fontWeight + " " : "";
         ctx.font = `${style}${weight}${fs}px ${cell.fontFamily}`;
         ctx.fillStyle = cell.textColor;
 
@@ -100,89 +100,104 @@ export function renderTableToDataURL(config: TableConfig, scale = 2): string {
         else if (cell.textAlign === "right") { ctx.textAlign = "right"; tx = x + cw - cell.padding; }
         else { ctx.textAlign = "center"; tx = x + cw / 2; }
 
-        // vertical align
-        ctx.textBaseline = "middle";
-        let ty: number;
-        if (cell.verticalAlign === "top") ty = y + cell.padding + fs / 2;
-        else if (cell.verticalAlign === "bottom") ty = y + ch - cell.padding - fs / 2;
-        else ty = y + ch / 2;
-
-        ctx.fillText(cell.text, tx, ty, cw - cell.padding * 2);
+        // multi-line + vertical align (alphabetic baseline)
+        ctx.textBaseline = "alphabetic";
+        const textLines = cell.text.split("\n");
+        const lineH = fs * (cell.lineHeight || 1.4);
+        const metrics = ctx.measureText("Mg");
+        const ascent = metrics.fontBoundingBoxAscent ?? fs * 0.8;
+        const descent = metrics.fontBoundingBoxDescent ?? fs * 0.2;
+        const realH = ascent + descent;
+        const totalTextH = textLines.length > 1 ? (textLines.length - 1) * lineH + realH : realH;
+        let baseY: number;
+        if (cell.verticalAlign === "top") baseY = y + cell.padding + ascent;
+        else if (cell.verticalAlign === "bottom") baseY = y + ch - cell.padding - totalTextH + ascent;
+        else baseY = y + (ch - totalTextH) / 2 + ascent;
+        const maxW = cw - cell.padding * 2;
+        for (let li = 0; li < textLines.length; li++) {
+          ctx.fillText(textLines[li], tx, baseY + li * lineH, maxW > 0 ? maxW : undefined);
+        }
       }
     }
   }
 
 
-  // 2.5) Cell-specific borders
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const cell = cells[r][c];
-      if (cell.merged) continue;
-      const hasBorder = cell.borderTop > 0 || cell.borderRight > 0 || cell.borderBottom > 0 || cell.borderLeft > 0;
-      if (!hasBorder) continue;
-      let x = 0; for (let i = 0; i < c; i++) x += colWidths[i];
-      let y = 0; for (let i = 0; i < r; i++) y += rowHeights[i];
-      let cw = 0; for (let i = c; i < Math.min(c + cell.colSpan, cols); i++) cw += colWidths[i];
-      let ch = 0; for (let i = r; i < Math.min(r + cell.rowSpan, rows); i++) ch += rowHeights[i];
-      ctx.strokeStyle = cell.cellBorderColor || borderColor;
-      if (cell.borderTop > 0) { ctx.lineWidth = cell.borderTop; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + cw, y); ctx.stroke(); }
-      if (cell.borderBottom > 0) { ctx.lineWidth = cell.borderBottom; ctx.beginPath(); ctx.moveTo(x, y + ch); ctx.lineTo(x + cw, y + ch); ctx.stroke(); }
-      if (cell.borderLeft > 0) { ctx.lineWidth = cell.borderLeft; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + ch); ctx.stroke(); }
-      if (cell.borderRight > 0) { ctx.lineWidth = cell.borderRight; ctx.beginPath(); ctx.moveTo(x + cw, y); ctx.lineTo(x + cw, y + ch); ctx.stroke(); }
-    }
-  }
+  // 3) Draw grid lines - unified approach
+  const xPos: number[] = [0];
+  for (let c = 0; c < cols; c++) xPos.push(xPos[c] + colWidths[c]);
+  const yPos: number[] = [0];
+  for (let r = 0; r < rows; r++) yPos.push(yPos[r] + rowHeights[r]);
 
-  // 3) Grid lines - skip merged cell interiors
-  ctx.strokeStyle = borderColor;
-
-  // Helper: check if a grid line segment is inside a merged cell
-  const isMergedH = (r: number, c: number): boolean => {
-    // Is horizontal line at row r, column c inside a merged cell?
-    for (let mr = 0; mr < rows; mr++) {
-      for (let mc = 0; mc < cols; mc++) {
-        const cell = cells[mr][mc];
-        if (cell.merged || (cell.rowSpan <= 1 && cell.colSpan <= 1)) continue;
-        if (r > mr && r < mr + cell.rowSpan && c >= mc && c < mc + cell.colSpan) return true;
-      }
-    }
-    return false;
-  };
-  const isMergedV = (r: number, c: number): boolean => {
-    for (let mr = 0; mr < rows; mr++) {
-      for (let mc = 0; mc < cols; mc++) {
-        const cell = cells[mr][mc];
-        if (cell.merged || (cell.rowSpan <= 1 && cell.colSpan <= 1)) continue;
-        if (c > mc && c < mc + cell.colSpan && r >= mr && r < mr + cell.rowSpan) return true;
-      }
-    }
-    return false;
+  const masterId = (r: number, c: number): string => {
+    if (r < 0 || r >= rows || c < 0 || c >= cols) return `out-${r}-${c}`;
+    const cell = cells[r][c];
+    if (cell.merged && cell.mergedBy) return `${cell.mergedBy[0]}-${cell.mergedBy[1]}`;
+    return `${r}-${c}`;
   };
 
-  // inner horizontal lines (segment by segment)
-  for (let r = 1; r < rows; r++) {
-    let y = 0; for (let i = 0; i < r; i++) y += rowHeights[i];
-    ctx.lineWidth = borderWidth;
-    for (let c = 0; c < cols; c++) {
-      if (isMergedH(r, c)) continue;
-      let x = 0; for (let i = 0; i < c; i++) x += colWidths[i];
-      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + colWidths[c], y); ctx.stroke();
+  const snap = (v: number, lw: number): number => {
+    if (lw % 2 !== 0) return Math.round(v) + 0.5;
+    return Math.round(v);
+  };
+
+  const safeCell = (r: number, c: number) => {
+    if (r < 0 || r >= rows || c < 0 || c >= cols) return null;
+    const cell = cells[r][c];
+    if (cell.merged && cell.mergedBy) return cells[cell.mergedBy[0]]?.[cell.mergedBy[1]] || null;
+    return cell;
+  };
+
+  for (let r = 0; r <= rows; r++) {
+    const y = yPos[r];
+    let segStart = 0; let segLw = 0; let segColor = borderColor;
+    for (let c = 0; c <= cols; c++) {
+      let lw = 0; let color = borderColor; let skip = false;
+      if (c < cols) {
+        if (r > 0 && r < rows && masterId(r, c) === masterId(r - 1, c)) { skip = true; }
+        else {
+          const above = safeCell(r - 1, c);
+          const below = safeCell(r, c);
+          if (r === 0 && below) { lw = below.borderTop || 0.5; color = below.cellBorderColor || borderColor; }
+          else if (r === rows && above) { lw = above.borderBottom || 0.5; color = above.cellBorderColor || borderColor; }
+          else { const bB = below?.borderTop || 0; const bA = above?.borderBottom || 0; lw = Math.max(bB, bA); color = (bB >= bA ? below?.cellBorderColor : above?.cellBorderColor) || borderColor; }
+        }
+      }
+      if (c === cols || skip || lw !== segLw || color !== segColor) {
+        if (segLw > 0 && segStart < c) {
+          const sy = snap(y, segLw * 2); ctx.strokeStyle = segColor; ctx.lineWidth = Math.max(0.5, segLw * 2);
+          ctx.beginPath(); ctx.moveTo(xPos[segStart], sy); ctx.lineTo(xPos[c], sy); ctx.stroke();
+        }
+        segStart = c; segLw = skip ? 0 : lw; segColor = skip ? borderColor : color;
+        if (skip) segStart = c + 1;
+      }
     }
   }
 
-  // inner vertical lines (segment by segment)
-  for (let c = 1; c < cols; c++) {
-    let x = 0; for (let i = 0; i < c; i++) x += colWidths[i];
-    ctx.lineWidth = borderWidth;
-    for (let r = 0; r < rows; r++) {
-      if (isMergedV(r, c)) continue;
-      let y = 0; for (let i = 0; i < r; i++) y += rowHeights[i];
-      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + rowHeights[r]); ctx.stroke();
+  for (let c = 0; c <= cols; c++) {
+    const x = xPos[c];
+    let segStart = 0; let segLw = 0; let segColor = borderColor;
+    for (let r = 0; r <= rows; r++) {
+      let lw = 0; let color = borderColor; let skip = false;
+      if (r < rows) {
+        if (c > 0 && c < cols && masterId(r, c) === masterId(r, c - 1)) { skip = true; }
+        else {
+          const left = safeCell(r, c - 1);
+          const right = safeCell(r, c);
+          if (c === 0 && right) { lw = right.borderLeft || 0.5; color = right.cellBorderColor || borderColor; }
+          else if (c === cols && left) { lw = left.borderRight || 0.5; color = left.cellBorderColor || borderColor; }
+          else { const bR = right?.borderLeft || 0; const bL = left?.borderRight || 0; lw = Math.max(bR, bL); color = (bR >= bL ? right?.cellBorderColor : left?.cellBorderColor) || borderColor; }
+        }
+      }
+      if (r === rows || skip || lw !== segLw || color !== segColor) {
+        if (segLw > 0 && segStart < r) {
+          const sx = snap(x, segLw * 2); ctx.strokeStyle = segColor; ctx.lineWidth = Math.max(0.5, segLw * 2);
+          ctx.beginPath(); ctx.moveTo(sx, yPos[segStart]); ctx.lineTo(sx, yPos[r]); ctx.stroke();
+        }
+        segStart = r; segLw = skip ? 0 : lw; segColor = skip ? borderColor : color;
+        if (skip) segStart = r + 1;
+      }
     }
   }
-
-  // outer border
-  ctx.lineWidth = outerBorderWidth;
-  ctx.strokeRect(outerBorderWidth / 2, outerBorderWidth / 2, totalW - outerBorderWidth, totalH - outerBorderWidth);
 
   return canvas.toDataURL("image/png");
 }
@@ -227,6 +242,11 @@ export function mergeCells(config: TableConfig, sr: number, sc: number, er: numb
     }
   }
   anchor.text = mergedText;
+  // Preserve outer borders on merged cell
+  anchor.borderTop = anchor.borderTop || 0.5;
+  anchor.borderBottom = anchor.borderBottom || 0.5;
+  anchor.borderLeft = anchor.borderLeft || 0.5;
+  anchor.borderRight = anchor.borderRight || 0.5;
   return d;
 }
 
@@ -240,6 +260,7 @@ export function unmergeCells(config: TableConfig, row: number, col: number): Tab
     for (let c = col; c <= ec; c++) {
       if (r === row && c === col) continue;
       d.cells[r][c].merged = false;
+      d.cells[r][c].borderTop = 0.5; d.cells[r][c].borderRight = 0.5; d.cells[r][c].borderBottom = 0.5; d.cells[r][c].borderLeft = 0.5;
       d.cells[r][c].mergedBy = null;
     }
   }
