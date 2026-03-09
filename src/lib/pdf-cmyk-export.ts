@@ -284,6 +284,14 @@ export async function exportCmykPdf(
       if (obj._isGuideLayer) { obj.set({ visible: false }); }
     }
   });
+  // DEBUG: log visible objects after dielineOnly filtering
+  if (dielineOnly) {
+    const visibleObjs = objects.filter((o: any) => o.visible !== false);
+    console.log("[PDF-DBG] dielineOnly=true, total objects:", objects.length, "visible:", visibleObjs.length);
+    visibleObjs.forEach((o: any, i: number) => {
+      console.log("[PDF-DBG] visible[" + i + "]:", o.type, "name=" + (o.name || ""), "_isDieLine=" + !!o._isDieLine, "_isGuideLayer=" + !!o._isGuideLayer, "_isFoldLine=" + !!o._isFoldLine, "text=" + (o.text ? o.text.substring(0,30) : ""));
+    });
+  }
   canvas.renderAll();
 
   // Handle background color: remove before toSVG, add full-size rect to PDF later
@@ -291,8 +299,23 @@ export async function exportCmykPdf(
   canvas.backgroundColor = "";
   canvas.renderAll();
 
-  const svgString = canvas.toSVG({ width: canvasW, height: canvasH });
+  let svgString = canvas.toSVG({ width: canvasW, height: canvasH });
   console.log("[PDF] Step 3: SVG generated, length:", svgString.length);
+
+  // dielineOnly: forcefully remove all <text> and <tspan> elements from SVG
+  if (dielineOnly) {
+    const tempParser = new DOMParser();
+    const tempDoc = tempParser.parseFromString(svgString, "image/svg+xml");
+    const tempSvg = tempDoc.documentElement;
+    const textEls = tempSvg.querySelectorAll("text");
+    console.log("[PDF] dielineOnly: removing", textEls.length, "text elements from SVG");
+    textEls.forEach((el: Element) => el.parentNode?.removeChild(el));
+    // Also remove any elements with visibility:hidden or display:none that leaked through
+    const hiddenEls = tempSvg.querySelectorAll("[visibility=hidden], [display=none]");
+    hiddenEls.forEach((el: Element) => el.parentNode?.removeChild(el));
+    svgString = new XMLSerializer().serializeToString(tempSvg);
+    console.log("[PDF] dielineOnly: cleaned SVG length:", svgString.length);
+  }
 
   // Debug: show font-family usage in SVG
   const fontMatches = svgString.match(/font-family[^;"']*/g) || [];
