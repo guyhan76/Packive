@@ -1803,9 +1803,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     cv.discardActiveObject();
                     tableObjs.forEach((o: any) => cv.remove(o));
                     // Build new objects
-                    const { buildTableObjects } = await import("@/lib/table-engine");
-                    const F = await import("fabric");
-                    const objs = buildTableObjects(newCfg, F);
                     // 셀에 사용된 폰트를 미리 로드 후 렌더링
                     const usedFonts = new Set<string>();
                     newCfg.cells.forEach((row: any[]) => row.forEach((c: any) => { if (c.fontFamily && c.fontFamily !== "Inter") usedFonts.add(c.fontFamily); }));
@@ -1828,6 +1825,9 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                       }
                       console.log(`[TABLE] Font ready: ${ff}`, document.fonts.check(`16px "${ff}"`));
                     }
+                    const { buildTableObjects } = await import("@/lib/table-engine");
+                    const F = await import("fabric");
+                    const objs = buildTableObjects(newCfg, F);
                     objs.forEach((o: any) => {
                       o.set({ left: o.left + baseLeft, top: o.top + baseTop });
                       o._isTable = true;
