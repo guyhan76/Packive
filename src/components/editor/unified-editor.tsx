@@ -1809,7 +1809,10 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     const scrollEl = document.querySelector("[data-panel-scroll]") as HTMLElement;
                     const scrollTop = scrollEl?.scrollTop ?? 0;
                     setSelProps((p: any) => ({...p, _tableConfig: newCfg, _tableId: objs[0]?._tableId}));
-                    setTimeout(() => { if (scrollEl) scrollEl.scrollTop = scrollTop; }, 0);
+                    requestAnimationFrame(() => { 
+                      if (scrollEl) scrollEl.scrollTop = scrollTop;
+                      requestAnimationFrame(() => { if (scrollEl) scrollEl.scrollTop = scrollTop; });
+                    });
                     if (!loadingRef.current) pushHistory();
                     refreshLayers();
                   } catch (err: any) {
