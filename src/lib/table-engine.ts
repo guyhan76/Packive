@@ -365,7 +365,7 @@ export async function testMinimalTable(FabricModule: any): Promise<any[]> {
     top: 4,
     width: 92,
     fontSize: 14,
-    fontFamily: "Arial",
+    fontFamily: "Inter",
     fill: "#000000",
     textAlign: "center",
     selectable: false,

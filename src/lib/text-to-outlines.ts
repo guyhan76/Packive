@@ -52,8 +52,8 @@ async function loadFont(family: string, weight: string): Promise<any | null> {
     "Georgia-Bold__bold": "/fonts/georgiab.ttf",
     "Malgun Gothic__normal": "/fonts/malgun.ttf",
     "Malgun Gothic__bold": "/fonts/malgunbd.ttf",
-    "Inter__normal": "/fonts/NotoSansKR-Regular.ttf",
-    "Inter__bold": "/fonts/NotoSansKR-Bold.ttf",
+    "Inter__normal": "/fonts/Inter-Regular.ttf",
+    "Inter__bold": "/fonts/Inter-Bold.ttf",
   };
 
   for (const tryKey of [cacheKey, normKey]) {
