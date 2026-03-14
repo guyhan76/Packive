@@ -311,6 +311,22 @@ export async function exportCmykPdf(
   let svgString = canvas.toSVG({ width: canvasW, height: canvasH });
   console.log("[PDF] Step 3: SVG generated, length:", svgString.length);
   // DEBUG: SVG에서 표 텍스트 path 확인
+  // DEBUG: SVG를 다운로드하여 직접 확인
+  try {
+    const svgBlob = new Blob([svgString], { type: "image/svg+xml" });
+    const svgUrl = URL.createObjectURL(svgBlob);
+    const svgLink = document.createElement("a");
+    svgLink.href = svgUrl; svgLink.download = "debug-table-export.svg"; svgLink.click();
+    URL.revokeObjectURL(svgUrl);
+    console.log("[PDF-DBG] SVG saved as debug-table-export.svg");
+  } catch(e) { console.error("[PDF-DBG] SVG save error:", e); }
+  // DEBUG: SVG에서 text 요소 샘플 출력
+  const dbgParser = new DOMParser();
+  const dbgDoc = dbgParser.parseFromString(svgString, "image/svg+xml");
+  const dbgTexts = dbgDoc.querySelectorAll("text");
+  dbgTexts.forEach((t, i) => {
+    if (i < 3) console.log("[PDF-DBG] text[" + i + "]:", t.outerHTML.substring(0, 200));
+  });
   const pathCount = (svgString.match(/<path /g) || []).length;
   const textCount = (svgString.match(/<text[\s>]/g) || []).length;
   const tspanCount = (svgString.match(/<tspan[\s>]/g) || []).length;
