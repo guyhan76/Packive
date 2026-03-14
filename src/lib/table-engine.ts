@@ -384,3 +384,118 @@ export async function testMinimalTable(FabricModule: any): Promise<any[]> {
 
   return objects;
 }
+// === Phase 1 Step 2: Independent object table builder ===
+export function buildTableObjects(config: TableConfig, FabricModule: any): any[] {
+  const F = FabricModule;
+  const { rows, cols, cells, colWidths, rowHeights, borderColor, borderWidth, outerBorderWidth } = config;
+  const totalW = colWidths.reduce((a: number, b: number) => a + b, 0);
+  const totalH = rowHeights.reduce((a: number, b: number) => a + b, 0);
+  const tableId = `table_${Date.now()}`;
+
+  // Cumulative positions
+  const cumX: number[] = [0];
+  for (let i = 0; i < cols; i++) cumX.push(cumX[i] + colWidths[i]);
+  const cumY: number[] = [0];
+  for (let i = 0; i < rows; i++) cumY.push(cumY[i] + rowHeights[i]);
+
+  const objects: any[] = [];
+  const meta = (obj: any, role: string, r?: number, c?: number) => {
+    (obj as any)._tableId = tableId;
+    (obj as any)._tableRole = role;
+    if (r !== undefined) (obj as any)._tableRow = r;
+    if (c !== undefined) (obj as any)._tableCol = c;
+    return obj;
+  };
+
+  // 1) White background
+  objects.push(meta(new F.Rect({
+    left: 0, top: 0, width: totalW, height: totalH,
+    fill: "#ffffff", stroke: "transparent", strokeWidth: 0,
+    selectable: false, evented: false,
+  }), "bg"));
+
+  // 2) Cell backgrounds + text
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cell = cells[r]?.[c];
+      if (!cell || cell.merged) continue;
+      const cx = cumX[c];
+      const cy = cumY[r];
+      const colSpan = cell.colSpan || 1;
+      const rowSpan = cell.rowSpan || 1;
+      let cw = 0;
+      for (let i = c; i < Math.min(c + colSpan, cols); i++) cw += colWidths[i];
+      let ch = 0;
+      for (let i = r; i < Math.min(r + rowSpan, rows); i++) ch += rowHeights[i];
+      const bg = cell.backgroundColor || "#ffffff";
+      const padding = cell.padding ?? 4;
+
+      // Cell background (only if not white)
+      if (bg.toLowerCase() !== "#ffffff" && bg !== "transparent") {
+        objects.push(meta(new F.Rect({
+          left: cx, top: cy, width: cw, height: ch,
+          fill: bg, stroke: "transparent", strokeWidth: 0,
+          selectable: false, evented: false,
+        }), "cell", r, c));
+      }
+
+      // Cell text
+      const text = cell.text || "";
+      if (text.trim()) {
+        const tb = new F.Textbox(text, {
+          left: cx + padding, top: cy + padding,
+          width: cw - padding * 2,
+          fontSize: cell.fontSize ?? 14,
+          fontFamily: cell.fontFamily || "Arial",
+          fontWeight: cell.fontWeight || "normal",
+          fontStyle: cell.fontStyle || "normal",
+          fill: cell.textColor || "#000000",
+          textAlign: cell.textAlign || "center",
+          splitByGrapheme: true,
+          selectable: false, evented: false,
+          stroke: "transparent", strokeWidth: 0,
+        });
+        // Vertical align
+        const vAlign = cell.verticalAlign || "middle";
+        const textH = tb.calcTextHeight ? tb.calcTextHeight() : (tb.height || 16);
+        if (vAlign === "middle") tb.set({ top: cy + (ch - textH) / 2 });
+        else if (vAlign === "bottom") tb.set({ top: cy + ch - textH - padding });
+        objects.push(meta(tb, "text", r, c));
+      }
+    }
+  }
+
+  // 3) Grid borders as thin filled Rects
+  const bw = borderWidth ?? 1;
+  const obw = outerBorderWidth ?? bw;
+  const bc = borderColor || "#000000";
+
+  // Horizontal lines (rows + 1)
+  for (let r = 0; r <= rows; r++) {
+    const y = cumY[r];
+    const t = (r === 0 || r === rows) ? obw : bw;
+    if (t > 0) {
+      objects.push(meta(new F.Rect({
+        left: 0, top: y - t / 2, width: totalW, height: t,
+        fill: bc, stroke: "transparent", strokeWidth: 0,
+        selectable: false, evented: false,
+      }), "hline"));
+    }
+  }
+
+  // Vertical lines (cols + 1)
+  for (let c = 0; c <= cols; c++) {
+    const x = cumX[c];
+    const t = (c === 0 || c === cols) ? obw : bw;
+    if (t > 0) {
+      objects.push(meta(new F.Rect({
+        left: x - t / 2, top: 0, width: t, height: totalH,
+        fill: bc, stroke: "transparent", strokeWidth: 0,
+        selectable: false, evented: false,
+      }), "vline"));
+    }
+  }
+
+  console.log(`[TABLE] buildTableObjects: ${objects.length} objects, tableId=${tableId}, ${totalW}x${totalH}`);
+  return objects;
+}
