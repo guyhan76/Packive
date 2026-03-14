@@ -1208,6 +1208,39 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       setSelectedFont("Inter");
       setFSize(24);
     });
+    
+    // Init _prevLeft/_prevTop when table bg is selected
+    c.on("selection:created", (e: any) => {
+      const obj = e.selected?.[0];
+      if (obj?._tableId && obj._tableRole === "bg") {
+        obj._prevLeft = obj.left;
+        obj._prevTop = obj.top;
+      }
+    });
+    // === Table group move: drag bg moves all table objects ===
+    c.on("object:moving", (e: any) => {
+      const obj = e.target;
+      if (!obj?._tableId || obj._tableRole !== "bg") return;
+      const tableId = obj._tableId;
+      const dx = obj.left - (obj._prevLeft ?? obj.left);
+      const dy = obj.top - (obj._prevTop ?? obj.top);
+      if (dx === 0 && dy === 0) return;
+      c.getObjects().forEach((o: any) => {
+        if (o._tableId === tableId && o !== obj) {
+          o.set({ left: o.left + dx, top: o.top + dy });
+          o.setCoords();
+        }
+      });
+      obj._prevLeft = obj.left;
+      obj._prevTop = obj.top;
+    });
+    c.on("object:modified", (e: any) => {
+      const obj = e.target;
+      if (obj?._tableId) {
+        delete obj._prevLeft;
+        delete obj._prevTop;
+      }
+    });
     c.on("mouse:down", () => { setTimeout(() => { const props = getSelectedProps(); if (props) { setSelProps(props); if (props._isTable && props._tableConfig) { setTableEditCell(prev => prev || {row: 0, col: 0}); } } }, 50); });
     c.on("object:modified", (e: any) => {
       const t = e.target;
