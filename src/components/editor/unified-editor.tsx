@@ -1797,7 +1797,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                   try {
                     const cv = fcRef.current!;
                     const obj = cv.getActiveObject() as any;
-                    if (!obj) return;
+                    if (!obj) { console.warn("[TABLE] rebuildTable: no active object!"); _rebuildLock.current = false; return; }
                     const tableId = obj._tableId;
                     // Find all objects belonging to this table
                     const tableObjs = tableId
@@ -1809,7 +1809,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     const baseTop = bgObj.top || 0;
                     // Remove all old table objects
                     cv.discardActiveObject();
-                    tableObjs.forEach((o: any) => cv.remove(o));
+                    tableObjs.forEach((o: any) => cv.remove(o)); console.log("[TABLE] rebuildTable: removed", tableObjs.length, "objects, tableId:", tableId);
                     // Build new objects
                     const { buildTableObjects } = await import("@/lib/table-engine");
                     const F = await import("fabric");
@@ -1824,7 +1824,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     // Select the background object for continued editing
                     const newBg = objs.find((o: any) => o._tableRole === "bg");
                     if (newBg) cv.setActiveObject(newBg);
-                    cv.requestRenderAll();
+                    cv.requestRenderAll(); console.log("[TABLE] rebuildTable: added", objs.length, "new objects");
                     setSelProps((p: any) => ({...p, _tableConfig: newCfg, _tableId: objs[0]?._tableId}));
                     if (!loadingRef.current) pushHistory();
                     refreshLayers();
