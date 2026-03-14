@@ -464,7 +464,7 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
           splitByGrapheme: true,
           originX: "left", originY: "top",
           selectable: false, evented: false,
-          stroke: "transparent", strokeWidth: 0,
+          
         });
         // Vertical align
         const vAlign = cell.verticalAlign || "middle";
