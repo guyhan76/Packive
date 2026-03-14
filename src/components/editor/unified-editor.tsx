@@ -1729,7 +1729,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           </div>
 
           {/* Tab content */}
-          <div className="flex-1 overflow-y-auto p-3">
+          <div className="flex-1 overflow-y-auto p-3" data-panel-scroll>
 
             {/* ─── Properties Tab ─── */}
             {rightTab === "properties" && (
@@ -1805,7 +1805,11 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     const newBg = objs.find((o: any) => o._tableRole === "bg");
                     if (newBg) cv.setActiveObject(newBg);
                     cv.requestRenderAll();
+                    // Preserve scroll position during re-render
+                    const scrollEl = document.querySelector("[data-panel-scroll]") as HTMLElement;
+                    const scrollTop = scrollEl?.scrollTop ?? 0;
                     setSelProps((p: any) => ({...p, _tableConfig: newCfg, _tableId: objs[0]?._tableId}));
+                    setTimeout(() => { if (scrollEl) scrollEl.scrollTop = scrollTop; }, 0);
                     if (!loadingRef.current) pushHistory();
                     refreshLayers();
                   } catch (err: any) {
