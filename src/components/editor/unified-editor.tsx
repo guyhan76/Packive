@@ -1604,15 +1604,21 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                   const cv = fcRef.current;
                   if (!cv) return;
                   const F = await import("fabric");
+                  // Remove previous test objects
+                  const toRemove = cv.getObjects().filter((o: any) => o._tableId);
+                  toRemove.forEach((o: any) => cv.remove(o));
                   const { createTableConfig, buildTableObjects } = await import("@/lib/table-engine");
                   const config = createTableConfig(2, 2, 100, 50);
                   const objs = buildTableObjects(config, F);
                   const offsetX = Math.floor(cv.getWidth() / 2 - 100);
                   const offsetY = Math.floor(cv.getHeight() / 2 - 50);
-                  objs.forEach((o: any) => { o.set({ left: o.left + offsetX, top: o.top + offsetY }); cv.add(o); });
+                  objs.forEach((o: any) => {
+                    o.set({ left: o.left + offsetX, top: o.top + offsetY });
+                    cv.add(o);
+                  });
                   cv.requestRenderAll();
-                  console.log("[TABLE-TEST] 2x2 table added at", offsetX, offsetY);
-                  console.log("[TABLE-TEST] objects:", objs.length);
+                  console.log("[TABLE-TEST] 2x2 table added at", offsetX, offsetY, "total:", objs.length);
+                  objs.forEach((o: any, i: number) => console.log(`[TABLE-TEST] obj[${i}]: role=${o._tableRole} left=${o.left} top=${o.top} w=${o.width} h=${o.height}`));
                 }} className="w-full py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700 transition-colors mb-2">
                   Phase1 Test (2x2 Table)
                 </button>

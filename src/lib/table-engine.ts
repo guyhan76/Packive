@@ -49,7 +49,7 @@ export function createTableConfig(rows: number, cols: number, cellW = 90, cellH 
     colWidths: Array(cols).fill(cellW),
     rowHeights: Array(rows).fill(cellH),
     cells, borderColor: "#000000",
-    borderWidth: 0, outerBorderWidth: 0,
+    borderWidth: 1, outerBorderWidth: 1,
   };
 }
 
@@ -411,6 +411,7 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
   objects.push(meta(new F.Rect({
     left: 0, top: 0, width: totalW, height: totalH,
     fill: "#ffffff", stroke: "transparent", strokeWidth: 0,
+    originX: "left", originY: "top",
     selectable: false, evented: false,
   }), "bg"));
 
@@ -427,7 +428,7 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
       for (let i = c; i < Math.min(c + colSpan, cols); i++) cw += colWidths[i];
       let ch = 0;
       for (let i = r; i < Math.min(r + rowSpan, rows); i++) ch += rowHeights[i];
-      const bg = cell.backgroundColor || "#ffffff";
+      const bg = cell.bgColor || "#ffffff";
       const padding = cell.padding ?? 4;
 
       // Cell background (only if not white)
@@ -435,6 +436,7 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
         objects.push(meta(new F.Rect({
           left: cx, top: cy, width: cw, height: ch,
           fill: bg, stroke: "transparent", strokeWidth: 0,
+          originX: "left", originY: "top",
           selectable: false, evented: false,
         }), "cell", r, c));
       }
@@ -452,6 +454,7 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
           fill: cell.textColor || "#000000",
           textAlign: cell.textAlign || "center",
           splitByGrapheme: true,
+          originX: "left", originY: "top",
           selectable: false, evented: false,
           stroke: "transparent", strokeWidth: 0,
         });
@@ -478,6 +481,7 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
       objects.push(meta(new F.Rect({
         left: 0, top: y - t / 2, width: totalW, height: t,
         fill: bc, stroke: "transparent", strokeWidth: 0,
+        originX: "left", originY: "top",
         selectable: false, evented: false,
       }), "hline"));
     }
@@ -491,6 +495,7 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
       objects.push(meta(new F.Rect({
         left: x - t / 2, top: 0, width: t, height: totalH,
         fill: bc, stroke: "transparent", strokeWidth: 0,
+        originX: "left", originY: "top",
         selectable: false, evented: false,
       }), "vline"));
     }
