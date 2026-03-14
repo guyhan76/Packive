@@ -1806,28 +1806,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     // 셀에 사용된 폰트를 미리 로드 후 렌더링
                     const usedFonts = new Set<string>();
                     newCfg.cells.forEach((row: any[]) => row.forEach((c: any) => { if (c.fontFamily && c.fontFamily !== "Inter") usedFonts.add(c.fontFamily); }));
-                    for (const ff of usedFonts) {
-                      if (!document.fonts.check(`16px "${ff}"`)) {
-                        try {
-                          const cssUrl = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(ff)}:wght@400;700&display=swap`;
-                          const resp = await fetch(cssUrl, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" } });
-                          const cssText = await resp.text();
-                          const blocks = cssText.match(/@font-face\s*\{[^}]+\}/g) || [];
-                          for (const block of blocks) {
-                            const urlM = block.match(/url\((https:\/\/[^)]+)\)/);
-                            if (!urlM) continue;
-                            const wM = block.match(/font-weight:\s*(\d+)/);
-                            const face = new FontFace(ff, `url(${urlM[1]})`, { weight: wM?wM[1]:"400" });
-                            await face.load();
-                            document.fonts.add(face);
-                          }
-                        } catch(e) { console.warn("[TABLE] Font load failed:", ff); }
-                      }
-                      console.log(`[TABLE] Font ready: ${ff}`, document.fonts.check(`16px "${ff}"`));
-                    }
-                    const { buildTableObjects } = await import("@/lib/table-engine");
-                    const F = await import("fabric");
-                    const objs = buildTableObjects(newCfg, F);
                     objs.forEach((o: any) => {
                       o.set({ left: o.left + baseLeft, top: o.top + baseTop });
                       o._isTable = true;
