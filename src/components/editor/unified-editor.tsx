@@ -579,6 +579,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       });
 
       fcRef.current = canvas;
+    (window as any).__fc = canvas; // DEBUG
       setCanvasReady(true);
       canvas.fireRightClick = true;
       canvas.stopContextMenu = true;
