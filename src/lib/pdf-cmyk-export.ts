@@ -299,6 +299,15 @@ export async function exportCmykPdf(
   canvas.backgroundColor = "";
   canvas.renderAll();
 
+  // DEBUG: 표 객체 상태 확인
+  const tableObjsDbg = objects.filter((o: any) => o._tableId);
+  console.log("[PDF] Total objects:", objects.length, "Table objects:", tableObjsDbg.length);
+  tableObjsDbg.forEach((o: any) => console.log("[PDF-TBL]", o.type, "role=" + (o._tableRole || "?"), "visible=" + (o.visible !== false), "fill=" + (o.fill || "none"), "text=" + (o.text ? o.text.substring(0,20) : "")));
+  // 표 객체가 없으면 _tableId 대신 다른 속성 확인
+  if (tableObjsDbg.length === 0) {
+    const allTypes = objects.map((o: any) => o.type + "(" + (o.name || "") + ")").join(", ");
+    console.log("[PDF-TBL] No _tableId found. All objects:", allTypes);
+  }
   let svgString = canvas.toSVG({ width: canvasW, height: canvasH });
   console.log("[PDF] Step 3: SVG generated, length:", svgString.length);
 
