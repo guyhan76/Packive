@@ -1965,18 +1965,32 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                               <span className="text-gray-400">▼</span>
                             </button>
                             {selProps._tableFontOpen && (
-                              <div className="absolute z-50 w-full bg-white border rounded-lg shadow-lg max-h-48 flex flex-col mt-0.5">
-                                <input type="text" placeholder="Search fonts..." autoFocus
-                                  value={fontSearch} onChange={e => setFontSearch(e.target.value)}
-                                  className="border-b px-2 py-1.5 text-[10px] shrink-0 focus:outline-none" />
-                                <div className="overflow-auto">
-                                  {googleFonts.filter(f => !fontSearch || f.toLowerCase().includes(fontSearch.toLowerCase())).slice(0, 80).map(f => (
-                                    <button key={f} onClick={() => { loadGoogleFont(f); updateAndRebuild("fontFamily", f); setSelProps((p:any) => ({...p, _tableFontOpen: false})); setFontSearch(""); }}
-                                      className={`w-full text-left px-2 py-1.5 text-[10px] hover:bg-blue-50 ${(cell.fontFamily||"Inter")===f?"bg-blue-100 font-bold":""}`}
-                                      style={{fontFamily: f}}>{f}</button>
-                                  ))}
-                                </div>
-                              </div>
+                               <div className="absolute z-50 w-full bg-white border rounded-lg shadow-lg max-h-60 flex flex-col mt-0.5">
+                                 <input type="text" placeholder="Search fonts..." autoFocus
+                                   value={fontSearch} onChange={e => setFontSearch(e.target.value)}
+                                   className="border-b px-2 py-1.5 text-[10px] shrink-0 focus:outline-none" />
+                                 <div className="flex border-b shrink-0">
+                                   {(["all","en","ko","ja"] as const).map(cat => (
+                                     <button key={cat} onClick={() => setFontCategory(cat)}
+                                       className={`flex-1 py-1 text-[9px] font-medium ${fontCategory===cat?"text-blue-600 border-b-2 border-blue-600":"text-gray-400 hover:text-gray-600"}`}>
+                                       {cat==="all"?"All":cat==="en"?"English":cat==="ko"?"한국어":cat==="ja"?"日本語":cat}</button>
+                                   ))}
+                                 </div>
+                                 <div className="overflow-auto">
+                                   {(() => {
+                                     let list = googleFonts;
+                                     if (fontCategory === "ko") list = koFonts.length > 0 ? koFonts : ["Noto Sans KR","Black Han Sans","Gothic A1","Nanum Gothic","Nanum Myeongjo","Do Hyeon","Jua","Sunflower","Gaegu","Gugi","Song Myung","Gamja Flower","Nanum Brush Script","Nanum Pen Script","Poor Story","Stylish","Cute Font","Hi Melody","East Sea Dokdo","Dokdo","Kirang Haerang","Yeon Sung","Black And White Picture"];
+                                     if (fontCategory === "ja") list = jaFonts.length > 0 ? jaFonts : ["Noto Sans JP","Noto Serif JP","M PLUS Rounded 1c","M PLUS 1p","Kosugi Maru","Kosugi","Sawarabi Mincho","Sawarabi Gothic","Shippori Mincho","Zen Maru Gothic","Zen Kaku Gothic New","Hina Mincho","Dela Gothic One"];
+                                     if (fontCategory === "en") list = googleFonts.filter(f => !koFonts.includes(f) && !jaFonts.includes(f));
+                                     const filtered = list.filter(f => !fontSearch || f.toLowerCase().includes(fontSearch.toLowerCase())).slice(0, 100);
+                                     return filtered.map(f => (
+                                       <button key={f} onClick={() => { loadGoogleFont(f); updateAndRebuild("fontFamily", f); setSelProps((p:any) => ({...p, _tableFontOpen: false})); setFontSearch(""); }}
+                                         className={`w-full text-left px-2 py-1.5 text-[10px] hover:bg-blue-50 ${(cell.fontFamily||"Inter")===f?"bg-blue-100 font-bold":""}`}
+                                         style={{fontFamily: f}}>{f}</button>
+                                     ));
+                                   })()}
+                                 </div>
+                               </div>
                             )}
                           </div>
                           <div className="space-y-2">
