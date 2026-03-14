@@ -1787,8 +1787,10 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                       : [obj];
                     // Get position from first bg object or active object
                     const bgObj = tableObjs.find((o: any) => o._tableRole === "bg") || obj;
-                    const baseLeft = bgObj.left || 0;
-                    const baseTop = bgObj.top || 0;
+                    // bg has negative offset for border overflow, find a hline or vline for true origin
+                    const refObj = tableObjs.find((o: any) => o._tableRole === "hline") || bgObj;
+                    const baseLeft = refObj === bgObj ? (bgObj.left || 0) : Math.min(...tableObjs.filter((o: any) => o._tableRole === "hline").map((o: any) => o.left));
+                    const baseTop = refObj === bgObj ? (bgObj.top || 0) : Math.min(...tableObjs.filter((o: any) => o._tableRole === "hline").map((o: any) => o.top));
                     // Remove all old table objects
                     cv.discardActiveObject();
                     tableObjs.forEach((o: any) => cv.remove(o));
