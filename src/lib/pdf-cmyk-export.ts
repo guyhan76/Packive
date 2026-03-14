@@ -310,6 +310,11 @@ export async function exportCmykPdf(
   }
   let svgString = canvas.toSVG({ width: canvasW, height: canvasH });
   console.log("[PDF] Step 3: SVG generated, length:", svgString.length);
+  // DEBUG: SVG에서 표 텍스트 path 확인
+  const pathCount = (svgString.match(/<path /g) || []).length;
+  const textCount = (svgString.match(/<text[\s>]/g) || []).length;
+  const tspanCount = (svgString.match(/<tspan[\s>]/g) || []).length;
+  console.log("[PDF-DBG] SVG before outline: paths=" + pathCount + " texts=" + textCount + " tspans=" + tspanCount);
 
   // dielineOnly: forcefully remove all <text> and <tspan> elements from SVG
   if (dielineOnly) {
@@ -403,6 +408,14 @@ export async function exportCmykPdf(
   const { convertTextToOutlines } = await import("./text-to-outlines");
   const outlineCount = await convertTextToOutlines(svgEl);
   console.log("[PDF] Step 3b: Text converted to outlines:", outlineCount, "elements");
+  const finalSvg = new XMLSerializer().serializeToString(svgEl);
+  const pathCountAfter = (finalSvg.match(/<path /g) || []).length;
+  const textCountAfter = (finalSvg.match(/<text[\s>]/g) || []).length;
+  console.log("[PDF-DBG] SVG after outline: paths=" + pathCountAfter + " texts=" + textCountAfter);
+  // fill 색상 확인
+  const fillMatches = finalSvg.match(/fill="([^"]+)"/g) || [];
+  const uniqueFills = [...new Set(fillMatches)].slice(0, 15);
+  console.log("[PDF-DBG] Unique fills:", uniqueFills.join(", "));
 
   svgEl.setAttribute("width", String(canvasW));
   svgEl.setAttribute("height", String(canvasH));

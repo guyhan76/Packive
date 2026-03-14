@@ -1075,7 +1075,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
         c.requestRenderAll();
         const link = document.createElement("a");
         link.href = dataUrl; link.download = "packive-design.png"; link.click();
-      } else if (type === "svg") {
       } else if (type === "pdf") {
         const { exportCmykPdf } = await import("@/lib/pdf-cmyk-export");
         await exportCmykPdf(c, {
@@ -2837,7 +2836,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
               {[
                 { type: "pdf" as const, label: "PDF (CMYK Print-Ready)", desc: "Vector CMYK PDF with dieline", icon: "📄" },
                 { type: "png" as const, label: "PNG (High-Res)", desc: "Full net image at 4x resolution", icon: "🖼" },
-                { type: "svg" as const, label: "SVG (Vector)", desc: "Scalable vector graphics", icon: "🔷" },
+                
                 { type: "dieline" as const, label: "Dieline Only", desc: "Cut & fold lines PDF", icon: "✂" },
               ].map(opt => (
                 <button key={opt.type} onClick={() => handleExport(opt.type)} disabled={!!exporting}
