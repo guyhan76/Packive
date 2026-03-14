@@ -174,7 +174,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
   }, []);
   const loadGoogleFont = useCallback(async (family: string) => {
-  const loadGoogleFont = useCallback(async (family: string) => {
     if (fontsLoaded.has(family)) return;
     setFontsLoaded(prev => new Set([...prev, family]));
     try {
