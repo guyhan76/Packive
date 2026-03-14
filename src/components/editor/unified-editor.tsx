@@ -970,6 +970,9 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       o.name = `Table ${tableRows}\u00d7${tableCols}`;
       cv.add(o);
     });
+    // Select bg object for immediate editing
+    const bgObj = objs.find((o: any) => o._tableRole === "bg");
+    if (bgObj) cv.setActiveObject(bgObj);
     cv.requestRenderAll();
     pushHistory();
     setShowTablePanel(false);
@@ -1193,7 +1196,15 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
         delete obj._prevTop;
       }
     });
-    c.on("mouse:down", () => { setTimeout(() => { const props = getSelectedProps(); if (props) { setSelProps(props); if (props._isTable && props._tableConfig) { setTableEditCell(prev => prev || {row: 0, col: 0}); } } }, 50); });
+    c.on("mouse:down", (e: any) => {
+      // If clicked object belongs to a table, select the bg instead
+      const target = e.target;
+      if (target && target._tableId && target._tableRole !== "bg") {
+        const bg = c.getObjects().find((o: any) => o._tableId === target._tableId && o._tableRole === "bg");
+        if (bg) { setTimeout(() => { c.setActiveObject(bg); c.requestRenderAll(); }, 10); }
+      }
+      setTimeout(() => { const props = getSelectedProps(); if (props) { setSelProps(props); if (props._isTable && props._tableConfig) { setTableEditCell(prev => prev || {row: 0, col: 0}); } } }, 50);
+    });
     c.on("object:modified", (e: any) => {
       const t = e.target;
       if (t && (t.type === "i-text" || t.type === "textbox") && t.scaleX && t.scaleX !== 1) {
