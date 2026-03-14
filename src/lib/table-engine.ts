@@ -413,8 +413,8 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
     fill: "#ffffff", stroke: "transparent", strokeWidth: 0,
     originX: "left", originY: "top",
     selectable: true, evented: true,
-    lockScalingX: true, lockScalingY: true,
-    hasControls: false,
+    lockScalingX: true, lockScalingY: true, lockRotation: true,
+    hasControls: false, hasBorders: false,
   }), "bg"));
 
   // 2) Cell backgrounds + text
