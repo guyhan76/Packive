@@ -320,3 +320,67 @@ export function getCellBounds(config: TableConfig, row: number, col: number): { 
   let h = 0; for (let i = row; i < Math.min(row + cell.rowSpan, config.rows); i++) h += config.rowHeights[i];
   return { x, y, w, h };
 }
+
+// === Phase 1 Step 1: Minimal test ===
+export async function testMinimalTable(FabricModule: any): Promise<any[]> {
+  const F = FabricModule;
+  const objects: any[] = [];
+  const tableId = `table_${Date.now()}`;
+
+  // 1) Cell background - single Rect
+  const cellBg = new F.Rect({
+    left: 0,
+    top: 0,
+    width: 100,
+    height: 50,
+    fill: "#ffffff",
+    stroke: "transparent",
+    strokeWidth: 0,
+    selectable: false,
+    evented: false,
+  });
+  (cellBg as any)._tableId = tableId;
+  (cellBg as any)._tableRole = "cell";
+  objects.push(cellBg);
+
+  // 2) Horizontal border - top line as thin Rect
+  const hLine = new F.Rect({
+    left: 0,
+    top: -0.5,
+    width: 100,
+    height: 1,
+    fill: "#000000",
+    stroke: "transparent",
+    strokeWidth: 0,
+    selectable: false,
+    evented: false,
+  });
+  (hLine as any)._tableId = tableId;
+  (hLine as any)._tableRole = "hline";
+  objects.push(hLine);
+
+  // 3) Text
+  const cellText = new F.Textbox("Test", {
+    left: 4,
+    top: 4,
+    width: 92,
+    fontSize: 14,
+    fontFamily: "Arial",
+    fill: "#000000",
+    textAlign: "center",
+    selectable: false,
+    evented: false,
+    stroke: "transparent",
+    strokeWidth: 0,
+  });
+  (cellText as any)._tableId = tableId;
+  (cellText as any)._tableRole = "text";
+  objects.push(cellText);
+
+  console.log(`[TABLE-TEST] Created ${objects.length} objects, tableId=${tableId}`);
+  objects.forEach((o, i) => {
+    console.log(`[TABLE-TEST] obj[${i}]: type=${o.type} left=${o.left} top=${o.top} w=${o.width} h=${o.height}`);
+  });
+
+  return objects;
+}

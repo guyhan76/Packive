@@ -1600,7 +1600,24 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 </div>
                 {tableRows > 6 && <div className="text-[10px] text-gray-400 mt-1">+{tableRows - 6} more rows</div>}
               </div>
-              <button onClick={addTableToCanvas} className="w-full py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors">
+              <button onClick={async () => {
+                  const cv = canvasRef.current;
+                  if (!cv) return;
+                  const F = await import("fabric");
+                  const { testMinimalTable } = await import("@/lib/table-engine");
+                  const objs = await testMinimalTable(F);
+                  objs.forEach((o: any) => cv.add(o));
+                  cv.requestRenderAll();
+                  // PDF export test
+                  const svgStr = cv.toSVG();
+                  console.log("[TABLE-TEST] SVG length:", svgStr.length);
+                  console.log("[TABLE-TEST] SVG contains rect:", svgStr.includes("<rect"));
+                  console.log("[TABLE-TEST] SVG contains text:", svgStr.includes("<text"));
+                  console.log("[TABLE-TEST] SVG snippet:", svgStr.substring(0, 500));
+                }} className="w-full py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700 transition-colors mb-2">
+                  Phase1 Test (Rect+Line+Text)
+                </button>
+                <button onClick={addTableToCanvas} className="w-full py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors">
                 Insert {tableRows} &times; {tableCols} Table
               </button>
             </div>
