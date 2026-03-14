@@ -500,17 +500,15 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
           selectable: false, evented: false,
         }), "hline", r, c));
       }
-      // Bottom border (only if last row of this cell span)
-      if (r + rowSpan >= rows) {
-        const tBot = cell.borderBottom ?? bw;
-        if (tBot > 0) {
-          objects.push(meta(new F.Rect({
-            left: cx, top: cy + ch - tBot, width: cw, height: tBot,
-            fill: cellBc, stroke: "transparent", strokeWidth: 0,
-            originX: "left", originY: "top",
-            selectable: false, evented: false,
-          }), "hline", r, c));
-        }
+      // Bottom border
+      const tBot = cell.borderBottom ?? bw;
+      if (tBot > 0) {
+        objects.push(meta(new F.Rect({
+          left: cx, top: cy + ch - tBot, width: cw, height: tBot,
+          fill: cellBc, stroke: "transparent", strokeWidth: 0,
+          originX: "left", originY: "top",
+          selectable: false, evented: false,
+        }), "hline", r, c));
       }
       // Left border (always draw)
       const tLeft = cell.borderLeft ?? bw;
@@ -522,17 +520,15 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
           selectable: false, evented: false,
         }), "vline", r, c));
       }
-      // Right border (only if last col of this cell span)
-      if (c + colSpan >= cols) {
-        const tRight = cell.borderRight ?? bw;
-        if (tRight > 0) {
-          objects.push(meta(new F.Rect({
-            left: cx + cw - tRight, top: cy, width: tRight, height: ch,
-            fill: cellBc, stroke: "transparent", strokeWidth: 0,
-            originX: "left", originY: "top",
-            selectable: false, evented: false,
-          }), "vline", r, c));
-        }
+      // Right border
+      const tRight = cell.borderRight ?? bw;
+      if (tRight > 0) {
+        objects.push(meta(new F.Rect({
+          left: cx + cw - tRight, top: cy, width: tRight, height: ch,
+          fill: cellBc, stroke: "transparent", strokeWidth: 0,
+          originX: "left", originY: "top",
+          selectable: false, evented: false,
+        }), "vline", r, c));
       }
     }
   }
