@@ -174,12 +174,21 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
   }, []);
   const loadGoogleFont = useCallback((family: string) => {
+  const loadGoogleFont = useCallback(async (family: string) => {
     if (fontsLoaded.has(family)) return;
     const link = document.createElement("link");
     link.rel = "stylesheet";
     link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@300;400;500;600;700&display=swap`;
     document.head.appendChild(link);
     setFontsLoaded(prev => new Set([...prev, family]));
+    // 폰트 로딩 완료 대기
+    try {
+      await document.fonts.load(`16px "${family}"`);
+      await document.fonts.ready;
+      console.log("[FONT] Loaded:", family);
+    } catch (e) {
+      console.warn("[FONT] Load timeout:", family);
+    }
   }, [fontsLoaded]);
 
   const detectFontForText = useCallback((text: string): string => {
@@ -1984,7 +1993,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                                      if (fontCategory === "en") list = googleFonts.filter(f => !koFonts.includes(f) && !jaFonts.includes(f));
                                      const filtered = list.filter(f => !fontSearch || f.toLowerCase().includes(fontSearch.toLowerCase())).slice(0, 100);
                                      return filtered.map(f => (
-                                       <button key={f} onClick={() => { loadGoogleFont(f); updateAndRebuild("fontFamily", f); setSelProps((p:any) => ({...p, _tableFontOpen: false})); setFontSearch(""); }}
+                                       <button key={f} onClick={async () => { await loadGoogleFont(f); updateAndRebuild("fontFamily", f); setSelProps((p:any) => ({...p, _tableFontOpen: false})); setFontSearch(""); }}
                                          className={`w-full text-left px-2 py-1.5 text-[10px] hover:bg-blue-50 ${(cell.fontFamily||"Inter")===f?"bg-blue-100 font-bold":""}`}
                                          style={{fontFamily: f}}>{f}</button>
                                      ));
