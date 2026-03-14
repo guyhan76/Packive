@@ -954,22 +954,26 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const addTableToCanvas = useCallback(async () => {
     const cv = fcRef.current; if (!cv) return;
     const F = await import("fabric");
-    const { createTableConfig, buildTableImage } = await import("@/lib/table-engine");
+    const { createTableConfig, buildTableObjects } = await import("@/lib/table-engine");
     const cellW = Math.min(100, Math.floor(cv.getWidth() * 0.4 / tableCols));
     const cellH = 32;
     const config = createTableConfig(tableRows, tableCols, cellW, cellH);
-    const group = await buildTableImage(config, F);
-    group.set({
-      left: Math.floor(cv.getWidth() / 2 - (cellW * tableCols) / 2),
-      top: Math.floor(cv.getHeight() / 2 - (cellH * tableRows) / 2),
-      _tableConfig: JSON.stringify(config), name: `Table ${tableRows}×${tableCols}`,
+    const objs = buildTableObjects(config, F);
+    const totalW = config.colWidths.reduce((a: number, b: number) => a + b, 0);
+    const totalH = config.rowHeights.reduce((a: number, b: number) => a + b, 0);
+    const offsetX = Math.floor(cv.getWidth() / 2 - totalW / 2);
+    const offsetY = Math.floor(cv.getHeight() / 2 - totalH / 2);
+    objs.forEach((o: any) => {
+      o.set({ left: o.left + offsetX, top: o.top + offsetY });
+      o._isTable = true;
+      o._tableConfig = JSON.stringify(config);
+      o.name = `Table ${tableRows}\u00d7${tableCols}`;
+      cv.add(o);
     });
-    cv.add(group);
-    cv.setActiveObject(group);
-    cv.renderAll();
+    cv.requestRenderAll();
     pushHistory();
     setShowTablePanel(false);
-    console.log("[TABLE] Inserted", tableRows, "x", tableCols, "vector table");
+    console.log("[TABLE] Inserted", tableRows, "x", tableCols, "table with", objs.length, "objects");
   }, [tableRows, tableCols, pushHistory]);
 
   // ─── Packaging Marks (SVG-based) ───
@@ -1761,19 +1765,34 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     const cv = fcRef.current!;
                     const obj = cv.getActiveObject() as any;
                     if (!obj) return;
-                    const pos = { left: obj.left, top: obj.top, scaleX: obj.scaleX, scaleY: obj.scaleY };
-                    const { buildTableImage } = await import("@/lib/table-engine");
+                    const tableId = obj._tableId;
+                    // Find all objects belonging to this table
+                    const tableObjs = tableId
+                      ? cv.getObjects().filter((o: any) => o._tableId === tableId)
+                      : [obj];
+                    // Get position from first bg object or active object
+                    const bgObj = tableObjs.find((o: any) => o._tableRole === "bg") || obj;
+                    const baseLeft = bgObj.left || 0;
+                    const baseTop = bgObj.top || 0;
+                    // Remove all old table objects
+                    cv.discardActiveObject();
+                    tableObjs.forEach((o: any) => cv.remove(o));
+                    // Build new objects
+                    const { buildTableObjects } = await import("@/lib/table-engine");
                     const F = await import("fabric");
-                    const group = await buildTableImage(newCfg, F);
-                    group.set({ ...pos, _tableConfig: JSON.stringify(newCfg), name: `Table ${newCfg.rows}×${newCfg.cols}` });
-                    cv.discardActiveObject();
-                    cv.discardActiveObject();
-                    const removed = cv.remove(obj);
-                    cv.renderAll();
-                    cv.add(group);
-                    cv.setActiveObject(group);
+                    const objs = buildTableObjects(newCfg, F);
+                    objs.forEach((o: any) => {
+                      o.set({ left: o.left + baseLeft, top: o.top + baseTop });
+                      o._isTable = true;
+                      o._tableConfig = JSON.stringify(newCfg);
+                      o.name = `Table ${newCfg.rows}\u00d7${newCfg.cols}`;
+                      cv.add(o);
+                    });
+                    // Select the background object for continued editing
+                    const newBg = objs.find((o: any) => o._tableRole === "bg");
+                    if (newBg) cv.setActiveObject(newBg);
                     cv.requestRenderAll();
-                    setSelProps((p:any) => ({...p, _tableConfig: newCfg}));
+                    setSelProps((p: any) => ({...p, _tableConfig: newCfg, _tableId: objs[0]?._tableId}));
                     if (!loadingRef.current) pushHistory();
                     refreshLayers();
                   } catch (err: any) {
@@ -1781,6 +1800,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                   } finally {
                     _rebuildLock.current = false;
                   }
+                };
                 };
                 return (
                   <div className="mb-3 border border-blue-200 rounded-xl p-3 bg-blue-50/30">
