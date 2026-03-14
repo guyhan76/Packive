@@ -1789,6 +1789,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     const newBg = objs.find((o: any) => o._tableRole === "bg");
                     if (newBg) cv.setActiveObject(newBg);
                     cv.requestRenderAll();
+                    // DEBUG: 폰트 확인
+                    objs.forEach((o: any) => { if (o.type === "textbox" || o.type === "Textbox") console.log("[TABLE-FONT]", o.text?.substring(0,20), "fontFamily:", o.fontFamily, "fill:", o.fill); });
                     setSelProps((p: any) => ({...p, _tableConfig: newCfg, _tableId: objs[0]?._tableId}));
                     if (!loadingRef.current) pushHistory();
                     refreshLayers();
