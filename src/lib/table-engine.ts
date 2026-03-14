@@ -468,36 +468,66 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
     }
   }
 
-  // 3) Grid borders as thin filled Rects
+  // 3) Cell-based borders (supports merged cells)
   const bw = borderWidth ?? 1;
   const obw = outerBorderWidth ?? bw;
   const bc = borderColor || "#000000";
 
-  // Horizontal lines (rows + 1)
-  for (let r = 0; r <= rows; r++) {
-    const y = cumY[r];
-    const t = (r === 0 || r === rows) ? obw : bw;
-    if (t > 0) {
-      objects.push(meta(new F.Rect({
-        left: 0, top: y - t / 2, width: totalW, height: t,
-        fill: bc, stroke: "transparent", strokeWidth: 0,
-        originX: "left", originY: "top",
-        selectable: false, evented: false,
-      }), "hline"));
-    }
-  }
+  // Track which edges to draw using a grid
+  // For each non-merged cell, draw its 4 borders
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cell = cells[r]?.[c];
+      if (!cell || cell.merged) continue;
+      const colSpan = cell.colSpan || 1;
+      const rowSpan = cell.rowSpan || 1;
+      const cx = cumX[c];
+      const cy = cumY[r];
+      let cw = 0;
+      for (let i = c; i < Math.min(c + colSpan, cols); i++) cw += colWidths[i];
+      let ch = 0;
+      for (let i = r; i < Math.min(r + rowSpan, rows); i++) ch += rowHeights[i];
 
-  // Vertical lines (cols + 1)
-  for (let c = 0; c <= cols; c++) {
-    const x = cumX[c];
-    const t = (c === 0 || c === cols) ? obw : bw;
-    if (t > 0) {
-      objects.push(meta(new F.Rect({
-        left: x - t / 2, top: 0, width: t, height: totalH,
-        fill: bc, stroke: "transparent", strokeWidth: 0,
-        originX: "left", originY: "top",
-        selectable: false, evented: false,
-      }), "vline"));
+      // Top border
+      const tTop = (r === 0) ? obw : bw;
+      if (tTop > 0) {
+        objects.push(meta(new F.Rect({
+          left: cx, top: cy - tTop / 2, width: cw, height: tTop,
+          fill: bc, stroke: "transparent", strokeWidth: 0,
+          originX: "left", originY: "top",
+          selectable: false, evented: false,
+        }), "hline", r, c));
+      }
+      // Bottom border
+      const tBot = (r + rowSpan >= rows) ? obw : bw;
+      if (tBot > 0) {
+        objects.push(meta(new F.Rect({
+          left: cx, top: cy + ch - tBot / 2, width: cw, height: tBot,
+          fill: bc, stroke: "transparent", strokeWidth: 0,
+          originX: "left", originY: "top",
+          selectable: false, evented: false,
+        }), "hline", r, c));
+      }
+      // Left border
+      const tLeft = (c === 0) ? obw : bw;
+      if (tLeft > 0) {
+        objects.push(meta(new F.Rect({
+          left: cx - tLeft / 2, top: cy, width: tLeft, height: ch,
+          fill: bc, stroke: "transparent", strokeWidth: 0,
+          originX: "left", originY: "top",
+          selectable: false, evented: false,
+        }), "vline", r, c));
+      }
+      // Right border
+      const tRight = (c + colSpan >= cols) ? obw : bw;
+      if (tRight > 0) {
+        objects.push(meta(new F.Rect({
+          left: cx + cw - tRight / 2, top: cy, width: tRight, height: ch,
+          fill: bc, stroke: "transparent", strokeWidth: 0,
+          originX: "left", originY: "top",
+          selectable: false, evented: false,
+        }), "vline", r, c));
+      }
     }
   }
 
