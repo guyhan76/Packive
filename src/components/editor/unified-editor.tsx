@@ -174,19 +174,33 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
   }, []);
   const loadGoogleFont = useCallback(async (family: string) => {
+  const loadGoogleFont = useCallback(async (family: string) => {
     if (fontsLoaded.has(family)) return;
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@300;400;500;600;700&display=swap`;
-    document.head.appendChild(link);
     setFontsLoaded(prev => new Set([...prev, family]));
-    // 폰트 로딩 완료 대기
     try {
-      await document.fonts.load(`16px "${family}"`);
-      await document.fonts.ready;
-      console.log("[FONT] Loaded:", family);
+      // 1. Google Fonts CSS 로드
+      const cssUrl = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@300;400;500;600;700&display=swap`;
+      const cssResp = await fetch(cssUrl);
+      const cssText = await cssResp.text();
+      // 2. CSS에서 font-face URL 추출
+      const urlMatch = cssText.match(/url\((https:\/\/[^)]+\.(?:woff2|woff|ttf))\)/);
+      if (urlMatch) {
+        const fontFace = new FontFace(family, `url(${urlMatch[1]})`);
+        await fontFace.load();
+        document.fonts.add(fontFace);
+        console.log("[FONT] FontFace loaded:", family);
+      } else {
+        // CSS link 폴백
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = cssUrl;
+        document.head.appendChild(link);
+        await document.fonts.load(`16px "${family}"`);
+        await document.fonts.ready;
+        console.log("[FONT] CSS link loaded:", family);
+      }
     } catch (e) {
-      console.warn("[FONT] Load timeout:", family);
+      console.warn("[FONT] Load failed:", family, e);
     }
   }, [fontsLoaded]);
 
