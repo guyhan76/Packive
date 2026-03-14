@@ -285,6 +285,12 @@ export async function exportCmykPdf(
     }
   });
 
+  const savedBgColor = canvas.backgroundColor;
+  canvas.backgroundColor = "";
+  canvas.renderAll();
+  let svgString = canvas.toSVG({ width: canvasW, height: canvasH });
+  console.log("[PDF] Step 3: SVG generated, length:", svgString.length);
+
   // dielineOnly: forcefully remove all <text> and <tspan> elements from SVG
   if (dielineOnly) {
     const tempParser = new DOMParser();
