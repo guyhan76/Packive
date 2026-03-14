@@ -1797,6 +1797,9 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     const newBg = objs.find((o: any) => o._tableRole === "bg");
                     if (newBg) cv.setActiveObject(newBg);
                     cv.requestRenderAll();
+                    // 폰트 로딩 후 강제 재렌더링 (Fabric.js가 새 폰트를 인식하도록)
+                    setTimeout(() => { cv.requestRenderAll(); }, 100);
+                    setTimeout(() => { cv.requestRenderAll(); }, 500);
                     // DEBUG: 폰트 확인
                     objs.forEach((o: any) => { if (o.type === "textbox" || o.type === "Textbox") console.log("[TABLE-FONT]", o.text?.substring(0,20), "fontFamily:", o.fontFamily, "fill:", o.fill); });
                     setSelProps((p: any) => ({...p, _tableConfig: newCfg, _tableId: objs[0]?._tableId}));
