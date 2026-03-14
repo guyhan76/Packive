@@ -295,13 +295,13 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   // ─── History ───
   const pushHistory = useCallback(() => {
     const c = fcRef.current; if (!c || loadingRef.current) return;
-    const jsonObj = c.toJSON(["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isTable","_tableConfig","_tableRole","_tableRow","_tableCol"]);
+    const jsonObj = c.toJSON(["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isTable","_tableConfig","_tableRole","_tableRow","_tableCol","_tableId"]);
     // Fabric toJSON may drop custom props on Image - inject manually
     const objs = c.getObjects();
     if (jsonObj.objects) {
       objs.forEach((obj: any, i: number) => {
         if (!jsonObj.objects[i]) return;
-        ["_isTable","_tableConfig","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","_tableRole","_tableRow","_tableCol","name"].forEach((k: string) => {
+        ["_isTable","_tableConfig","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","_tableRole","_tableRow","_tableCol","_tableId","name"].forEach((k: string) => {
           if ((obj as any)[k] !== undefined) jsonObj.objects[i][k] = (obj as any)[k];
         });
       });
@@ -328,7 +328,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
         obj._objects.forEach((child: any, ci: number) => {
           const csrc = src.objects[ci];
           if (!csrc) return;
-          ["_isTable","_tableConfig","_tableRole","_tableRow","_tableCol","name","selectable","evented"].forEach(k => {
+          ["_isTable","_tableConfig","_tableRole","_tableRow","_tableCol","_tableId","name","selectable","evented"].forEach(k => {
             if (csrc[k] !== undefined) child[k] = csrc[k];
           });
         });
@@ -365,7 +365,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   }, []);
   const SAVE_KEY = "packive-temp-design";
   const SAVE_META_KEY = "packive-temp-meta";
-  const JSON_PROPS = ["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isTable","_tableConfig","_tableRole","_tableRow","_tableCol"];
+  const JSON_PROPS = ["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isTable","_tableConfig","_tableRole","_tableRow","_tableCol","_tableId"];
 
   const [saveStatus, setSaveStatus] = useState<string|null>(null);
 

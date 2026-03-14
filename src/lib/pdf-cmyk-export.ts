@@ -287,9 +287,7 @@ export async function exportCmykPdf(
   // DEBUG: log visible objects after dielineOnly filtering
   if (dielineOnly) {
     const visibleObjs = objects.filter((o: any) => o.visible !== false);
-    console.log("[PDF-DBG] dielineOnly=true, total objects:", objects.length, "visible:", visibleObjs.length);
     visibleObjs.forEach((o: any, i: number) => {
-      console.log("[PDF-DBG] visible[" + i + "]:", o.type, "name=" + (o.name || ""), "_isDieLine=" + !!o._isDieLine, "_isGuideLayer=" + !!o._isGuideLayer, "_isFoldLine=" + !!o._isFoldLine, "text=" + (o.text ? o.text.substring(0,30) : ""));
     });
   }
   canvas.renderAll();
@@ -309,7 +307,6 @@ export async function exportCmykPdf(
     const svgBlob = new Blob([svgString], { type: "image/svg+xml" });
     const svgUrl = URL.createObjectURL(svgBlob);
     const svgLink = document.createElement("a");
-    svgLink.href = svgUrl; svgLink.download = "debug-table-export.svg"; svgLink.click();
     URL.revokeObjectURL(svgUrl);
   const pathCount = (svgString.match(/<path /g) || []).length;
   const textCount = (svgString.match(/<text[\s>]/g) || []).length;
