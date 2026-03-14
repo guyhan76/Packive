@@ -1901,7 +1901,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     {/* Cell editing */}
                     {tableEditCell && tc.cells[tableEditCell.row]?.[tableEditCell.col] && (() => {
                       const cell = tc.cells[tableEditCell.row][tableEditCell.col];
-                      const updateAndRebuild = (prop: string, value: any) => {
                        const updateAndRebuild = (prop: string, value: any) => {
                          const cv = fcRef.current;
                          const obj = cv?.getActiveObject() as any;
