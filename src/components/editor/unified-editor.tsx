@@ -1637,28 +1637,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 </div>
                 {tableRows > 6 && <div className="text-[10px] text-gray-400 mt-1">+{tableRows - 6} more rows</div>}
               </div>
-              <button onClick={async () => {
-                  const cv = fcRef.current;
-                  if (!cv) return;
-                  const F = await import("fabric");
-                  // Remove previous test objects
-                  const toRemove = cv.getObjects().filter((o: any) => o._tableId);
-                  toRemove.forEach((o: any) => cv.remove(o));
-                  const { createTableConfig, buildTableObjects } = await import("@/lib/table-engine");
-                  const config = createTableConfig(2, 2, 100, 50);
-                  const objs = buildTableObjects(config, F);
-                  const offsetX = Math.floor(cv.getWidth() / 2 - 100);
-                  const offsetY = Math.floor(cv.getHeight() / 2 - 50);
-                  objs.forEach((o: any) => {
-                    o.set({ left: o.left + offsetX, top: o.top + offsetY });
-                    cv.add(o);
-                  });
-                  cv.requestRenderAll();
-                  console.log("[TABLE-TEST] 2x2 table added at", offsetX, offsetY, "total:", objs.length);
-                  objs.forEach((o: any, i: number) => console.log(`[TABLE-TEST] obj[${i}]: role=${o._tableRole} left=${o.left} top=${o.top} w=${o.width} h=${o.height}`));
-                }} className="w-full py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700 transition-colors mb-2">
-                  Phase1 Test (2x2 Table)
-                </button>
                 <button onClick={addTableToCanvas} className="w-full py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors">
                 Insert {tableRows} &times; {tableCols} Table
               </button>
@@ -1797,7 +1775,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                   try {
                     const cv = fcRef.current!;
                     const obj = cv.getActiveObject() as any;
-                    if (!obj) { console.warn("[TABLE] rebuildTable: no active object!"); _rebuildLock.current = false; return; }
+                    if (!obj) { _rebuildLock.current = false; return; }
                     const tableId = obj._tableId;
                     // Find all objects belonging to this table
                     const tableObjs = tableId
@@ -1809,7 +1787,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     const baseTop = bgObj.top || 0;
                     // Remove all old table objects
                     cv.discardActiveObject();
-                    tableObjs.forEach((o: any) => cv.remove(o)); console.log("[TABLE] rebuildTable: removed", tableObjs.length, "objects, tableId:", tableId);
+                    tableObjs.forEach((o: any) => cv.remove(o));
                     // Build new objects
                     const { buildTableObjects } = await import("@/lib/table-engine");
                     const F = await import("fabric");
@@ -1824,7 +1802,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     // Select the background object for continued editing
                     const newBg = objs.find((o: any) => o._tableRole === "bg");
                     if (newBg) cv.setActiveObject(newBg);
-                    cv.requestRenderAll(); console.log("[TABLE] rebuildTable: added", objs.length, "new objects");
+                    cv.requestRenderAll();
                     setSelProps((p: any) => ({...p, _tableConfig: newCfg, _tableId: objs[0]?._tableId}));
                     if (!loadingRef.current) pushHistory();
                     refreshLayers();
