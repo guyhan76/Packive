@@ -155,7 +155,19 @@ export async function convertTextToOutlines(svgEl: Element): Promise<number> {
     const attrs = getTextAttributes(textEl);
     console.log("[OUTLINE] Processing text:", textEl.textContent?.substring(0, 30), "font:", attrs.fontFamily, attrs.fontWeight);
     const weight = (attrs.fontWeight === "bold" || parseInt(attrs.fontWeight) >= 700) ? "bold" : "normal";
-    const font = await loadFont(attrs.fontFamily, weight);
+    let font = await loadFont(attrs.fontFamily, weight);
+    // Check if loaded font has glyphs for the text (e.g. Arial has no Korean)
+    const textStr = textEl.textContent || "";
+    if (font && /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]/.test(textStr)) {
+      // Korean text - check if font has Korean glyphs
+      const testChar = textStr.match(/[\uAC00-\uD7AF]/)?.[0] || "\uAC00";
+      const glyph = font.charToGlyph(testChar);
+      if (!glyph || glyph.index === 0 || glyph.name === ".notdef") {
+        console.log("[OUTLINE] Font", attrs.fontFamily, "has no Korean glyphs, falling back to NotoSansKR");
+        const fallbackFont = await loadFont("NotoSansKR", weight);
+        if (fallbackFont) font = fallbackFont;
+      }
+    }
     if (!font) {
       console.warn("[OUTLINE] Skipping - no font loaded for:", attrs.fontFamily);
       continue;
