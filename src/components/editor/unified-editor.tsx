@@ -173,7 +173,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       .then(r => r.json()).then(d => { if(d.items) setJaFonts(d.items.map((f:any)=>f.family)); }).catch(()=>{});
 
   }, []);
-  const loadGoogleFont = useCallback((family: string) => {
   const loadGoogleFont = useCallback(async (family: string) => {
     if (fontsLoaded.has(family)) return;
     const link = document.createElement("link");
