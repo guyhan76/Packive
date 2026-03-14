@@ -742,7 +742,18 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       else if (e.key === "Delete" || e.key === "Backspace") {
         const active = c.getActiveObjects();
         if (active.length > 0) {
-          active.filter((o: any) => o.selectable !== false).forEach((o: any) => c.remove(o));
+          const toRemove: any[] = [];
+          active.forEach((o: any) => {
+            if (o._tableId) {
+              // Table object: remove ALL objects with same tableId
+              c.getObjects().forEach((obj: any) => {
+                if (obj._tableId === o._tableId && !toRemove.includes(obj)) toRemove.push(obj);
+              });
+            } else if (o.selectable !== false) {
+              toRemove.push(o);
+            }
+          });
+          toRemove.forEach((o: any) => c.remove(o));
           c.discardActiveObject(); c.requestRenderAll(); pushHistory(); refreshLayers();
         }
       }
@@ -1411,7 +1422,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
               {eyedropperResult.spot && <div className="text-orange-500 font-bold">{eyedropperResult.spot}</div>}
             </div>
           )}
-          <button onClick={() => { const c=fcRef.current; if(!c)return; const a=c.getActiveObjects(); a.filter((o:any)=>o.selectable!==false).forEach((o:any)=>c.remove(o)); c.discardActiveObject(); c.requestRenderAll(); pushHistory(); refreshLayers(); }}
+          <button onClick={() => { const c=fcRef.current; if(!c)return; const a=c.getActiveObjects(); const toRm: any[]=[]; a.forEach((o:any)=>{ if(o._tableId){ c.getObjects().forEach((obj:any)=>{ if(obj._tableId===o._tableId && !toRm.includes(obj)) toRm.push(obj); }); } else if(o.selectable!==false){ toRm.push(o); } }); toRm.forEach((o:any)=>c.remove(o)); c.discardActiveObject(); c.requestRenderAll(); pushHistory(); refreshLayers(); }}
             title="Delete" className="w-12 h-12 flex flex-col items-center justify-center rounded-lg text-xs hover:bg-red-50 text-gray-600 hover:text-red-600">
             <span className="text-base leading-none">{"\uD83D\uDDD1"}</span>
             <span className="text-[9px] mt-0.5">Delete</span>
