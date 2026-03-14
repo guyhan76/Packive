@@ -404,10 +404,10 @@ export async function exportCmykPdf(
   });
 
   console.log("[PDF] Font-family normalized:", svgFontEls.length, "elements");
-  // Convert text to outlines (vector paths) for perfect font rendering
-  const { convertTextToOutlines } = await import("./text-to-outlines");
-  const outlineCount = await convertTextToOutlines(svgEl);
-  console.log("[PDF] Step 3b: Text converted to outlines:", outlineCount, "elements");
+  // [임시비활성화] Convert text to outlines (vector paths) for perfect font rendering
+  // const { convertTextToOutlines } = await import("./text-to-outlines");
+  const outlineCount = 0; // await convertTextToOutlines(svgEl);
+  console.log("[PDF] Step 3b: Text outline SKIPPED - font embedding test");
   const finalSvg = new XMLSerializer().serializeToString(svgEl);
   const pathCountAfter = (finalSvg.match(/<path /g) || []).length;
   const textCountAfter = (finalSvg.match(/<text[\s>]/g) || []).length;
