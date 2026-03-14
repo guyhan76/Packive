@@ -1,5 +1,5 @@
 ﻿# Packive Dev Rules & Roadmap
-> Updated: 2026-03-10 | Status: Phase 1 ready
+> Updated: 2026-03-14 | Status: Phase 2 ready
 
 ## Export Strategy
 - PDF (CMYK vector) — print + AI conversion
@@ -12,8 +12,24 @@
 - All features (incl. BG removal) unlimited for subscribers
 
 ## Phase Order
-1. Table (independent Rect+Line+Textbox, NO Group)
-2. Ruler (mm/px, guidelines, snap)
+1. ✅ Table (completed 2026-03-14)
+   - Independent Rect+Line+Textbox, NO Group
+   - Add/delete/undo, drag-move, re-select
+   - Cell text, merge/unmerge, border, row/col resize
+   - Font change (English/Korean/Japanese via Google Fonts unicode-range subsets)
+   - Font category tabs (All/English/한국어/日本語)
+   - Cell background/text color (CMYK picker)
+   - Bold/Weight/Style, Line Height, Text Align
+   - PDF CMYK export with text-to-outlines
+   - Direct property update (fontFamily etc.) without rebuild for performance
+
+2. Ruler (mm/inch, guidelines, snap)
+   - Canvas top/left mm/inch ruler display
+   - Drag from ruler to create guidelines
+   - Object snap to guidelines on move/resize
+   - mm ↔ inch unit toggle
+   - Leverage existing _isGuideLayer, _isFoldLine code where applicable
+
 3. Shape vector editing (anchor points, bezier)
 4. Pen tool / path clipping
 5. Panel Map (per-face design)
@@ -38,4 +54,5 @@ Next.js, TypeScript, Fabric.js, clipper2-ts, opentype.js, svg2pdf.js, jsPDF, ONN
 
 ## Restore Points
 - backup-before-table-rewrite
-- backup-restored-raster-20260309_220044 (current stable)
+- backup-restored-raster-20260309_220044
+- phase1-complete-20260314 (table fully working, font/PDF/outline OK)
