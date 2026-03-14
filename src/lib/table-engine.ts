@@ -30,7 +30,7 @@ export function createDefaultCell(row: number, col: number): TableCellData {
   return {
     row, col, rowSpan: 1, colSpan: 1,
     text: "", bgColor: "#ffffff", textColor: "#222222",
-    fontSize: 12, fontFamily: "NotoSansKR",
+    fontSize: 12, fontFamily: "Inter",
     fontWeight: "normal", fontStyle: "normal",
     textAlign: "center", verticalAlign: "middle",
     padding: 4, merged: false, mergedBy: null, borderTop: 0.5, borderRight: 0.5, borderBottom: 0.5, borderLeft: 0.5, cellBorderColor: "#000000", lineHeight: 1.4,
@@ -455,7 +455,7 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
           left: cx + padding, top: cy + padding,
           width: cw - padding * 2,
           fontSize: cell.fontSize ?? 14,
-          fontFamily: cell.fontFamily || "NotoSansKR",
+          fontFamily: cell.fontFamily || "Inter",
           fontWeight: cell.fontWeight || "normal",
           fontStyle: cell.fontStyle || "normal",
           fill: cell.textColor || "#000000",
