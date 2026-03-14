@@ -1815,18 +1815,18 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                      // 5. bg 선택
                      const newBg = objs.find((o: any) => o._tableRole === "bg");
                      if (newBg) cv.setActiveObject(newBg);
-                     // 강제 폰트 적용 (Fabric.js 캐시 우회)
-                     objs.forEach((o: any) => {
-                       if (o.type === "textbox") {
-                         const cfg = newCfg.cells[o._tableRow]?.[o._tableCol];
-                         if (cfg?.fontFamily) {
-                           o.set({ fontFamily: cfg.fontFamily, dirty: true });
+                     cv.requestRenderAll();
+                     // 다음 프레임에서 폰트 강제 재적용 (Fabric.js 렌더링 완료 후)
+                     requestAnimationFrame(() => {
+                       objs.forEach((o: any) => {
+                         if (o.type === "textbox") {
+                           o.set({ fontFamily: o.fontFamily, dirty: true });
                            o.initDimensions?.();
                            o._clearCache?.();
                          }
-                       }
+                       });
+                       cv.requestRenderAll();
                      });
-                     cv.requestRenderAll();
                      setSelProps((p: any) => ({...p, _tableConfig: newCfg, _tableId: objs[0]?._tableId}));
                      if (!loadingRef.current) pushHistory();
                      refreshLayers();
