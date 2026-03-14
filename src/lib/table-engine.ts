@@ -475,10 +475,7 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
     }
   }
 
-  // 3) Cell-based borders (supports merged cells)
-
-  // Track which edges to draw using a grid
-  // For each non-merged cell, draw its 4 borders
+  // 3) Cell-based borders (uses per-cell border values, no duplication)
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const cell = cells[r]?.[c];
@@ -491,46 +488,51 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
       for (let i = c; i < Math.min(c + colSpan, cols); i++) cw += colWidths[i];
       let ch = 0;
       for (let i = r; i < Math.min(r + rowSpan, rows); i++) ch += rowHeights[i];
+      const cellBc = cell.cellBorderColor || bc;
 
-      // Top border
-      const tTop = (r === 0) ? obw : bw;
+      // Top border (always draw - no cell above will duplicate)
+      const tTop = cell.borderTop ?? bw;
       if (tTop > 0) {
         objects.push(meta(new F.Rect({
           left: cx, top: cy, width: cw, height: tTop,
-          fill: bc, stroke: "transparent", strokeWidth: 0,
+          fill: cellBc, stroke: "transparent", strokeWidth: 0,
           originX: "left", originY: "top",
           selectable: false, evented: false,
         }), "hline", r, c));
       }
-      // Bottom border
-      const tBot = (r + rowSpan >= rows) ? obw : bw;
-      if (tBot > 0) {
-        objects.push(meta(new F.Rect({
-          left: cx, top: cy + ch - tBot, width: cw, height: tBot,
-          fill: bc, stroke: "transparent", strokeWidth: 0,
-          originX: "left", originY: "top",
-          selectable: false, evented: false,
-        }), "hline", r, c));
+      // Bottom border (only if last row of this cell span)
+      if (r + rowSpan >= rows) {
+        const tBot = cell.borderBottom ?? bw;
+        if (tBot > 0) {
+          objects.push(meta(new F.Rect({
+            left: cx, top: cy + ch - tBot, width: cw, height: tBot,
+            fill: cellBc, stroke: "transparent", strokeWidth: 0,
+            originX: "left", originY: "top",
+            selectable: false, evented: false,
+          }), "hline", r, c));
+        }
       }
-      // Left border
-      const tLeft = (c === 0) ? obw : bw;
+      // Left border (always draw)
+      const tLeft = cell.borderLeft ?? bw;
       if (tLeft > 0) {
         objects.push(meta(new F.Rect({
           left: cx, top: cy, width: tLeft, height: ch,
-          fill: bc, stroke: "transparent", strokeWidth: 0,
+          fill: cellBc, stroke: "transparent", strokeWidth: 0,
           originX: "left", originY: "top",
           selectable: false, evented: false,
         }), "vline", r, c));
       }
-      // Right border
-      const tRight = (c + colSpan >= cols) ? obw : bw;
-      if (tRight > 0) {
-        objects.push(meta(new F.Rect({
-          left: cx + cw - tRight, top: cy, width: tRight, height: ch,
-          fill: bc, stroke: "transparent", strokeWidth: 0,
-          originX: "left", originY: "top",
-          selectable: false, evented: false,
-        }), "vline", r, c));
+      // Right border (only if last col of this cell span)
+      if (c + colSpan >= cols) {
+        const tRight = cell.borderRight ?? bw;
+        if (tRight > 0) {
+          objects.push(meta(new F.Rect({
+            left: cx + cw - tRight, top: cy, width: tRight, height: ch,
+            fill: cellBc, stroke: "transparent", strokeWidth: 0,
+            originX: "left", originY: "top",
+            selectable: false, evented: false,
+          }), "vline", r, c));
+        }
       }
     }
   }
