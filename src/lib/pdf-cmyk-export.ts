@@ -420,10 +420,19 @@ export async function exportCmykPdf(
   });
 
   console.log("[PDF] Font-family normalized:", svgFontEls.length, "elements");
-  // [임시비활성화] Convert text to outlines (vector paths) for perfect font rendering
-  // const { convertTextToOutlines } = await import("./text-to-outlines");
-  const outlineCount = 0; // await convertTextToOutlines(svgEl);
-  console.log("[PDF] Step 3b: Text outline SKIPPED - font embedding test");
+  // Fix: extract fill from style to attribute before outline conversion
+  svgEl.querySelectorAll("text, tspan").forEach((el: Element) => {
+    const st = el.getAttribute("style") || "";
+    const fillMatch = st.match(/(?:^|;\s*)fill:\s*([^;]+)/);
+    if (fillMatch) el.setAttribute("fill", fillMatch[1].trim());
+    const cleanSt = st.replace(/fill:\s*[^;]+;?/g, "").replace(/stroke[^;]*;?/g, "").replace(/;{2,}/g, ";").replace(/^;|;$/g, "").trim();
+    if (cleanSt) el.setAttribute("style", cleanSt); else el.removeAttribute("style");
+  });
+  console.log("[PDF] Style cleanup before outline conversion");
+  // Convert text to outlines (vector paths) for perfect font rendering
+  const { convertTextToOutlines } = await import("./text-to-outlines");
+  const outlineCount = await convertTextToOutlines(svgEl);
+  console.log("[PDF] Step 3b: Text converted to outlines:", outlineCount, "elements");
   const finalSvg = new XMLSerializer().serializeToString(svgEl);
   const pathCountAfter = (finalSvg.match(/<path /g) || []).length;
   const textCountAfter = (finalSvg.match(/<text[\s>]/g) || []).length;
