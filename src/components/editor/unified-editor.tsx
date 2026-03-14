@@ -1221,9 +1221,11 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     c.on("object:moving", (e: any) => {
       const obj = e.target;
       if (!obj?._tableId || obj._tableRole !== "bg") return;
+      // Init prev position on first move
+      if (obj._prevLeft === undefined) { obj._prevLeft = obj.left; obj._prevTop = obj.top; return; }
       const tableId = obj._tableId;
-      const dx = obj.left - (obj._prevLeft ?? obj.left);
-      const dy = obj.top - (obj._prevTop ?? obj.top);
+      const dx = obj.left - obj._prevLeft;
+      const dy = obj.top - obj._prevTop;
       if (dx === 0 && dy === 0) return;
       c.getObjects().forEach((o: any) => {
         if (o._tableId === tableId && o !== obj) {
