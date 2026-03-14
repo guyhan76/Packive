@@ -1809,6 +1809,14 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     // Select the background object for continued editing
                     const newBg = objs.find((o: any) => o._tableRole === "bg");
                     if (newBg) cv.setActiveObject(newBg);
+                    // Fabric.js 텍스트 캐시 강제 초기화
+                    objs.forEach((o: any) => {
+                      if (o.type === "textbox" || o.type === "Textbox") {
+                        o.dirty = true;
+                        o._clearCache?.();
+                        o.initDimensions?.();
+                      }
+                    });
                     cv.requestRenderAll();
                     // 폰트 로딩 후 강제 재렌더링 (Fabric.js가 새 폰트를 인식하도록)
                     setTimeout(() => { cv.requestRenderAll(); }, 100);
