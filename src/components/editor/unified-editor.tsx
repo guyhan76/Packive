@@ -592,8 +592,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       });
 
       fcRef.current = canvas;
-    (window as any).__fc = canvas; // DEBUG
-    (window as any).__fc = canvas; // DEBUG
       setCanvasReady(true);
       canvas.fireRightClick = true;
       canvas.stopContextMenu = true;
@@ -1830,7 +1828,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                      if (newBg) cv.setActiveObject(newBg);
                      cv.requestRenderAll();
                      // 폰트 강제 재적용 (즉시 + 지연)
-                     const forceFont = () => {
                        cv.getObjects().forEach((o: any) => {
                          if (o.type === "textbox" && o._tableId) {
                            o.dirty = true;
@@ -1840,9 +1837,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                        });
                        cv.requestRenderAll();
                      };
-                     forceFont();
-                     setTimeout(forceFont, 50);
-                     setTimeout(forceFont, 200);
                      setSelProps((p: any) => ({...p, _tableConfig: newCfg, _tableId: objs[0]?._tableId}));
                      if (!loadingRef.current) pushHistory();
                      refreshLayers();
@@ -1930,11 +1924,9 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                          const fabricPropMap: Record<string,string> = { textColor: "fill" };
                          const fabricProp = fabricPropMap[prop] || prop;
                          if (directProps.includes(prop) || fabricPropMap[prop]) {
-                         console.log("[UAR] prop:", prop, "value:", value, "tableId:", obj._tableId, "fabricProp:", fabricProp, "isDirect:", directProps.includes(prop));
                            const tableId = obj._tableId;
                            const allObjs = cv.getObjects().filter((o: any) => o._tableId === tableId && o.type === "textbox");
                            allObjs.forEach((o: any) => {
-                           console.log("[UAR] textbox objects found:", allObjs.length, allObjs.map((o:any) => o._tableRow + "," + o._tableCol).join(" "));
                              const r = o._tableRow, c = o._tableCol;
                              if (r >= sr && r <= er && c >= sc && c <= ec) {
                                o.set({ [fabricProp]: value, dirty: true });
