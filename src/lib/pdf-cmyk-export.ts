@@ -478,6 +478,38 @@ export async function exportCmykPdf(
     console.warn("[PDF] Font loading failed:", fontErr);
   }
 
+  // Fix: Fabric.js puts fill inside style attribute - svg2pdf needs it as direct attribute
+  const allTextEls = svgEl.querySelectorAll("text, tspan");
+  allTextEls.forEach((el: Element) => {
+    const st = el.getAttribute("style") || "";
+    // Extract fill from style
+    const fillMatch = st.match(/(?:^|;\s*)fill:\s*([^;]+)/);
+    if (fillMatch && !el.getAttribute("fill")) {
+      el.setAttribute("fill", fillMatch[1].trim());
+    }
+    // Extract opacity from style
+    const opMatch = st.match(/(?:^|;\s*)opacity:\s*([^;]+)/);
+    if (opMatch && !el.getAttribute("opacity")) {
+      el.setAttribute("opacity", opMatch[1].trim());
+    }
+    // Remove stroke:none that confuses svg2pdf
+    const cleanStyle = st
+      .replace(/fill:\s*[^;]+;?/g, "")
+      .replace(/opacity:\s*[^;]+;?/g, "")
+      .replace(/stroke:\s*none;?/g, "")
+      .replace(/stroke-width:\s*[^;]+;?/g, "")
+      .replace(/stroke-dasharray:\s*none;?/g, "")
+      .replace(/stroke-linecap:\s*[^;]+;?/g, "")
+      .replace(/stroke-dashoffset:\s*[^;]+;?/g, "")
+      .replace(/stroke-linejoin:\s*[^;]+;?/g, "")
+      .replace(/stroke-miterlimit:\s*[^;]+;?/g, "")
+      .replace(/stroke-opacity:\s*[^;]+;?/g, "")
+      .replace(/;{2,}/g, ";").replace(/^;|;$/g, "").trim();
+    if (cleanStyle) el.setAttribute("style", cleanStyle);
+    else el.removeAttribute("style");
+  });
+  console.log("[PDF] Fixed", allTextEls.length, "text/tspan style->attribute for svg2pdf");
+
   await svg2pdf(svgEl, doc, { x: 0, y: 0, width: canvasW, height: canvasH });
   console.log("[PDF] Step 5: SVG rendered to PDF via svg2pdf.js");
 
