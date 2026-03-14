@@ -475,7 +475,7 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
     }
   }
 
-  // 3) Cell-based borders (uses per-cell border values, no duplication)
+  // 3) Cell-based borders (top/left per cell, bottom/right only at edges to avoid overlap)
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const cell = cells[r]?.[c];
@@ -490,7 +490,7 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
       for (let i = r; i < Math.min(r + rowSpan, rows); i++) ch += rowHeights[i];
       const cellBc = cell.cellBorderColor || bc;
 
-      // Top border (always draw - no cell above will duplicate)
+      // Top border (always - next cell above won't draw bottom)
       const tTop = cell.borderTop ?? bw;
       if (tTop > 0) {
         objects.push(meta(new F.Rect({
@@ -500,17 +500,19 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
           selectable: false, evented: false,
         }), "hline", r, c));
       }
-      // Bottom border
-      const tBot = cell.borderBottom ?? bw;
-      if (tBot > 0) {
-        objects.push(meta(new F.Rect({
-          left: cx, top: cy + ch - tBot, width: cw, height: tBot,
-          fill: cellBc, stroke: "transparent", strokeWidth: 0,
-          originX: "left", originY: "top",
-          selectable: false, evented: false,
-        }), "hline", r, c));
+      // Bottom border (only if this is the last row span edge)
+      if (r + rowSpan >= rows) {
+        const tBot = cell.borderBottom ?? bw;
+        if (tBot > 0) {
+          objects.push(meta(new F.Rect({
+            left: cx, top: cy + ch - tBot, width: cw, height: tBot,
+            fill: cellBc, stroke: "transparent", strokeWidth: 0,
+            originX: "left", originY: "top",
+            selectable: false, evented: false,
+          }), "hline", r, c));
+        }
       }
-      // Left border (always draw)
+      // Left border (always - next cell left won't draw right)
       const tLeft = cell.borderLeft ?? bw;
       if (tLeft > 0) {
         objects.push(meta(new F.Rect({
@@ -520,15 +522,17 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
           selectable: false, evented: false,
         }), "vline", r, c));
       }
-      // Right border
-      const tRight = cell.borderRight ?? bw;
-      if (tRight > 0) {
-        objects.push(meta(new F.Rect({
-          left: cx + cw - tRight, top: cy, width: tRight, height: ch,
-          fill: cellBc, stroke: "transparent", strokeWidth: 0,
-          originX: "left", originY: "top",
-          selectable: false, evented: false,
-        }), "vline", r, c));
+      // Right border (only if this is the last col span edge)
+      if (c + colSpan >= cols) {
+        const tRight = cell.borderRight ?? bw;
+        if (tRight > 0) {
+          objects.push(meta(new F.Rect({
+            left: cx + cw - tRight, top: cy, width: tRight, height: ch,
+            fill: cellBc, stroke: "transparent", strokeWidth: 0,
+            originX: "left", originY: "top",
+            selectable: false, evented: false,
+          }), "vline", r, c));
+        }
       }
     }
   }
