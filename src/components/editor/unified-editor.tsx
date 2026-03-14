@@ -1801,22 +1801,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     _rebuildLock.current = false;
                   }
                 };
-                      o.name = `Table ${newCfg.rows}\u00d7${newCfg.cols}`;
-                      cv.add(o);
-                    });
-                    // Select the background object for continued editing
-                    const newBg = objs.find((o: any) => o._tableRole === "bg");
-                    if (newBg) cv.setActiveObject(newBg);
-                    cv.requestRenderAll();
-                    setSelProps((p: any) => ({...p, _tableConfig: newCfg, _tableId: objs[0]?._tableId}));
-                    if (!loadingRef.current) pushHistory();
-                    refreshLayers();
-                  } catch (err: any) {
-                    console.error("[TABLE] rebuildTable ERROR:", err);
-                  } finally {
-                    _rebuildLock.current = false;
-                  }
-                };
                 };
                 return (
                   <div className="mb-3 border border-blue-200 rounded-xl p-3 bg-blue-50/30">
