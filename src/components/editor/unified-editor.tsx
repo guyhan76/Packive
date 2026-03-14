@@ -1927,7 +1927,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                           <div className="relative">
                             <button onClick={() => setSelProps((p:any) => ({...p, _tableFontOpen: !p._tableFontOpen}))}
                               className="w-full border rounded px-2 py-1.5 text-[10px] text-left hover:bg-gray-50 flex justify-between items-center">
-                              <span style={{fontFamily: cell.fontFamily || "Arial"}}>{cell.fontFamily || "Arial"}</span>
+                              <span style={{fontFamily: cell.fontFamily || "Inter"}}>{cell.fontFamily || "Inter"}</span>
                               <span className="text-gray-400">▼</span>
                             </button>
                             {selProps._tableFontOpen && (
@@ -1938,7 +1938,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                                 <div className="overflow-auto">
                                   {googleFonts.filter(f => !fontSearch || f.toLowerCase().includes(fontSearch.toLowerCase())).slice(0, 80).map(f => (
                                     <button key={f} onClick={() => { loadGoogleFont(f); updateAndRebuild("fontFamily", f); setSelProps((p:any) => ({...p, _tableFontOpen: false})); setFontSearch(""); }}
-                                      className={`w-full text-left px-2 py-1.5 text-[10px] hover:bg-blue-50 ${(cell.fontFamily||"Arial")===f?"bg-blue-100 font-bold":""}`}
+                                      className={`w-full text-left px-2 py-1.5 text-[10px] hover:bg-blue-50 ${(cell.fontFamily||"Inter")===f?"bg-blue-100 font-bold":""}`}
                                       style={{fontFamily: f}}>{f}</button>
                                   ))}
                                 </div>
