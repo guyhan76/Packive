@@ -460,6 +460,7 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
           fontStyle: cell.fontStyle || "normal",
           fill: cell.textColor || "#000000",
           textAlign: cell.textAlign || "center",
+          lineHeight: cell.lineHeight ?? 1.4,
           splitByGrapheme: true,
           originX: "left", originY: "top",
           selectable: false, evented: false,

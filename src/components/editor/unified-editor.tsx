@@ -1062,7 +1062,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   }, [pushHistory]);
 
   // ─── Export ───
-  const handleExport = useCallback(async (type: "png" | "pdf" | "svg" | "dieline") => {
+  const handleExport = useCallback(async (type: "png" | "pdf" | "dieline") => {
     const c = fcRef.current; if (!c) return;
     setExporting(type);
     try {
@@ -1076,55 +1076,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
         const link = document.createElement("a");
         link.href = dataUrl; link.download = "packive-design.png"; link.click();
       } else if (type === "svg") {
-        // --- SVG Export: hide guides, vectorize tables in SVG post-processing, outline text ---
-        const savedVisibility: { obj: any; visible: boolean }[] = [];
-        const objects = c.getObjects();
-        objects.forEach((obj: any) => {
-          if ((obj._isGuideLayer && !obj._isDieLine) || obj._isFoldLine) {
-            savedVisibility.push({ obj, visible: obj.visible !== false });
-            obj.set({ visible: false });
-          }
-        });
-        c.renderAll();
-
-        let svgString = c.toSVG({ width: c.getWidth(), height: c.getHeight() });
-        console.log("[SVG Export] Raw SVG length:", svgString.length);
-
-        // Vectorize tables: replace raster <image> with vector SVG elements
-        try {
-          const { vectorizeTablesInSvg } = await import("@/lib/table-to-vector");
-          svgString = vectorizeTablesInSvg(svgString, objects);
-        } catch (e) {
-          console.error("[SVG Export] Table vectorization error:", e);
-        }
-
-        console.log("[SVG-DBG] <text> count in svgString:", (svgString.match(/<text[\s>]/g) || []).length);
-        // Convert text to outlines
-        try {
-          const { convertTextToOutlines } = await import("@/lib/text-to-outlines");
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(svgString, "image/svg+xml");
-          const svgEl = doc.documentElement;
-          const outlineCount = await convertTextToOutlines(svgEl);
-          console.log("[SVG Export] Text outlines converted:", outlineCount);
-          svgString = new XMLSerializer().serializeToString(svgEl);
-        } catch (e) {
-          console.error("[SVG Export] Text outline error:", e);
-        }
-
-        // Restore guide visibility
-        savedVisibility.forEach(({ obj, visible }) => obj.set({ visible }));
-        c.renderAll();
-
-        // Download
-        const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "packive-design.svg";
-        a.click();
-        URL.revokeObjectURL(url);
-        console.log("[SVG Export] Done, size:", svgString.length);
       } else if (type === "pdf") {
         const { exportCmykPdf } = await import("@/lib/pdf-cmyk-export");
         await exportCmykPdf(c, {
