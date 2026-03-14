@@ -1830,8 +1830,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                      forceFont();
                      setTimeout(forceFont, 50);
                      setTimeout(forceFont, 200);
-                       cv.requestRenderAll();
-                     });
                      setSelProps((p: any) => ({...p, _tableConfig: newCfg, _tableId: objs[0]?._tableId}));
                      if (!loadingRef.current) pushHistory();
                      refreshLayers();
