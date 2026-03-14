@@ -320,7 +320,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     objs.forEach((obj: any, i: number) => {
       const src = jsonObjs[i];
       if (!src) return;
-      ["_isTable","_tableConfig","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","_tableRole","_tableRow","_tableCol","name","selectable","evented"].forEach(k => {
+      ["_isTable","_tableConfig","_tableId","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","_tableRole","_tableRow","_tableCol","name","selectable","evented"].forEach(k => {
         if (src[k] !== undefined) obj[k] = src[k];
       });
       // Group 내부 objects도 복원
@@ -332,6 +332,16 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             if (csrc[k] !== undefined) child[k] = csrc[k];
           });
         });
+      }
+    });
+    // 표 객체 바운딩박스/컨트롤 제거
+    objs.forEach((obj: any) => {
+      if (obj._tableId) {
+        if (obj._tableRole === "bg") {
+          obj.set({ hasControls: false, hasBorders: false, lockRotation: true });
+        } else {
+          obj.set({ selectable: false, hasControls: false, hasBorders: false });
+        }
       }
     });
   };
