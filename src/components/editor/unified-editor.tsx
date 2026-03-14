@@ -1902,12 +1902,44 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     {tableEditCell && tc.cells[tableEditCell.row]?.[tableEditCell.col] && (() => {
                       const cell = tc.cells[tableEditCell.row][tableEditCell.col];
                       const updateAndRebuild = (prop: string, value: any) => {
-                        const obj = fcRef.current?.getActiveObject() as any;
-                        if (!obj?._tableConfig) return;
-                        const cfg = JSON.parse(obj._tableConfig);
-                        const sr = tableSelStart && tableSelEnd ? Math.min(tableSelStart.row, tableSelEnd.row) : tableEditCell.row; const er = tableSelStart && tableSelEnd ? Math.max(tableSelStart.row, tableSelEnd.row) : tableEditCell.row; const sc = tableSelStart && tableSelEnd ? Math.min(tableSelStart.col, tableSelEnd.col) : tableEditCell.col; const ec = tableSelStart && tableSelEnd ? Math.max(tableSelStart.col, tableSelEnd.col) : tableEditCell.col; for (let r = sr; r <= er; r++) for (let c = sc; c <= ec; c++) { if (cfg.cells[r]?.[c] && !cfg.cells[r][c].merged) cfg.cells[r][c][prop] = value; }
-                        rebuildTable(cfg);
-                      };
+                       const updateAndRebuild = (prop: string, value: any) => {
+                         const cv = fcRef.current;
+                         const obj = cv?.getActiveObject() as any;
+                         if (!obj?._tableConfig || !cv) return;
+                         const cfg = JSON.parse(obj._tableConfig);
+                         const sr = tableSelStart && tableSelEnd ? Math.min(tableSelStart.row, tableSelEnd.row) : tableEditCell.row;
+                         const er = tableSelStart && tableSelEnd ? Math.max(tableSelStart.row, tableSelEnd.row) : tableEditCell.row;
+                         const sc = tableSelStart && tableSelEnd ? Math.min(tableSelStart.col, tableSelEnd.col) : tableEditCell.col;
+                         const ec = tableSelStart && tableSelEnd ? Math.max(tableSelStart.col, tableSelEnd.col) : tableEditCell.col;
+                         for (let r = sr; r <= er; r++) for (let c = sc; c <= ec; c++) { if (cfg.cells[r]?.[c] && !cfg.cells[r][c].merged) cfg.cells[r][c][prop] = value; }
+
+                         // fontFamily, fontWeight, fontStyle, fontSize, fill(textColor) 등은 기존 객체에 직접 적용
+                         const directProps = ["fontFamily","fontWeight","fontStyle","fontSize","textAlign","lineHeight"];
+                         const fabricPropMap: Record<string,string> = { textColor: "fill" };
+                         const fabricProp = fabricPropMap[prop] || prop;
+                         if (directProps.includes(prop) || fabricPropMap[prop]) {
+                           const tableId = obj._tableId;
+                           const allObjs = cv.getObjects().filter((o: any) => o._tableId === tableId && o.type === "textbox");
+                           allObjs.forEach((o: any) => {
+                             const r = o._tableRow, c = o._tableCol;
+                             if (r >= sr && r <= er && c >= sc && c <= ec) {
+                               o.set({ [fabricProp]: value, dirty: true });
+                               o.initDimensions?.();
+                               o._clearCache?.();
+                             }
+                           });
+                           // config 업데이트 (모든 표 객체에 저장)
+                           const newCfgStr = JSON.stringify(cfg);
+                           cv.getObjects().filter((o: any) => o._tableId === tableId).forEach((o: any) => { o._tableConfig = newCfgStr; });
+                           cv.requestRenderAll();
+                           setSelProps((p: any) => ({...p, _tableConfig: cfg}));
+                           if (!loadingRef.current) pushHistory();
+                           return;
+                         }
+
+                         // 나머지 속성(text, bgColor, border 등)은 rebuildTable
+                         rebuildTable(cfg);
+                       };
                       return (
                         <div className="space-y-2 border-t pt-2">
                             <textarea defaultValue={cell.text || ""} placeholder="Cell text..." rows={2}
