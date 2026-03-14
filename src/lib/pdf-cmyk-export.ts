@@ -284,33 +284,6 @@ export async function exportCmykPdf(
       if (obj._isGuideLayer) { obj.set({ visible: false }); }
     }
   });
-  // DEBUG: log visible objects after dielineOnly filtering
-  if (dielineOnly) {
-    const visibleObjs = objects.filter((o: any) => o.visible !== false);
-    visibleObjs.forEach((o: any, i: number) => {
-    });
-  }
-  canvas.renderAll();
-
-  // Handle background color: remove before toSVG, add full-size rect to PDF later
-  const savedBgColor = canvas.backgroundColor;
-  canvas.backgroundColor = "";
-  canvas.renderAll();
-
-  // DEBUG: 표 객체 상태 확인
-  // 표 객체가 없으면 _tableId 대신 다른 속성 확인
-  }
-  let svgString = canvas.toSVG({ width: canvasW, height: canvasH });
-  console.log("[PDF] Step 3: SVG generated, length:", svgString.length);
-  // DEBUG: SVG에서 표 텍스트 path 확인
-  try {
-    const svgBlob = new Blob([svgString], { type: "image/svg+xml" });
-    const svgUrl = URL.createObjectURL(svgBlob);
-    const svgLink = document.createElement("a");
-    URL.revokeObjectURL(svgUrl);
-  const pathCount = (svgString.match(/<path /g) || []).length;
-  const textCount = (svgString.match(/<text[\s>]/g) || []).length;
-  const tspanCount = (svgString.match(/<tspan[\s>]/g) || []).length;
 
   // dielineOnly: forcefully remove all <text> and <tspan> elements from SVG
   if (dielineOnly) {
