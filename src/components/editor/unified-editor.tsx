@@ -1917,9 +1917,11 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                          const fabricPropMap: Record<string,string> = { textColor: "fill" };
                          const fabricProp = fabricPropMap[prop] || prop;
                          if (directProps.includes(prop) || fabricPropMap[prop]) {
+                         console.log("[UAR] prop:", prop, "value:", value, "tableId:", obj._tableId, "fabricProp:", fabricProp, "isDirect:", directProps.includes(prop));
                            const tableId = obj._tableId;
                            const allObjs = cv.getObjects().filter((o: any) => o._tableId === tableId && o.type === "textbox");
                            allObjs.forEach((o: any) => {
+                           console.log("[UAR] textbox objects found:", allObjs.length, allObjs.map((o:any) => o._tableRow + "," + o._tableCol).join(" "));
                              const r = o._tableRow, c = o._tableCol;
                              if (r >= sr && r <= er && c >= sc && c <= ec) {
                                o.set({ [fabricProp]: value, dirty: true });
