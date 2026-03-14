@@ -1815,6 +1815,17 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                      // 5. bg 선택
                      const newBg = objs.find((o: any) => o._tableRole === "bg");
                      if (newBg) cv.setActiveObject(newBg);
+                     // 강제 폰트 적용 (Fabric.js 캐시 우회)
+                     objs.forEach((o: any) => {
+                       if (o.type === "textbox") {
+                         const cfg = newCfg.cells[o._tableRow]?.[o._tableCol];
+                         if (cfg?.fontFamily) {
+                           o.set({ fontFamily: cfg.fontFamily, dirty: true });
+                           o.initDimensions?.();
+                           o._clearCache?.();
+                         }
+                       }
+                     });
                      cv.requestRenderAll();
                      setSelProps((p: any) => ({...p, _tableConfig: newCfg, _tableId: objs[0]?._tableId}));
                      if (!loadingRef.current) pushHistory();
