@@ -177,34 +177,16 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     if (fontsLoaded.has(family)) return;
     setFontsLoaded(prev => new Set([...prev, family]));
     try {
-      const cssUrl = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@300;400;500;600;700&display=swap`;
-      const resp = await fetch(cssUrl, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" } });
+      const cssUrl = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@400&display=swap`;
+      const resp = await fetch(cssUrl);
       const cssText = await resp.text();
-      // 모든 @font-face 블록에서 URL 추출
-      const blocks = cssText.match(/@font-face\s*\{[^}]+\}/g) || [];
-      let loaded = 0;
-      for (const block of blocks) {
-        const urlM = block.match(/url\((https:\/\/[^)]+)\)/);
-        const weightM = block.match(/font-weight:\s*(\d+)/);
-        const styleM = block.match(/font-style:\s*(\w+)/);
-        if (!urlM) continue;
-        const weight = weightM ? weightM[1] : "400";
-        const style = styleM ? styleM[1] : "normal";
-        try {
-          const ff = new FontFace(family, `url(${urlM[1]})`, { weight, style });
-          await ff.load();
-          document.fonts.add(ff);
-          loaded++;
-        } catch (e) { /* skip failed variant */ }
+      const urlM = cssText.match(/url\((https:\/\/[^)]+)\)/);
+      if (urlM) {
+        const face = new FontFace(family, `url(${urlM[1]})`);
+        await face.load();
+        document.fonts.add(face);
       }
-      if (loaded === 0) {
-        // CSS link 폴백
-        const link = document.createElement("link");
-        link.rel = "stylesheet"; link.href = cssUrl;
-        document.head.appendChild(link);
-        await document.fonts.ready;
-      }
-      console.log(`[FONT] ${family}: ${loaded} variants loaded`);
+      console.log("[FONT] Loaded:", family);
     } catch (e) {
       console.warn("[FONT] Load failed:", family, e);
     }
@@ -1796,25 +1778,17 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                      const baseLeft = bgObj.left || 0;
                      const baseTop = bgObj.top || 0;
 
-                     // 1. 셀에 사용된 폰트를 미리 로드
+                     // 1. 셀 폰트 로드 (400 weight만 빠르게)
                      const usedFonts = new Set<string>();
                      newCfg.cells.forEach((row: any[]) => row.forEach((c: any) => { if (c.fontFamily && c.fontFamily !== "Inter") usedFonts.add(c.fontFamily); }));
                      for (const ff of usedFonts) {
                        if (!document.fonts.check(`16px "${ff}"`)) {
                          try {
-                           const cssUrl = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(ff)}:wght@400;700&display=swap`;
-                           const resp = await fetch(cssUrl, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" } });
-                           const cssText = await resp.text();
-                           const blocks = cssText.match(/@font-face\s*\{[^}]+\}/g) || [];
-                           for (const block of blocks) {
-                             const urlM = block.match(/url\((https:\/\/[^)]+)\)/);
-                             if (!urlM) continue;
-                             const wM = block.match(/font-weight:\s*(\d+)/);
-                             const face = new FontFace(ff, `url(${urlM[1]})`, { weight: wM?wM[1]:"400" });
-                             await face.load();
-                             document.fonts.add(face);
-                           }
-                         } catch(e) { console.warn("[TABLE] Font load failed:", ff); }
+                           const r = await fetch(`https://fonts.googleapis.com/css2?family=${encodeURIComponent(ff)}:wght@400&display=swap`);
+                           const css = await r.text();
+                           const u = css.match(/url\((https:\/\/[^)]+)\)/);
+                           if (u) { const f = new FontFace(ff, `url(${u[1]})`); await f.load(); document.fonts.add(f); }
+                         } catch(e) {}
                        }
                      }
 
