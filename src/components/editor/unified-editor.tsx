@@ -1801,7 +1801,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     _rebuildLock.current = false;
                   }
                 };
-                };
                 return (
                   <div className="mb-3 border border-blue-200 rounded-xl p-3 bg-blue-50/30">
                     <div className="text-[10px] font-semibold text-blue-700 mb-2">TABLE EDITOR ({tc.rows} × {tc.cols})</div>
