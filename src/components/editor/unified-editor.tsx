@@ -180,13 +180,26 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       const cssUrl = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@400&display=swap`;
       const resp = await fetch(cssUrl);
       const cssText = await resp.text();
-      const urlM = cssText.match(/url\((https:\/\/[^)]+)\)/);
-      if (urlM) {
-        const face = new FontFace(family, `url(${urlM[1]})`);
-        await face.load();
-        document.fonts.add(face);
+      // 모든 @font-face 블록 로드 (한글 서브셋 포함)
+      const blocks = cssText.match(/@font-face\s*\{[^}]+\}/g) || [];
+      const promises: Promise<void>[] = [];
+      for (const block of blocks) {
+        const urlM = block.match(/url\((https:\/\/[^)]+)\)/);
+        if (!urlM) continue;
+        const rangeM = block.match(/unicode-range:\s*([^;]+)/);
+        const p = (async () => {
+          try {
+            const opts: any = { weight: "400" };
+            if (rangeM) opts.unicodeRange = rangeM[1].trim();
+            const face = new FontFace(family, `url(${urlM[1]})`, opts);
+            await face.load();
+            document.fonts.add(face);
+          } catch(e) {}
+        })();
+        promises.push(p);
       }
-      console.log("[FONT] Loaded:", family);
+      await Promise.all(promises);
+      console.log("[FONT] Loaded:", family, blocks.length, "subsets");
     } catch (e) {
       console.warn("[FONT] Load failed:", family, e);
     }
