@@ -1774,6 +1774,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 const rebuildTable = async (newCfg: any) => {
                   if (_rebuildLock.current) return;
                   _rebuildLock.current = true;
+                  const _scrollEl = document.querySelector("[data-panel-scroll]") as HTMLElement;
+                  const _scrollPos = _scrollEl?.scrollTop ?? 0;
                   try {
                     const cv = fcRef.current!;
                     const obj = cv.getActiveObject() as any;
@@ -1805,20 +1807,14 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     const newBg = objs.find((o: any) => o._tableRole === "bg");
                     if (newBg) cv.setActiveObject(newBg);
                     cv.requestRenderAll();
-                    // Preserve scroll position during re-render
-                    const scrollEl = document.querySelector("[data-panel-scroll]") as HTMLElement;
-                    const scrollTop = scrollEl?.scrollTop ?? 0;
                     setSelProps((p: any) => ({...p, _tableConfig: newCfg, _tableId: objs[0]?._tableId}));
-                    requestAnimationFrame(() => { 
-                      if (scrollEl) scrollEl.scrollTop = scrollTop;
-                      requestAnimationFrame(() => { if (scrollEl) scrollEl.scrollTop = scrollTop; });
-                    });
                     if (!loadingRef.current) pushHistory();
                     refreshLayers();
                   } catch (err: any) {
                     console.error("[TABLE] rebuildTable ERROR:", err);
                   } finally {
                     _rebuildLock.current = false;
+                    requestAnimationFrame(() => { if (_scrollEl) _scrollEl.scrollTop = _scrollPos; requestAnimationFrame(() => { if (_scrollEl) _scrollEl.scrollTop = _scrollPos; }); });
                   }
                 };
                 return (

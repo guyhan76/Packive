@@ -407,9 +407,14 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
     return obj;
   };
 
+  // Border widths (needed for bg sizing)
+  const bw = borderWidth ?? 1;
+  const obw = outerBorderWidth ?? bw;
+  const bc = borderColor || "#000000";
+
   // 1) White background
   objects.push(meta(new F.Rect({
-    left: 0, top: 0, width: totalW, height: totalH,
+    left: -(obw / 2), top: -(obw / 2), width: totalW + obw, height: totalH + obw,
     fill: "#ffffff", stroke: "transparent", strokeWidth: 0,
     originX: "left", originY: "top",
     selectable: true, evented: true,
@@ -471,9 +476,6 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
   }
 
   // 3) Cell-based borders (supports merged cells)
-  const bw = borderWidth ?? 1;
-  const obw = outerBorderWidth ?? bw;
-  const bc = borderColor || "#000000";
 
   // Track which edges to draw using a grid
   // For each non-merged cell, draw its 4 borders
