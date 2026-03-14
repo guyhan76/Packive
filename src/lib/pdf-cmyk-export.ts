@@ -300,37 +300,20 @@ export async function exportCmykPdf(
   canvas.renderAll();
 
   // DEBUG: 표 객체 상태 확인
-  const tableObjsDbg = objects.filter((o: any) => o._tableId);
-  console.log("[PDF] Total objects:", objects.length, "Table objects:", tableObjsDbg.length);
-  tableObjsDbg.forEach((o: any) => console.log("[PDF-TBL]", o.type, "role=" + (o._tableRole || "?"), "visible=" + (o.visible !== false), "fill=" + (o.fill || "none"), "text=" + (o.text ? o.text.substring(0,20) : "")));
   // 표 객체가 없으면 _tableId 대신 다른 속성 확인
-  if (tableObjsDbg.length === 0) {
-    const allTypes = objects.map((o: any) => o.type + "(" + (o.name || "") + ")").join(", ");
-    console.log("[PDF-TBL] No _tableId found. All objects:", allTypes);
   }
   let svgString = canvas.toSVG({ width: canvasW, height: canvasH });
   console.log("[PDF] Step 3: SVG generated, length:", svgString.length);
   // DEBUG: SVG에서 표 텍스트 path 확인
-  // DEBUG: SVG를 다운로드하여 직접 확인
   try {
     const svgBlob = new Blob([svgString], { type: "image/svg+xml" });
     const svgUrl = URL.createObjectURL(svgBlob);
     const svgLink = document.createElement("a");
     svgLink.href = svgUrl; svgLink.download = "debug-table-export.svg"; svgLink.click();
     URL.revokeObjectURL(svgUrl);
-    console.log("[PDF-DBG] SVG saved as debug-table-export.svg");
-  } catch(e) { console.error("[PDF-DBG] SVG save error:", e); }
-  // DEBUG: SVG에서 text 요소 샘플 출력
-  const dbgParser = new DOMParser();
-  const dbgDoc = dbgParser.parseFromString(svgString, "image/svg+xml");
-  const dbgTexts = dbgDoc.querySelectorAll("text");
-  dbgTexts.forEach((t, i) => {
-    if (i < 3) console.log("[PDF-DBG] text[" + i + "]:", t.outerHTML.substring(0, 200));
-  });
   const pathCount = (svgString.match(/<path /g) || []).length;
   const textCount = (svgString.match(/<text[\s>]/g) || []).length;
   const tspanCount = (svgString.match(/<tspan[\s>]/g) || []).length;
-  console.log("[PDF-DBG] SVG before outline: paths=" + pathCount + " texts=" + textCount + " tspans=" + tspanCount);
 
   // dielineOnly: forcefully remove all <text> and <tspan> elements from SVG
   if (dielineOnly) {
@@ -436,11 +419,9 @@ export async function exportCmykPdf(
   const finalSvg = new XMLSerializer().serializeToString(svgEl);
   const pathCountAfter = (finalSvg.match(/<path /g) || []).length;
   const textCountAfter = (finalSvg.match(/<text[\s>]/g) || []).length;
-  console.log("[PDF-DBG] SVG after outline: paths=" + pathCountAfter + " texts=" + textCountAfter);
   // fill 색상 확인
   const fillMatches = finalSvg.match(/fill="([^"]+)"/g) || [];
   const uniqueFills = [...new Set(fillMatches)].slice(0, 15);
-  console.log("[PDF-DBG] Unique fills:", uniqueFills.join(", "));
 
   svgEl.setAttribute("width", String(canvasW));
   svgEl.setAttribute("height", String(canvasH));
