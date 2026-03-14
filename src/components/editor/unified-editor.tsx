@@ -174,30 +174,38 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
   }, []);
   const loadGoogleFont = useCallback(async (family: string) => {
+  const loadGoogleFont = useCallback(async (family: string) => {
     if (fontsLoaded.has(family)) return;
     setFontsLoaded(prev => new Set([...prev, family]));
     try {
-      // 1. Google Fonts CSS 로드
       const cssUrl = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@300;400;500;600;700&display=swap`;
-      const cssResp = await fetch(cssUrl);
-      const cssText = await cssResp.text();
-      // 2. CSS에서 font-face URL 추출
-      const urlMatch = cssText.match(/url\((https:\/\/[^)]+\.(?:woff2|woff|ttf))\)/);
-      if (urlMatch) {
-        const fontFace = new FontFace(family, `url(${urlMatch[1]})`);
-        await fontFace.load();
-        document.fonts.add(fontFace);
-        console.log("[FONT] FontFace loaded:", family);
-      } else {
+      const resp = await fetch(cssUrl, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" } });
+      const cssText = await resp.text();
+      // 모든 @font-face 블록에서 URL 추출
+      const blocks = cssText.match(/@font-face\s*\{[^}]+\}/g) || [];
+      let loaded = 0;
+      for (const block of blocks) {
+        const urlM = block.match(/url\((https:\/\/[^)]+)\)/);
+        const weightM = block.match(/font-weight:\s*(\d+)/);
+        const styleM = block.match(/font-style:\s*(\w+)/);
+        if (!urlM) continue;
+        const weight = weightM ? weightM[1] : "400";
+        const style = styleM ? styleM[1] : "normal";
+        try {
+          const ff = new FontFace(family, `url(${urlM[1]})`, { weight, style });
+          await ff.load();
+          document.fonts.add(ff);
+          loaded++;
+        } catch (e) { /* skip failed variant */ }
+      }
+      if (loaded === 0) {
         // CSS link 폴백
         const link = document.createElement("link");
-        link.rel = "stylesheet";
-        link.href = cssUrl;
+        link.rel = "stylesheet"; link.href = cssUrl;
         document.head.appendChild(link);
-        await document.fonts.load(`16px "${family}"`);
         await document.fonts.ready;
-        console.log("[FONT] CSS link loaded:", family);
       }
+      console.log(`[FONT] ${family}: ${loaded} variants loaded`);
     } catch (e) {
       console.warn("[FONT] Load failed:", family, e);
     }
