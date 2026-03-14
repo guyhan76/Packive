@@ -414,7 +414,7 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
 
   // 1) White background
   objects.push(meta(new F.Rect({
-    left: -(obw / 2), top: -(obw / 2), width: totalW + obw, height: totalH + obw,
+    left: 0, top: 0, width: totalW, height: totalH,
     fill: "#ffffff", stroke: "transparent", strokeWidth: 0,
     originX: "left", originY: "top",
     selectable: true, evented: true,
@@ -496,7 +496,7 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
       const tTop = (r === 0) ? obw : bw;
       if (tTop > 0) {
         objects.push(meta(new F.Rect({
-          left: cx, top: cy - tTop / 2, width: cw, height: tTop,
+          left: cx, top: cy, width: cw, height: tTop,
           fill: bc, stroke: "transparent", strokeWidth: 0,
           originX: "left", originY: "top",
           selectable: false, evented: false,
@@ -506,7 +506,7 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
       const tBot = (r + rowSpan >= rows) ? obw : bw;
       if (tBot > 0) {
         objects.push(meta(new F.Rect({
-          left: cx, top: cy + ch - tBot / 2, width: cw, height: tBot,
+          left: cx, top: cy + ch - tBot, width: cw, height: tBot,
           fill: bc, stroke: "transparent", strokeWidth: 0,
           originX: "left", originY: "top",
           selectable: false, evented: false,
@@ -516,7 +516,7 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
       const tLeft = (c === 0) ? obw : bw;
       if (tLeft > 0) {
         objects.push(meta(new F.Rect({
-          left: cx - tLeft / 2, top: cy, width: tLeft, height: ch,
+          left: cx, top: cy, width: tLeft, height: ch,
           fill: bc, stroke: "transparent", strokeWidth: 0,
           originX: "left", originY: "top",
           selectable: false, evented: false,
@@ -526,7 +526,7 @@ export function buildTableObjects(config: TableConfig, FabricModule: any): any[]
       const tRight = (c + colSpan >= cols) ? obw : bw;
       if (tRight > 0) {
         objects.push(meta(new F.Rect({
-          left: cx + cw - tRight / 2, top: cy, width: tRight, height: ch,
+          left: cx + cw - tRight, top: cy, width: tRight, height: ch,
           fill: bc, stroke: "transparent", strokeWidth: 0,
           originX: "left", originY: "top",
           selectable: false, evented: false,
