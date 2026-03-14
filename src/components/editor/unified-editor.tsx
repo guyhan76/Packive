@@ -1787,52 +1787,62 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                   const _scrollEl = document.querySelector("[data-panel-scroll]") as HTMLElement;
                   const _scrollPos = _scrollEl?.scrollTop ?? 0;
                   try {
-                    const cv = fcRef.current!;
-                    const obj = cv.getActiveObject() as any;
-                    if (!obj) { _rebuildLock.current = false; return; }
-                    const tableId = obj._tableId;
-                    // Find all objects belonging to this table
-                    const tableObjs = tableId
-                      ? cv.getObjects().filter((o: any) => o._tableId === tableId)
-                      : [obj];
-                    // Get position from first bg object or active object
-                    const bgObj = tableObjs.find((o: any) => o._tableRole === "bg") || obj;
-                    const baseLeft = bgObj.left || 0;
-                    const baseTop = bgObj.top || 0;
-                    // Remove all old table objects
-                    cv.discardActiveObject();
-                    tableObjs.forEach((o: any) => cv.remove(o));
-                    // Build new objects
-                    // 셀에 사용된 폰트를 미리 로드 후 렌더링
-                    const usedFonts = new Set<string>();
-                    newCfg.cells.forEach((row: any[]) => row.forEach((c: any) => { if (c.fontFamily && c.fontFamily !== "Inter") usedFonts.add(c.fontFamily); }));
-                    objs.forEach((o: any) => {
-                      o.set({ left: o.left + baseLeft, top: o.top + baseTop });
-                      o._isTable = true;
-                      o._tableConfig = JSON.stringify(newCfg);
-                      o.name = `Table ${newCfg.rows}\u00d7${newCfg.cols}`;
-                      cv.add(o);
-                    });
-                    // Select the background object for continued editing
-                    const newBg = objs.find((o: any) => o._tableRole === "bg");
-                    if (newBg) cv.setActiveObject(newBg);
-                    // Fabric.js 텍스트 캐시 강제 초기화
-                    objs.forEach((o: any) => {
-                      if (o.type === "textbox" || o.type === "Textbox") {
-                        o.dirty = true;
-                        o._clearCache?.();
-                        o.initDimensions?.();
-                      }
-                    });
-                    cv.requestRenderAll();
-                    // 폰트 로딩 후 강제 재렌더링 (Fabric.js가 새 폰트를 인식하도록)
-                    setTimeout(() => { cv.requestRenderAll(); }, 100);
-                    setTimeout(() => { cv.requestRenderAll(); }, 500);
-                    // DEBUG: 폰트 확인
-                    objs.forEach((o: any) => { if (o.type === "textbox" || o.type === "Textbox") console.log("[TABLE-FONT]", o.text?.substring(0,20), "fontFamily:", o.fontFamily, "fill:", o.fill); });
-                    setSelProps((p: any) => ({...p, _tableConfig: newCfg, _tableId: objs[0]?._tableId}));
-                    if (!loadingRef.current) pushHistory();
-                    refreshLayers();
+                     const cv = fcRef.current!;
+                     const obj = cv.getActiveObject() as any;
+                     if (!obj) { _rebuildLock.current = false; return; }
+                     const tableId = obj._tableId;
+                     const tableObjs = tableId ? cv.getObjects().filter((o: any) => o._tableId === tableId) : [obj];
+                     const bgObj = tableObjs.find((o: any) => o._tableRole === "bg") || obj;
+                     const baseLeft = bgObj.left || 0;
+                     const baseTop = bgObj.top || 0;
+
+                     // 1. 셀에 사용된 폰트를 미리 로드
+                     const usedFonts = new Set<string>();
+                     newCfg.cells.forEach((row: any[]) => row.forEach((c: any) => { if (c.fontFamily && c.fontFamily !== "Inter") usedFonts.add(c.fontFamily); }));
+                     for (const ff of usedFonts) {
+                       if (!document.fonts.check(`16px "${ff}"`)) {
+                         try {
+                           const cssUrl = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(ff)}:wght@400;700&display=swap`;
+                           const resp = await fetch(cssUrl, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" } });
+                           const cssText = await resp.text();
+                           const blocks = cssText.match(/@font-face\s*\{[^}]+\}/g) || [];
+                           for (const block of blocks) {
+                             const urlM = block.match(/url\((https:\/\/[^)]+)\)/);
+                             if (!urlM) continue;
+                             const wM = block.match(/font-weight:\s*(\d+)/);
+                             const face = new FontFace(ff, `url(${urlM[1]})`, { weight: wM?wM[1]:"400" });
+                             await face.load();
+                             document.fonts.add(face);
+                           }
+                         } catch(e) { console.warn("[TABLE] Font load failed:", ff); }
+                       }
+                     }
+
+                     // 2. 기존 표 제거
+                     cv.discardActiveObject();
+                     tableObjs.forEach((o: any) => cv.remove(o));
+
+                     // 3. 새 표 빌드
+                     const { buildTableObjects } = await import("@/lib/table-engine");
+                     const F = await import("fabric");
+                     const objs = buildTableObjects(newCfg, F);
+
+                     // 4. 캔버스에 추가
+                     objs.forEach((o: any) => {
+                       o.set({ left: o.left + baseLeft, top: o.top + baseTop });
+                       o._isTable = true;
+                       o._tableConfig = JSON.stringify(newCfg);
+                       o.name = `Table ${newCfg.rows}\u00d7${newCfg.cols}`;
+                       cv.add(o);
+                     });
+
+                     // 5. bg 선택
+                     const newBg = objs.find((o: any) => o._tableRole === "bg");
+                     if (newBg) cv.setActiveObject(newBg);
+                     cv.requestRenderAll();
+                     setSelProps((p: any) => ({...p, _tableConfig: newCfg, _tableId: objs[0]?._tableId}));
+                     if (!loadingRef.current) pushHistory();
+                     refreshLayers();
                   } catch (err: any) {
                     console.error("[TABLE] rebuildTable ERROR:", err);
                   } finally {
