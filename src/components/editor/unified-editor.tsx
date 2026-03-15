@@ -1,9 +1,9 @@
-﻿"use client";
+"use client";
 import React, { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useI18n } from "@/components/i18n-context";
 import { PACKIVE_SPOT_COLORS } from "@/data/packive-spot-colors";
-import Ruler, { RulerCorner } from "@/components/editor/ruler";
+import Ruler, { RulerCorner, RULER_THICK } from "@/components/editor/ruler";
 import { HLC_COLORS, HLC_HUE_CATEGORIES } from "@/data/cielab-hlc-colors";
 import { loadFOGRA39LUT, cmykToSrgb, cmykToHex as iccCmykToHex, srgbToCmyk, isLUTReady, isReverseLUTReady } from "@/lib/cmyk-engine";
 
@@ -217,6 +217,11 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [rulerUnit, setRulerUnit] = useState<"mm" | "inch">("mm");
   const [rulerScroll, setRulerScroll] = useState({ left: 0, top: 0 });
   const [guides, setGuides] = useState<Array<{ id: string; pos: number; dir: "h" | "v" }>>([]);
+  const [mousePos, setMousePos] = useState<{x:number;y:number}>({x:-100,y:-100});
+  const [measureMode, setMeasureMode] = useState(false);
+  const [measurePts, setMeasurePts] = useState<{x:number;y:number}[]>([]);
+  const [measureResult, setMeasureResult] = useState("");
+  const [showRuler, setShowRuler] = useState(true);
   const zoomRef = useRef(100);
   const [drawMode, setDrawMode] = useState(false);
   const [eyedropperMode, setEyedropperMode] = useState(false);
@@ -509,6 +514,51 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     setZoom(z);
     zoomRef.current = z;
   }, []);
+
+  // ─── Measure Tool ───
+  const handleMeasureClick = useCallback((opt: any) => {
+    if (!measureMode) return;
+    const cv = fcRef.current; if (!cv) return;
+    const ptr = cv.getPointer(opt.e);
+    const s = scaleRef.current;
+    const mmX = +(ptr.x / s - 15).toFixed(2);
+    const mmY = +(ptr.y / s - 15).toFixed(2);
+    setMeasurePts(prev => {
+      const next = prev.length >= 2 ? [{x:mmX,y:mmY}] : [...prev, {x:mmX,y:mmY}];
+      if (next.length === 2) {
+        const dx = next[1].x - next[0].x, dy = next[1].y - next[0].y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        setMeasureResult(dist.toFixed(2) + " mm (dx:" + dx.toFixed(1) + " dy:" + dy.toFixed(1) + ")");
+      } else { setMeasureResult("Click second point..."); }
+      return next;
+    });
+  }, [measureMode]);
+
+  useEffect(() => {
+    const cv = fcRef.current; if (!cv) return;
+    cv.getObjects().filter((o:any) => o._isMeasure).forEach((o:any) => cv.remove(o));
+    if (!measureMode || measurePts.length === 0) { cv.renderAll(); return; }
+    const s = scaleRef.current;
+    const F = (window as any).__fabric; if (!F) return;
+    const pts = measurePts.map(p => ({x:(p.x+15)*s, y:(p.y+15)*s}));
+    pts.forEach((p,i) => {
+      cv.add(new F.Circle({left:p.x-4, top:p.y-4, radius:4, fill:i===0?"#4fc3f7":"#ff5252", stroke:"#fff", strokeWidth:1.5, selectable:false, evented:false, _isMeasure:true}));
+    });
+    if (pts.length === 2) {
+      cv.add(new F.Line([pts[0].x,pts[0].y,pts[1].x,pts[1].y], {stroke:"#4fc3f7", strokeWidth:1.5, strokeDashArray:[6,3], selectable:false, evented:false, _isMeasure:true}));
+      const mx=(pts[0].x+pts[1].x)/2, my=(pts[0].y+pts[1].y)/2;
+      const dx=measurePts[1].x-measurePts[0].x, dy=measurePts[1].y-measurePts[0].y;
+      const dist=Math.sqrt(dx*dx+dy*dy);
+      cv.add(new F.Text(dist.toFixed(2)+" mm", {left:mx+8,top:my-10,fontSize:12,fill:"#4fc3f7",fontFamily:"Inter",fontWeight:"bold",backgroundColor:"rgba(0,0,0,0.7)",padding:3,selectable:false,evented:false,_isMeasure:true}));
+    }
+    cv.renderAll();
+  }, [measureMode, measurePts]);
+
+  useEffect(() => {
+    const cv = fcRef.current; if (!cv) return;
+    if (measureMode) { cv.on("mouse:down", handleMeasureClick); }
+    return () => { cv.off("mouse:down", handleMeasureClick); };
+  }, [measureMode, handleMeasureClick]);
 
   // ─── Draw dieline guide layer on Fabric canvas ───
   const drawGuideLayer = useCallback(async (canvas: any, scale: number) => {
@@ -1557,6 +1607,16 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             <span className="text-base leading-none">{"\u2328"}</span>
             <span className="text-[9px] mt-0.5">Keys</span>
           </button>
+            <button onClick={() => { setMeasureMode(m => { if(!m){setMeasurePts([]);setMeasureResult("Click first point...");} else {setMeasureResult("");const cv=fcRef.current;if(cv){cv.getObjects().filter((o:any)=>o._isMeasure).forEach((o:any)=>cv.remove(o));cv.renderAll();}} return !m; }); }}
+              className={`w-12 h-12 flex flex-col items-center justify-center rounded-lg transition-colors ${measureMode ? "bg-cyan-100 text-cyan-700" : "text-gray-500 hover:bg-gray-100"}`}>
+              <span className="text-base">&#x1F4CF;</span>
+              <span className="text-[9px] mt-0.5">Measure</span>
+            </button>
+            <button onClick={() => setShowRuler(r => !r)}
+              className={`w-12 h-12 flex flex-col items-center justify-center rounded-lg transition-colors ${showRuler ? "bg-gray-200 text-gray-700" : "text-gray-400 hover:bg-gray-100"}`}>
+              <span className="text-base">&#x1F4D0;</span>
+              <span className="text-[9px] mt-0.5">Ruler</span>
+            </button>
         </div>
 
         {/* ═══ Tool Popups (absolute positioned) ═══ */}
@@ -1791,9 +1851,10 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
 
           {/* ═══ CANVAS AREA ═══ */}
-          <div ref={wrapperRef} onScroll={(e) => setRulerScroll({ left: (e.target as HTMLDivElement).scrollLeft, top: (e.target as HTMLDivElement).scrollTop })} className="flex-1 overflow-auto bg-gray-100 relative flex items-center justify-center pb-7"
-            style={{ paddingLeft: 24, paddingTop: 24, cursor: drawMode ? "crosshair" : "default" }}>
+          <div ref={wrapperRef} onScroll={(e) => { const t=e.target as HTMLDivElement; setRulerScroll({left:t.scrollLeft,top:t.scrollTop}); }} onMouseMove={(e) => { if(!showRuler)return; const r=e.currentTarget.getBoundingClientRect(); setMousePos({x:e.clientX-r.left-RULER_THICK+(rulerScroll?.left||0),y:e.clientY-r.top-RULER_THICK+(rulerScroll?.top||0)}); }} onMouseLeave={() => setMousePos({x:-100,y:-100})} className="flex-1 overflow-auto bg-gray-100 relative pb-7"
+            style={{ paddingLeft: showRuler ? RULER_THICK : 0, paddingTop: showRuler ? RULER_THICK : 0, cursor: measureMode ? "crosshair" : drawMode ? "crosshair" : "default" }}>
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
+              {showRuler && (<>
               {/* Rulers */}
               <RulerCorner unit={rulerUnit} onToggle={() => setRulerUnit(u => u === "mm" ? "inch" : "mm")} />
               <Ruler direction="horizontal" canvasWidth={fcRef.current?.getWidth() || 800} canvasHeight={fcRef.current?.getHeight() || 600}
@@ -1802,15 +1863,17 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
               <Ruler direction="vertical" canvasWidth={fcRef.current?.getWidth() || 800} canvasHeight={fcRef.current?.getHeight() || 600}
                 scale={scaleRef.current} zoom={zoom} scrollLeft={rulerScroll.left} scrollTop={rulerScroll.top}
                 pad={15} unit={rulerUnit} onGuideCreate={addGuide} />
+              </>)}
             <canvas ref={canvasElRef} className="shadow-lg" />
-            {/* Status bar */}
-            <div className="absolute bottom-0 left-0 right-0 h-7 bg-white/90 border-t border-gray-200 flex items-center px-3 gap-4 text-[10px] text-gray-500">
-              <span>Net: {totalW.toFixed(1)} x {totalH.toFixed(1)} mm</span>
-              <span>Scale: {scaleRef.current.toFixed(1)} px/mm</span>
-              <span>Zoom: {zoom}%</span>
-              <span>Objects: {layersList.length}</span>
-              {selectedPanel && <span className="text-blue-600 font-medium">Panel: {selectedPanel}</span>}
-            </div>
+              {/* Status bar */}
+              <div className="absolute bottom-0 left-0 right-0 h-7 bg-[#2c2c2c] border-t border-[#1a1a1a] flex items-center px-3 gap-3 text-[10px] text-[#888] font-mono select-none">
+                {measureMode && <span className="text-[#4fc3f7] font-medium">{measureResult || "Measure: click first point"}</span>}
+                {measureMode && <span className="border-l border-[#444] h-3" />}
+                <span>Net: {totalW.toFixed(1)} x {totalH.toFixed(1)} mm</span>
+                <span>Zoom: {zoom}%</span>
+                <span>Objects: {layersList.length}</span>
+                {selectedPanel && <span className="text-[#4fc3f7]">Panel: {selectedPanel}</span>}
+              </div>
           </div>
         </div>
 
