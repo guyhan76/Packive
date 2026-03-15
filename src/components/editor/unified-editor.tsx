@@ -289,6 +289,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [showUploadGuide, setShowUploadGuide] = useState(false);
   const [dielineVisible, setDielineVisible] = useState(true);
   const [dielineLocked, setDielineLocked] = useState(true);
+  const [dielineUngrouped, setDielineUngrouped] = useState(false);
   const [dielineFileName, setDielineFileName] = useState<string>('');
   const dielineFileRef = useRef<HTMLInputElement>(null);
   const [fillHue, setFillHue] = useState(0);
@@ -1479,7 +1480,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           const f = e.target.files?.[0]; if (!f) return;
           const c = fcRef.current; if (!c) return;
           const F = fabricModRef.current; if (!F) return;
-          setDielineFileName(f.name);
+          setDielineFileName(f.name); setDielineUngrouped(false);
           // Remove existing dielines first
           const oldDielines = c.getObjects().filter((o: any) => o._isDieLine || o._isGuideLayer || o._isFoldLine || o._isPanelLabel);
           oldDielines.forEach((o: any) => c.remove(o));
