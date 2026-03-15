@@ -1625,8 +1625,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             console.log("[Dieline] Verify: ", verifyW.toFixed(4), "x", verifyH.toFixed(4), "mm");
             console.log("[Dieline] Scale: scX=", finalScX.toFixed(6), "scY=", finalScY.toFixed(6), "px/mm=", newPxPerMm.toFixed(4));
             // Store per-axis px/mm for Measure tool
-            scaleXRef.current = (group.width || 1) * finalScX / origMmW; // actual px per mm on X
-            scaleYRef.current = (group.height || 1) * finalScY / origMmH; // actual px per mm on Y
+            scaleXRef.current = newPxPerMm * (finalScX / finalScY); // X has different density due to Fabric distortion
+            scaleYRef.current = newPxPerMm; // Y axis is reference (least distorted)
             console.log("[Dieline] Measure scale: X=", scaleXRef.current.toFixed(4), "Y=", scaleYRef.current.toFixed(4), "px/mm");
             c.add(group); c.sendObjectToBack(group); c.requestRenderAll();
           } catch (err: any) { alert("Failed to load dieline: " + err.message); }
