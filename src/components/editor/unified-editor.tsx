@@ -1957,11 +1957,33 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
               {/* Rulers */}
               <div style={{visibility: showRuler ? "visible" : "hidden"}}><RulerCorner unit={rulerUnit} onToggle={() => setRulerUnit(u => u === "mm" ? "inch" : "mm")}  /></div>
               <div style={{visibility: showRuler ? "visible" : "hidden"}}><Ruler direction="horizontal" canvasWidth={fcRef.current?.getWidth() || 800} canvasHeight={fcRef.current?.getHeight() || 600}
-                scale={scaleRef.current} zoom={zoom} scrollLeft={rulerScroll.left} scrollTop={rulerScroll.top}
+                scale={scaleXRef.current} zoom={zoom} scrollLeft={rulerScroll.left} scrollTop={rulerScroll.top}
                 pad={15} unit={rulerUnit} onGuideCreate={addGuide}  /></div>
               <div style={{visibility: showRuler ? "visible" : "hidden"}}><Ruler direction="vertical" canvasWidth={fcRef.current?.getWidth() || 800} canvasHeight={fcRef.current?.getHeight() || 600}
-                scale={scaleRef.current} zoom={zoom} scrollLeft={rulerScroll.left} scrollTop={rulerScroll.top}
+                scale={scaleYRef.current} zoom={zoom} scrollLeft={rulerScroll.left} scrollTop={rulerScroll.top}
                 pad={15} unit={rulerUnit} onGuideCreate={addGuide}  /></div>
+
+
+              {/* Measure crosshair overlay */}
+              {measureMode && (
+                <div
+                  style={{
+                    position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh",
+                    pointerEvents: "none", zIndex: 9999,
+                  }}
+                >
+                  <svg width="100%" height="100%" style={{ position: "absolute", top: 0, left: 0 }}>
+                    {mousePos.x >= 0 && (
+                      <>
+                        <line x1={mousePos.x + (showRuler ? RULER_THICK : 0)} y1="0" x2={mousePos.x + (showRuler ? RULER_THICK : 0)} y2="100%"
+                          stroke="#4fc3f7" strokeWidth="0.5" strokeDasharray="4 4" opacity="0.7" />
+                        <line x1="0" y1={mousePos.y + (showRuler ? RULER_THICK : 0)} x2="100%" y2={mousePos.y + (showRuler ? RULER_THICK : 0)}
+                          stroke="#4fc3f7" strokeWidth="0.5" strokeDasharray="4 4" opacity="0.7" />
+                      </>
+                    )}
+                  </svg>
+                </div>
+              )}
 
             <canvas ref={canvasElRef} className="shadow-lg" />
               {/* Status bar */}
