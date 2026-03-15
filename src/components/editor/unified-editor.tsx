@@ -525,7 +525,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     const sX = scaleXRef.current; const sY = scaleYRef.current;
     const mmX = +(px / sX - 15).toFixed(2);
     const mmY = +(py / sY - 15).toFixed(2);
-    console.log("[Measure] scenePoint:", px.toFixed(4), py.toFixed(4), "sX:", sX.toFixed(6), "sY:", sY.toFixed(6), "mmX:", mmX, "mmY:", mmY);
     setMeasurePts(prev => {
       const next = prev.length >= 2 ? [{x:mmX,y:mmY}] : [...prev, {x:mmX,y:mmY}];
       if (next.length === 2) {
