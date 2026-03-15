@@ -1512,7 +1512,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           if (!svgStr) { alert("No SVG data received"); return; }
           
           try {
-          try {
             const result = await F.loadSVGFromString(svgStr);
             // Force strokes for non-SVG files
             const forceBlack = (objs: any[]) => {
@@ -1579,7 +1578,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             group.set({ scaleX: sc, scaleY: sc, left: cw2 / 2, top: ch2 / 2, originX: "center", originY: "center" });
             console.log("[Dieline] Applied scale:", sc.toFixed(6), "group size:", (group.width! * sc).toFixed(1), "x", (group.height! * sc).toFixed(1), "px");
 
-            c.add(group); c.sendObjectToBack(group); c.requestRenderAll();
             c.add(group); c.sendObjectToBack(group); c.requestRenderAll();
           } catch (err: any) { alert("Failed to load dieline: " + err.message); }
           e.target.value = "";
