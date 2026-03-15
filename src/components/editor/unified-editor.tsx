@@ -521,11 +521,11 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const handleMeasureClick = useCallback((opt: any) => {
     if (!measureMode) return;
     const cv = fcRef.current; if (!cv) return;
-    const e = opt.e; const cv2 = fcRef.current!; const vpt = cv2.viewportTransform || [1,0,0,1,0,0]; const rect = cv2.getElement().getBoundingClientRect(); const px = (e.clientX - rect.left) / vpt[0] - vpt[4] / vpt[0]; const py = (e.clientY - rect.top) / vpt[3] - vpt[5] / vpt[3];
+    const e = opt.e; const el = fcRef.current?.getElement(); if (!el) return; const vpt = fcRef.current!.viewportTransform || [1,0,0,1,0,0]; const px = (e.offsetX || 0) / vpt[0] - vpt[4] / vpt[0]; const py = (e.offsetY || 0) / vpt[3] - vpt[5] / vpt[3];
     const sX = scaleXRef.current; const sY = scaleYRef.current;
     const mmX = +(px / sX - 15).toFixed(2);
     const mmY = +(py / sY - 15).toFixed(2);
-    console.log("[Measure] raw px:", px.toFixed(2), py.toFixed(2), "sX:", sX.toFixed(6), "sY:", sY.toFixed(6), "mmX:", mmX, "mmY:", mmY, "rect:", rect.left.toFixed(1), rect.top.toFixed(1), "vpt:", vpt[0].toFixed(4), vpt[4].toFixed(2));
+    console.log("[Measure] offsetX:", (opt.e.offsetX||0).toFixed(4), "offsetY:", (opt.e.offsetY||0).toFixed(4), "px:", px.toFixed(4), "py:", py.toFixed(4), "mmX:", mmX, "mmY:", mmY);
     setMeasurePts(prev => {
       const next = prev.length >= 2 ? [{x:mmX,y:mmY}] : [...prev, {x:mmX,y:mmY}];
       if (next.length === 2) {
