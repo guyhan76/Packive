@@ -1976,6 +1976,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 <div style={{ position: "absolute", top: 0, left: mousePos.x + (showRuler ? RULER_THICK : 0) + (wrapperRef.current?.getBoundingClientRect().left || 0), height: "100%", width: 0, borderLeft: "0.5px dashed #4fc3f7", opacity: 0.7 }} />
               </div>
               {/* Status bar */}
+
+            <canvas ref={canvasElRef} className="shadow-lg" />
               <div className="absolute bottom-0 left-0 right-0 h-7 bg-[#2c2c2c] border-t border-[#1a1a1a] flex items-center px-3 gap-3 text-[10px] text-[#888] font-mono select-none">
                 {measureMode && <span className="text-[#4fc3f7] font-medium">{measureResult || "Measure: click first point"}</span>}
                 {measureMode && <span className="border-l border-[#444] h-3" />}
