@@ -1653,69 +1653,71 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
       <div className="flex flex-1 overflow-hidden">
         {/* ═══ LEFT TOOLBAR ═══ */}
-        <div className="w-16 bg-white border-r border-gray-200 flex flex-col items-center py-3 shrink-0 overflow-y-auto">
-          <span className="text-[8px] font-bold text-gray-400 tracking-wider mb-1">DESIGN</span>
+        <div className="w-14 bg-[#fafafa] border-r border-gray-200 flex flex-col items-center py-2 shrink-0 overflow-y-auto gap-0.5">
+          <span className="text-[7px] font-bold text-gray-400 tracking-widest mb-0.5">DESIGN</span>
           {[
-            { icon: "\u2196", label: "Select", action: () => { const c = fcRef.current; if(c){ c.isDrawingMode = false; setDrawMode(false); setEyedropperMode(false); c.defaultCursor = "default"; c.hoverCursor = "move"; } } },
+            { icon: "↖", label: "Select", action: () => { const c = fcRef.current; if(c){ c.isDrawingMode = false; setDrawMode(false); setMeasureMode(false); } } },
             { icon: "T", label: "Text", action: addText },
-            { icon: "\uD83D\uDDBC", label: "Image", action: addImage },
-            { icon: "\u25C6", label: "Shapes", action: () => setShowShapePanel(p => !p) },
+            { icon: "🖼", label: "Image", action: addImage },
+            { icon: "◆", label: "Shapes", action: () => setShowShapePanel(p => !p) },
           ].map(btn => (
             <button key={btn.label} onClick={btn.action} title={btn.label}
-              className="w-12 h-12 flex flex-col items-center justify-center rounded-lg text-xs transition-colors hover:bg-gray-100 text-gray-600">
-              <span className="text-base leading-none">{btn.icon}</span>
-              <span className="text-[9px] mt-0.5">{btn.label}</span>
+              className="w-11 h-11 flex flex-col items-center justify-center rounded-lg text-xs transition-all hover:bg-white hover:shadow-sm text-gray-500 hover:text-gray-800">
+              <span className="text-sm leading-none">{btn.icon}</span>
+              <span className="text-[8px] mt-0.5 font-medium">{btn.label}</span>
             </button>
           ))}
-          <div className="w-8 h-px bg-gray-200 my-2" />
-          <span className="text-[8px] font-bold text-gray-400 tracking-wider mb-1">PACKAGE</span>
+          <div className="w-8 h-px bg-gray-200 my-1" />
+          <span className="text-[7px] font-bold text-gray-400 tracking-widest mb-0.5">PACKAGE</span>
           {[
-            { icon: "\u229E", label: "Table", action: () => setShowTablePanel(p => !p) },
-            { icon: "\u25AE\u25AF", label: "Barcode", action: () => setShowBarcodePanel(p => !p) },
-            { icon: "\u25CE", label: "Marks", action: () => setShowMarkPanel(p => !p) },
+            { icon: "⊞", label: "Table", action: () => setShowTablePanel(p => !p) },
+            { icon: "▮▯", label: "Barcode", action: () => setShowBarcodePanel(p => !p) },
+            { icon: "◎", label: "Marks", action: () => setShowMarkPanel(p => !p) },
           ].map(btn => (
             <button key={btn.label} onClick={btn.action} title={btn.label}
-              className="w-12 h-12 flex flex-col items-center justify-center rounded-lg text-xs transition-colors hover:bg-gray-100 text-gray-600">
-              <span className="text-base leading-none">{btn.icon}</span>
-              <span className="text-[9px] mt-0.5">{btn.label}</span>
+              className="w-11 h-11 flex flex-col items-center justify-center rounded-lg text-xs transition-all hover:bg-white hover:shadow-sm text-gray-500 hover:text-gray-800">
+              <span className="text-sm leading-none">{btn.icon}</span>
+              <span className="text-[8px] mt-0.5 font-medium">{btn.label}</span>
             </button>
           ))}
-          <div className="w-8 h-px bg-gray-200 my-2" />
-          <span className="text-[8px] font-bold text-gray-400 tracking-wider mb-1">UTILS</span>
-          <button onClick={() => { const c = fcRef.current; if (!c) return; const nm = !eyedropperMode; setEyedropperMode(nm); if (nm) { c.isDrawingMode = false; setDrawMode(false); c.defaultCursor = "crosshair"; c.hoverCursor = "crosshair"; const handler = (opt: any) => { const t = opt.target; if (!t) return; const fill = t.fill || "#000000"; const hex = typeof fill === "string" && fill.match(/^#[0-9a-fA-F]{6}$/) ? fill : "#000000"; const cmyk = hexToCmyk(hex); setEyedropperResult({ hex, cmyk, spot: t._spotColorName || undefined }); setEyedropperMode(false); c.defaultCursor = "default"; c.hoverCursor = "move"; c.off("mouse:down", handler); }; c.on("mouse:down", handler); } else { c.defaultCursor = "default"; c.hoverCursor = "move"; } }} title="Eyedropper (CMYK/Spot)"
-            className={`w-12 h-12 flex flex-col items-center justify-center rounded-lg text-xs transition-colors ${eyedropperMode ? "bg-blue-100 text-blue-700 border border-blue-300" : "hover:bg-gray-100 text-gray-600"}`}>
-            <span className="text-base leading-none">{"\uD83D\uDCA7"}</span>
-            <span className="text-[9px] mt-0.5">Picker</span>
+          <div className="w-8 h-px bg-gray-200 my-1" />
+          <span className="text-[7px] font-bold text-gray-400 tracking-widest mb-0.5">TOOLS</span>
+          <button onClick={() => { const c = fcRef.current; if (!c) return; const nm = !eyedropperMode; setEyedropperMode(nm); if (nm) { c.isDrawingMode = false; setDrawMode(false); c.defaultCursor = "crosshair"; c.hoverCursor = "crosshair"; } else { c.defaultCursor = "default"; c.hoverCursor = "move"; } }}
+            className={`w-11 h-11 flex flex-col items-center justify-center rounded-lg text-xs transition-all ${eyedropperMode ? "bg-blue-50 text-blue-600 shadow-sm" : "text-gray-500 hover:bg-white hover:shadow-sm hover:text-gray-800"}`}>
+            <span className="text-sm leading-none">💧</span>
+            <span className="text-[8px] mt-0.5 font-medium">Picker</span>
           </button>
           {eyedropperResult && (
-            <div className="w-14 mt-1 p-1 bg-gray-50 rounded border text-[8px] text-center">
-              <div className="w-6 h-6 mx-auto rounded border mb-0.5" style={{ backgroundColor: eyedropperResult.hex }} />
-              <div className="text-gray-500">{eyedropperResult.hex}</div>
+            <div className="w-12 mt-0.5 p-1 bg-white rounded-lg border text-[7px] text-center shadow-sm">
+              <div className="w-5 h-5 mx-auto rounded border mb-0.5" style={{ backgroundColor: eyedropperResult.hex }} />
+              <div className="text-gray-500 font-mono">{eyedropperResult.hex}</div>
               <div className="text-gray-400">C{eyedropperResult.cmyk[0]} M{eyedropperResult.cmyk[1]}</div>
               <div className="text-gray-400">Y{eyedropperResult.cmyk[2]} K{eyedropperResult.cmyk[3]}</div>
               {eyedropperResult.spot && <div className="text-orange-500 font-bold">{eyedropperResult.spot}</div>}
             </div>
           )}
-          <button onClick={() => { const c=fcRef.current; if(!c)return; const a=c.getActiveObjects(); const toRm: any[]=[]; a.forEach((o:any)=>{ if(o._tableId){ c.getObjects().forEach((obj:any)=>{ if(obj._tableId===o._tableId && !toRm.includes(obj)) toRm.push(obj); }); } else if(o.selectable!==false){ toRm.push(o); } }); toRm.forEach((o:any)=>c.remove(o)); c.discardActiveObject(); c.requestRenderAll(); pushHistory(); refreshLayers(); }}
-            title="Delete" className="w-12 h-12 flex flex-col items-center justify-center rounded-lg text-xs hover:bg-red-50 text-gray-600 hover:text-red-600">
-            <span className="text-base leading-none">{"\uD83D\uDDD1"}</span>
-            <span className="text-[9px] mt-0.5">Delete</span>
+          <button onClick={() => { const c=fcRef.current; if(!c)return; const a=c.getActiveObjects(); const toRm: any[]=[]; a.forEach((o:any)=>{if(o._isGuideLayer||o._isDieLine||o._isFoldLine||o._isPanelLabel)return;toRm.push(o);}); toRm.forEach(o=>c.remove(o)); c.discardActiveObject(); c.requestRenderAll(); pushHistory(); refreshLayers(); }}
+            title="Delete" className="w-11 h-11 flex flex-col items-center justify-center rounded-lg text-xs transition-all hover:bg-red-50 text-gray-500 hover:text-red-500">
+            <span className="text-sm leading-none">🗑</span>
+            <span className="text-[8px] mt-0.5 font-medium">Delete</span>
           </button>
           <button onClick={() => setShowShortcuts(true)} title="Shortcuts (F1)"
-            className="w-12 h-12 flex flex-col items-center justify-center rounded-lg text-xs hover:bg-gray-100 text-gray-600">
-            <span className="text-base leading-none">{"\u2328"}</span>
-            <span className="text-[9px] mt-0.5">Keys</span>
+            className="w-11 h-11 flex flex-col items-center justify-center rounded-lg text-xs transition-all hover:bg-white hover:shadow-sm text-gray-500 hover:text-gray-800">
+            <span className="text-sm leading-none">⌨</span>
+            <span className="text-[8px] mt-0.5 font-medium">Keys</span>
           </button>
-            <button onClick={() => { setMeasureMode(m => { if(!m){setMeasurePts([]);setMeasureResult("Click first point...");} else {setMeasureResult("");const cv=fcRef.current;if(cv){cv.getObjects().filter((o:any)=>o._isMeasure).forEach((o:any)=>cv.remove(o));cv.renderAll();}} return !m; }); }}
-              className={`w-12 h-12 flex flex-col items-center justify-center rounded-lg transition-colors ${measureMode ? "bg-cyan-100 text-cyan-700" : "text-gray-500 hover:bg-gray-100"}`}>
-              <span className="text-base">&#x1F4CF;</span>
-              <span className="text-[9px] mt-0.5">Measure</span>
-            </button>
-            <button onClick={() => setShowRuler(r => !r)}
-              className={`w-12 h-12 flex flex-col items-center justify-center rounded-lg transition-colors ${showRuler ? "bg-gray-200 text-gray-700" : "text-gray-400 hover:bg-gray-100"}`}>
-              <span className="text-base">&#x1F4D0;</span>
-              <span className="text-[9px] mt-0.5">Ruler</span>
-            </button>
+          <div className="w-8 h-px bg-gray-200 my-1" />
+          <span className="text-[7px] font-bold text-gray-400 tracking-widest mb-0.5">MEASURE</span>
+          <button onClick={() => { setMeasureMode(m => { if(!m){setMeasurePts([]);setMeasureResult("Click first point...");} else {setMeasureResult("");} return !m; }); }}
+            className={`w-11 h-11 flex flex-col items-center justify-center rounded-lg transition-all ${measureMode ? "bg-cyan-50 text-cyan-600 shadow-sm" : "text-gray-500 hover:bg-white hover:shadow-sm hover:text-gray-800"}`}>
+            <span className="text-sm">📏</span>
+            <span className="text-[8px] mt-0.5 font-medium">Measure</span>
+          </button>
+          <button onClick={() => setShowRuler(r => !r)}
+            className={`w-11 h-11 flex flex-col items-center justify-center rounded-lg transition-all ${showRuler ? "bg-gray-100 text-gray-700 shadow-sm" : "text-gray-500 hover:bg-white hover:shadow-sm hover:text-gray-800"}`}>
+            <span className="text-sm">📐</span>
+            <span className="text-[8px] mt-0.5 font-medium">Ruler</span>
+          </button>
         </div>
 
         {/* ═══ Tool Popups (absolute positioned) ═══ */}
