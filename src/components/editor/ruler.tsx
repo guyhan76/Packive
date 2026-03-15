@@ -156,7 +156,7 @@ export default function Ruler({ direction, canvasWidth, canvasHeight, scale, zoo
   }, [isH, scale, z, scrollLeft, scrollTop, pad, onGuideCreate]);
 
   return (
-    <div ref={wrapRef} style={{ position: "absolute", ...(isH ? { top: 0, left: RULER_THICK, right: 0, height: RULER_THICK } : { top: RULER_THICK, left: 0, bottom: 0, width: RULER_THICK }), zIndex: 30, overflow: "hidden" }}>
+    <div ref={wrapRef} style={{ position: "absolute", ...(isH ? { top: 0, left: RULER_THICK, right: 0, height: RULER_THICK } : { top: RULER_THICK, left: 0, bottom: 28, width: RULER_THICK }), zIndex: 30, overflow: "hidden" }}>
       <canvas ref={cvRef} onMouseDown={onMouseDown} style={{ display: "block", cursor: isH ? "s-resize" : "e-resize" }} />
     </div>
   );

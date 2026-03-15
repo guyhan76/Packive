@@ -1950,7 +1950,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
 
           {/* ═══ CANVAS AREA ═══ */}
-          <div ref={wrapperRef} onScroll={(e) => { const t=e.target as HTMLDivElement; setRulerScroll({left:t.scrollLeft,top:t.scrollTop}); }} onMouseMove={(e) => { if(!showRuler)return; const r=e.currentTarget.getBoundingClientRect(); setMousePos({x:e.clientX-r.left-RULER_THICK+(rulerScroll?.left||0),y:e.clientY-r.top-RULER_THICK+(rulerScroll?.top||0)}); }} onMouseLeave={() => setMousePos({x:-100,y:-100})} className="flex-1 overflow-auto bg-gray-100 relative pb-7"
+          <div ref={wrapperRef} onScroll={(e) => { const t=e.target as HTMLDivElement; setRulerScroll({left:t.scrollLeft,top:t.scrollTop}); }} onMouseMove={(e) => { const r=e.currentTarget.getBoundingClientRect(); setMousePos({x:e.clientX-r.left-RULER_THICK+(rulerScroll?.left||0),y:e.clientY-r.top-RULER_THICK+(rulerScroll?.top||0)}); }} onMouseLeave={() => setMousePos({x:-100,y:-100})} className="flex-1 overflow-auto bg-gray-100 relative pb-7"
             style={{ paddingLeft: showRuler ? RULER_THICK : 0, paddingTop: showRuler ? RULER_THICK : 0, cursor: measureMode ? "crosshair" : drawMode ? "crosshair" : "default" }}>
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
               {/* Rulers - conditional */}
