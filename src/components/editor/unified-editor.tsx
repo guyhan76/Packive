@@ -3065,10 +3065,12 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
                   </>
                 ) : (
-                  <div className="text-center py-8">
-                    <div className="text-2xl text-gray-300 mb-2">↖</div>
-                    <div className="text-xs text-gray-400">Select an object to edit properties</div>
-                  </div>
+              <div className="flex flex-col items-center justify-center py-12 px-4">
+                <div className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center mb-3">
+                  <span className="text-xl text-gray-300">↖</span>
+                </div>
+                <p className="text-xs text-gray-400 text-center leading-relaxed">Select an object on canvas<br/>to edit its properties</p>
+              </div>
                 )}
               </div>
             )}
