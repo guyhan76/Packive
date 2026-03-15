@@ -1589,7 +1589,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
             // ── Resize canvas to fit dieline at accurate px/mm ──
             // Available space: use wrapper dimensions
-            const wrapper = (cv as any).wrapperEl?.parentElement || document.querySelector("[data-canvas-wrapper]");
+            const wrapper = (c as any).wrapperEl?.parentElement || document.querySelector("[data-canvas-wrapper]");
             const availW = wrapper ? wrapper.clientWidth - 60 : 1200;
             const availH = wrapper ? wrapper.clientHeight - 60 : 800;
 
@@ -1603,7 +1603,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             // Resize canvas
             const newCanvasW = Math.round(totalMmW * newPxPerMm);
             const newCanvasH = Math.round(totalMmH * newPxPerMm);
-            cv.setDimensions({ width: newCanvasW, height: newCanvasH });
+            c.setDimensions({ width: newCanvasW, height: newCanvasH });
             scaleRef.current = newPxPerMm;
             console.log("[Dieline] Canvas resized:", newCanvasW, "x", newCanvasH, "px, scale:", newPxPerMm.toFixed(4), "px/mm");
 
