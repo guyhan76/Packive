@@ -1580,8 +1580,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             console.log("[Dieline] Applied scale:", sc.toFixed(6), "group size:", (group.width! * sc).toFixed(1), "x", (group.height! * sc).toFixed(1), "px");
 
             c.add(group); c.sendObjectToBack(group); c.requestRenderAll();
+            c.add(group); c.sendObjectToBack(group); c.requestRenderAll();
           } catch (err: any) { alert("Failed to load dieline: " + err.message); }
-        }} />
         <button onClick={() => { if (!window.confirm("Start a completely new blank canvas?\nAll current work including dielines will be permanently removed.")) return; const c = fcRef.current; if (!c) return; c.clear(); c.backgroundColor = "#ffffff"; c.requestRenderAll(); setDielineFileName(""); pushHistory(); refreshLayers(); }} className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors" title="Start a completely new blank canvas">New</button>
         <button onClick={() => dielineFileRef.current?.click()} className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-blue-600 hover:bg-blue-50 hover:border-blue-400 transition-colors">Upload Dieline (EPS/AI/PDF/SVG)</button>
         <button onClick={() => { const c = fcRef.current; if (!c) return; const nv = !dielineVisible; setDielineVisible(nv); c.getObjects().forEach((o: any) => { if (o._isGuideLayer || o._isDieLine || o._isFoldLine || o._isPanelLabel) o.set({ visible: nv }); }); c.requestRenderAll(); }} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${dielineVisible ? "bg-gray-200 border-gray-300 text-gray-600 hover:bg-gray-300" : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"}`}>{dielineVisible ? "Hide Lines" : "Show Lines"}</button>
