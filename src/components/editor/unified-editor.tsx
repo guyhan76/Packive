@@ -519,7 +519,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const handleMeasureClick = useCallback((opt: any) => {
     if (!measureMode) return;
     const cv = fcRef.current; if (!cv) return;
-    const ptr = cv.getPointer(opt.e);
+    const ptr = cv.getViewportPoint(opt.e);
     const s = scaleRef.current;
     const mmX = +(ptr.x / s - 15).toFixed(2);
     const mmY = +(ptr.y / s - 15).toFixed(2);
