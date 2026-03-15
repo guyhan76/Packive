@@ -1656,7 +1656,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
         <div className="w-14 bg-[#fafafa] border-r border-gray-200 flex flex-col items-center py-2 shrink-0 overflow-y-auto gap-0.5">
           <span className="text-[7px] font-bold text-gray-400 tracking-widest mb-0.5">DESIGN</span>
           {[
-            { icon: "↖", label: "Select", action: () => { const c = fcRef.current; if(c){ c.isDrawingMode = false; setDrawMode(false); setMeasureMode(false); } } },
+            { icon: "↖", label: "Select", action: () => { const c = fcRef.current; if(c){ c.isDrawingMode = false; setDrawMode(false); setMeasureMode(false); setEyedropperMode(false); c.defaultCursor = "default"; c.hoverCursor = "move"; } } },
             { icon: "T", label: "Text", action: addText },
             { icon: "🖼", label: "Image", action: addImage },
             { icon: "◆", label: "Shapes", action: () => setShowShapePanel(p => !p) },
