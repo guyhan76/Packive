@@ -1975,7 +1975,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 <div style={{ position: "absolute", left: 0, top: mousePos.y + (showRuler ? RULER_THICK : 0) + (wrapperRef.current?.getBoundingClientRect().top || 0), width: "100%", height: 0, borderTop: "0.5px dashed #4fc3f7", opacity: 0.7 }} />
                 <div style={{ position: "absolute", top: 0, left: mousePos.x + (showRuler ? RULER_THICK : 0) + (wrapperRef.current?.getBoundingClientRect().left || 0), height: "100%", width: 0, borderLeft: "0.5px dashed #4fc3f7", opacity: 0.7 }} />
               </div>
-                  </svg>
                 </div>
               )}
 
