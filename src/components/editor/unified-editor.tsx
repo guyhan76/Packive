@@ -1563,21 +1563,46 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             console.log("[Dieline] group.width:", group.width, "group.height:", group.height, "scX:", (origMmW * scaleRef.current / (group.width || 1)).toFixed(6), "scY:", (origMmH * scaleRef.current / (group.height || 1)).toFixed(6));
             console.log("[Dieline] Canvas scale:", scaleRef.current, "px/mm");
 
-            // Scale: SVG internal unit -> canvas px
-            // group.width is in SVG internal units (pt/px)
-            // We need: 1 SVG unit * scaleForCanvas = correct px on canvas
+            // ── Accurate mm scaling ──
+            // Fabric may parse SVG with partial viewBox transform applied,
+            // causing group.width != svgOrigW. We use origMm as ground truth.
             const s = scaleRef.current; // px per mm
             const PAD_MM = 15;
-            const targetPxW = origMmW * s;
-            const targetPxH = origMmH * s;
-            const scX = targetPxW / (group.width || 1);
-            const scY = targetPxH / (group.height || 1);
-            // Use exact per-axis scale for accuracy (no aspect ratio distortion with SVG)
 
-            // Center on canvas with PAD offset
+            // Method: compute a single uniform scale from the LARGER axis
+            // to preserve aspect ratio, then verify both axes match.
+            // Since origMm comes from the SVG attributes (accurate),
+            // and group dimensions come from Fabric parsing (may differ),
+            // we compute per-axis but then FORCE uniform scale from the
+            // axis whose Fabric dimension is closest to SVG units.
+            const scX = (origMmW * s) / (group.width || 1);
+            const scY = (origMmH * s) / (group.height || 1);
+
+            // Determine which axis Fabric preserved more accurately
+            const ratioX = (group.width || 1) / svgOrigW;  // how much Fabric changed X
+            const ratioY = (group.height || 1) / svgOrigH; // how much Fabric changed Y
+            console.log("[Dieline] Fabric/SVG ratio - X:", ratioX.toFixed(4), "Y:", ratioY.toFixed(4));
+
+            // Use the axis where Fabric ratio is closer to 1.0 (least distorted)
+            // as the reference for uniform scaling
+            const useYAsRef = Math.abs(ratioY - 1.0) < Math.abs(ratioX - 1.0);
+            const sc = useYAsRef ? scY : scX;
+            console.log("[Dieline] Using", useYAsRef ? "Y" : "X", "axis as reference. Uniform scale:", sc.toFixed(6));
+
+            // With uniform scale, the rendered size in px:
+            const renderedW = (group.width || 1) * sc;
+            const renderedH = (group.height || 1) * sc;
+            // Expected mm from rendered px:
+            const measuredMmW = renderedW / s;
+            const measuredMmH = renderedH / s;
+            console.log("[Dieline] Expected:", origMmW.toFixed(2), "x", origMmH.toFixed(2), "mm");
+            console.log("[Dieline] Rendered:", measuredMmW.toFixed(2), "x", measuredMmH.toFixed(2), "mm");
+            console.log("[Dieline] Error: W=", (measuredMmW - origMmW).toFixed(2), "mm, H=", (measuredMmH - origMmH).toFixed(2), "mm");
+
+            // Center on canvas
             const cw2 = c.getWidth(), ch2 = c.getHeight();
-            group.set({ scaleX: scX, scaleY: scY, left: cw2 / 2, top: ch2 / 2, originX: "center", originY: "center" });
-            console.log("[Dieline] Applied scaleX:", scX.toFixed(6), "scaleY:", scY.toFixed(6), "group size:", (group.width! * scX).toFixed(1), "x", (group.height! * scY).toFixed(1), "px");
+            group.set({ scaleX: sc, scaleY: sc, left: cw2 / 2, top: ch2 / 2, originX: "center", originY: "center" });
+            console.log("[Dieline] Applied uniform scale:", sc.toFixed(6), "group size:", renderedW.toFixed(1), "x", renderedH.toFixed(1), "px");
 
             c.add(group); c.sendObjectToBack(group); c.requestRenderAll();
           } catch (err: any) { alert("Failed to load dieline: " + err.message); }
