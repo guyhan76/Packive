@@ -51,3 +51,10 @@ URL: https://packive.design
 - Secondary: #7C3AED
 - Accent: #F59E0B
 - 폰트: Inter
+
+## PACKIVE DEV RULES 참조 규칙 (2026-03-16)
+- 매 세션 시작 시 반드시 `PACKIVE DEV RULES.md` 파일을 읽고 현재 Phase 상태를 확인할 것
+- 기능 완료/변경 시 반드시 `PACKIVE DEV RULES.md`의 해당 항목 상태를 업데이트할 것
+- Phase 완료 시 백업: `Copy-Item "PACKIVE DEV RULES.md" "backups\PACKIVE_DEV_RULES_$(Get-Date -Format 'yyyyMMdd_HHmmss').md"`
+- 파일 위치: 프로젝트 루트 `C:\Users\user\Desktop\dev\packive\PACKIVE DEV RULES.md`
+- 이 파일은 프로젝트의 단일 진실 공급원(Single Source of Truth)임

@@ -34,3 +34,11 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## 개발 규칙 & 로드맵
+
+모든 개발 규칙, Phase별 스케줄, Adobe 벤치마킹 분석, 기술 스택은 아래 파일에서 관리합니다:
+
+📌 **[PACKIVE DEV RULES.md](./PACKIVE%20DEV%20RULES.md)** — 프로젝트 단일 진실 공급원 (Single Source of Truth)
+
+매 개발 세션 시작 시 반드시 이 파일을 확인하세요.
