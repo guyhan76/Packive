@@ -1809,6 +1809,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 {selectedPanel && <span className="text-[#4fc3f7] font-medium">Panel: {selectedPanel}</span>}
               </div>
         </div>
+            </div>
 
         {/* ═══ RIGHT PANEL ═══ */}
         <div className="w-80 bg-white border-l border-gray-200 flex flex-col shrink-0 overflow-hidden">
