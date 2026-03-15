@@ -1856,13 +1856,13 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
               {/* Rulers - conditional */}
               {/* Rulers */}
-              {showRuler && <RulerCorner unit={rulerUnit} onToggle={() => setRulerUnit(u => u === "mm" ? "inch" : "mm")}  />}
-              {showRuler && <Ruler direction="horizontal" canvasWidth={fcRef.current?.getWidth() || 800} canvasHeight={fcRef.current?.getHeight() || 600}
+              <div style={{visibility: showRuler ? "visible" : "hidden"}}><RulerCorner unit={rulerUnit} onToggle={() => setRulerUnit(u => u === "mm" ? "inch" : "mm")}  /></div>
+              <div style={{visibility: showRuler ? "visible" : "hidden"}}><Ruler direction="horizontal" canvasWidth={fcRef.current?.getWidth() || 800} canvasHeight={fcRef.current?.getHeight() || 600}
                 scale={scaleRef.current} zoom={zoom} scrollLeft={rulerScroll.left} scrollTop={rulerScroll.top}
-                pad={15} unit={rulerUnit} onGuideCreate={addGuide}  />}
-              {showRuler && <Ruler direction="vertical" canvasWidth={fcRef.current?.getWidth() || 800} canvasHeight={fcRef.current?.getHeight() || 600}
+                pad={15} unit={rulerUnit} onGuideCreate={addGuide}  /></div>
+              <div style={{visibility: showRuler ? "visible" : "hidden"}}><Ruler direction="vertical" canvasWidth={fcRef.current?.getWidth() || 800} canvasHeight={fcRef.current?.getHeight() || 600}
                 scale={scaleRef.current} zoom={zoom} scrollLeft={rulerScroll.left} scrollTop={rulerScroll.top}
-                pad={15} unit={rulerUnit} onGuideCreate={addGuide}  />}
+                pad={15} unit={rulerUnit} onGuideCreate={addGuide}  /></div>
 
             <canvas ref={canvasElRef} className="shadow-lg" />
               {/* Status bar */}
