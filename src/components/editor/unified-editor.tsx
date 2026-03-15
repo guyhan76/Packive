@@ -1512,8 +1512,9 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           if (!svgStr) { alert("No SVG data received"); return; }
           
           try {
+          try {
             const result = await F.loadSVGFromString(svgStr);
-            // Force all uploaded dieline strokes to solid dark black with visible width
+            // Force strokes for non-SVG files
             const forceBlack = (objs: any[]) => {
               if (!objs) return;
               objs.forEach((obj: any) => {
@@ -1524,12 +1525,61 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             if (ext !== "svg") forceBlack(result.objects);
             const group = F.util.groupSVGElements(result.objects, result.options);
             group.set({ _isDieLine: true, _isGuideLayer: true, selectable: !dielineLocked, evented: !dielineLocked, name: "__dieline_upload__" });
+
+            // ─── Accurate mm scaling ───
+            // SVG/EPS coordinates are in pt (1pt = 0.3528mm = 1/72 inch)
+            // Parse viewBox or width/height to determine original dimensions
+            const parser = new DOMParser();
+            const svgDoc = parser.parseFromString(svgStr, "image/svg+xml");
+            const svgEl = svgDoc.documentElement;
+            const vb = svgEl.getAttribute("viewBox");
+            let svgOrigW = group.width || 1;
+            let svgOrigH = group.height || 1;
+            if (vb) {
+              const parts = vb.split(/[\s,]+/).map(Number);
+              if (parts.length === 4) { svgOrigW = parts[2]; svgOrigH = parts[3]; }
+            }
+
+            // Detect unit from width/height attributes
+            const widthAttr = svgEl.getAttribute("width") || "";
+            const heightAttr = svgEl.getAttribute("height") || "";
+            let origMmW: number, origMmH: number;
+
+            if (widthAttr.includes("mm")) {
+              origMmW = parseFloat(widthAttr);
+              origMmH = parseFloat(heightAttr);
+            } else if (widthAttr.includes("cm")) {
+              origMmW = parseFloat(widthAttr) * 10;
+              origMmH = parseFloat(heightAttr) * 10;
+            } else if (widthAttr.includes("in")) {
+              origMmW = parseFloat(widthAttr) * 25.4;
+              origMmH = parseFloat(heightAttr) * 25.4;
+            } else {
+              // Default: assume pt (1pt = 0.3528mm)
+              origMmW = svgOrigW * 0.3528;
+              origMmH = svgOrigH * 0.3528;
+            }
+
+            console.log("[Dieline] SVG original:", svgOrigW, "x", svgOrigH, "units, =", origMmW.toFixed(2), "x", origMmH.toFixed(2), "mm");
+            console.log("[Dieline] Canvas scale:", scaleRef.current, "px/mm");
+
+            // Scale: SVG internal unit -> canvas px
+            // group.width is in SVG internal units (pt/px)
+            // We need: 1 SVG unit * scaleForCanvas = correct px on canvas
+            const s = scaleRef.current; // px per mm
+            const PAD_MM = 15;
+            const targetPxW = origMmW * s;
+            const targetPxH = origMmH * s;
+            const scX = targetPxW / (group.width || 1);
+            const scY = targetPxH / (group.height || 1);
+            const sc = Math.min(scX, scY);
+
+            // Center on canvas with PAD offset
             const cw2 = c.getWidth(), ch2 = c.getHeight();
-            const sw = cw2 * 0.9 / (group.width || 1), sh = ch2 * 0.9 / (group.height || 1);
-            const sc = Math.min(sw, sh);
             group.set({ scaleX: sc, scaleY: sc, left: cw2 / 2, top: ch2 / 2, originX: "center", originY: "center" });
+            console.log("[Dieline] Applied scale:", sc.toFixed(6), "group size:", (group.width! * sc).toFixed(1), "x", (group.height! * sc).toFixed(1), "px");
+
             c.add(group); c.sendObjectToBack(group); c.requestRenderAll();
-          } catch (err: any) { alert("Failed to load dieline: " + err.message); }
           e.target.value = "";
         }} />
         <button onClick={() => { if (!window.confirm("Start a completely new blank canvas?\nAll current work including dielines will be permanently removed.")) return; const c = fcRef.current; if (!c) return; c.clear(); c.backgroundColor = "#ffffff"; c.requestRenderAll(); setDielineFileName(""); pushHistory(); refreshLayers(); }} className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors" title="Start a completely new blank canvas">New</button>
