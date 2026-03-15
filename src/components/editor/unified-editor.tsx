@@ -1560,6 +1560,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             }
 
             console.log("[Dieline] SVG original:", svgOrigW, "x", svgOrigH, "units, =", origMmW.toFixed(2), "x", origMmH.toFixed(2), "mm");
+            console.log("[Dieline] group.width:", group.width, "group.height:", group.height, "scX:", (origMmW * scaleRef.current / (group.width || 1)).toFixed(6), "scY:", (origMmH * scaleRef.current / (group.height || 1)).toFixed(6));
             console.log("[Dieline] Canvas scale:", scaleRef.current, "px/mm");
 
             // Scale: SVG internal unit -> canvas px
@@ -1571,12 +1572,12 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             const targetPxH = origMmH * s;
             const scX = targetPxW / (group.width || 1);
             const scY = targetPxH / (group.height || 1);
-            const sc = Math.min(scX, scY);
+            // Use exact per-axis scale for accuracy (no aspect ratio distortion with SVG)
 
             // Center on canvas with PAD offset
             const cw2 = c.getWidth(), ch2 = c.getHeight();
-            group.set({ scaleX: sc, scaleY: sc, left: cw2 / 2, top: ch2 / 2, originX: "center", originY: "center" });
-            console.log("[Dieline] Applied scale:", sc.toFixed(6), "group size:", (group.width! * sc).toFixed(1), "x", (group.height! * sc).toFixed(1), "px");
+            group.set({ scaleX: scX, scaleY: scY, left: cw2 / 2, top: ch2 / 2, originX: "center", originY: "center" });
+            console.log("[Dieline] Applied scaleX:", scX.toFixed(6), "scaleY:", scY.toFixed(6), "group size:", (group.width! * scX).toFixed(1), "x", (group.height! * scY).toFixed(1), "px");
 
             c.add(group); c.sendObjectToBack(group); c.requestRenderAll();
           } catch (err: any) { alert("Failed to load dieline: " + err.message); }
