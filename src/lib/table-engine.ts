@@ -29,7 +29,7 @@ export interface TableConfig {
 export function createDefaultCell(row: number, col: number): TableCellData {
   return {
     row, col, rowSpan: 1, colSpan: 1,
-    text: "", bgColor: "#ffffff", textColor: "#222222",
+    text: "", bgColor: "#ffffff", textColor: "#000000",
     fontSize: 12, fontFamily: "Inter",
     fontWeight: "normal", fontStyle: "normal",
     textAlign: "center", verticalAlign: "middle",

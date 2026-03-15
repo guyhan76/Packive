@@ -187,7 +187,7 @@ export async function convertTextToOutlines(svgEl: Element): Promise<number> {
 
         const tx = parseFloat(tspan.getAttribute("x") || String(attrs.x));
         const ty = parseFloat(tspan.getAttribute("y") || String(attrs.y));
-        const tFill = tspan.getAttribute("fill") || attrs.fill;
+        const tFill = tspan.getAttribute("fill") || tspan.style?.fill || attrs.fill;
         const tFontSize = parseFloat(tspan.getAttribute("font-size") || String(attrs.fontSize));
 
         const path = font.getPath(text, tx, ty, tFontSize);

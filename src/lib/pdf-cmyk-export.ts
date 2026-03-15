@@ -291,6 +291,20 @@ export async function exportCmykPdf(
   let svgString = canvas.toSVG({ width: canvasW, height: canvasH });
   console.log("[PDF] Step 3: SVG generated, length:", svgString.length);
 
+  // Insert background as SVG rect (not jsPDF operator) so Illustrator treats it as part of artwork
+  if (savedBgColor && savedBgColor !== "transparent" && savedBgColor !== "none" && savedBgColor !== "") {
+    const bgHex = normalizeColor(savedBgColor);
+    if (bgHex) {
+      const bgRgb = hexToRgb(bgHex);
+      if (bgRgb) {
+        // Insert a <rect> as the first child of the SVG so it sits behind all content
+        const bgRect = '<rect x="0" y="0" width="' + canvasW + '" height="' + canvasH + '" fill="rgb(' + bgRgb.r + ',' + bgRgb.g + ',' + bgRgb.b + ')" />';
+        svgString = svgString.replace(/(<svg[^>]*>)/, '$1\n' + bgRect);
+        console.log("[PDF] Background rect inserted into SVG:", bgHex);
+      }
+    }
+  }
+
   // dielineOnly: forcefully remove all <text> and <tspan> elements from SVG
   if (dielineOnly) {
     const tempParser = new DOMParser();
@@ -478,37 +492,6 @@ export async function exportCmykPdf(
 
   await svg2pdf(svgEl, doc, { x: 0, y: 0, width: canvasW, height: canvasH });
   console.log("[PDF] Step 5: SVG rendered to PDF via svg2pdf.js");
-
-  // Draw background color as full-canvas rect in PDF
-  if (savedBgColor && savedBgColor !== "transparent" && savedBgColor !== "none" && savedBgColor !== "") {
-    const bgHex = normalizeColor(savedBgColor);
-    if (bgHex) {
-      const bgRgb = hexToRgb(bgHex);
-      if (bgRgb) {
-        // Add background rect behind all content
-        // jsPDF pages[1] array: insert at beginning
-        const pages = (doc as any).internal.pages;
-        if (pages[1] && Array.isArray(pages[1])) {
-          const bgCmyk = colorMap.get(bgHex) || rgbToCmyk(bgRgb.r, bgRgb.g, bgRgb.b);
-          const bc = (bgCmyk.c / 100).toFixed(4);
-          const bm = (bgCmyk.m / 100).toFixed(4);
-          const by = (bgCmyk.y / 100).toFixed(4);
-          const bk = (bgCmyk.k / 100).toFixed(4);
-          // Insert background rect operators at the beginning of content
-          const bgOps = [
-            "q",
-            bc + " " + bm + " " + by + " " + bk + " k",
-            "0 0 " + canvasW + " " + canvasH + " re",
-            "f",
-            "Q"
-          ];
-          // Find first content entry and insert before it
-          pages[1].splice(1, 0, ...bgOps);
-          console.log("[PDF] Background rect added:", bgHex, "->", "C" + bgCmyk.c + " M" + bgCmyk.m + " Y" + bgCmyk.y + " K" + bgCmyk.k);
-        }
-      }
-    }
-  }
 
   doc.setProperties({
     title: filename?.replace(".pdf", "") || "Package Design",
