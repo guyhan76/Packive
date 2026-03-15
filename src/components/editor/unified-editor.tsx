@@ -134,6 +134,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const loadingRef = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const scaleRef = useRef(1); // px per mm
+  const scaleXRef = useRef(1); // px per mm (X axis, may differ from Y due to Fabric SVG distortion)
+  const scaleYRef = useRef(1); // px per mm (Y axis)
 
   // ─── UI state ───
   const [rightTab, setRightTab] = useState<RightTab>("properties");
@@ -520,9 +522,9 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     if (!measureMode) return;
     const cv = fcRef.current; if (!cv) return;
     const e = opt.e; const cv2 = fcRef.current!; const vpt = cv2.viewportTransform || [1,0,0,1,0,0]; const rect = cv2.getElement().getBoundingClientRect(); const px = (e.clientX - rect.left) / vpt[0] - vpt[4] / vpt[0]; const py = (e.clientY - rect.top) / vpt[3] - vpt[5] / vpt[3];
-    const s = scaleRef.current;
-    const mmX = +(px / s - 15).toFixed(2);
-    const mmY = +(py / s - 15).toFixed(2);
+    const sX = scaleXRef.current; const sY = scaleYRef.current;
+    const mmX = +(px / sX - 15).toFixed(2);
+    const mmY = +(py / sY - 15).toFixed(2);
     setMeasurePts(prev => {
       const next = prev.length >= 2 ? [{x:mmX,y:mmY}] : [...prev, {x:mmX,y:mmY}];
       if (next.length === 2) {
@@ -538,9 +540,9 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     const cv = fcRef.current; if (!cv) return;
     cv.getObjects().filter((o:any) => o._isMeasure).forEach((o:any) => cv.remove(o));
     if (!measureMode || measurePts.length === 0) { cv.renderAll(); return; }
-    const s = scaleRef.current;
+    const sX2 = scaleXRef.current; const sY2 = scaleYRef.current;
     const F = (window as any).__fabric; if (!F) return;
-    const pts = measurePts.map(p => ({x:(p.x+15)*s, y:(p.y+15)*s}));
+    const pts = measurePts.map(p => ({x:(p.x+15)*sX2, y:(p.y+15)*sY2}));
     pts.forEach((p,i) => {
       cv.add(new F.Circle({left:p.x-4, top:p.y-4, radius:4, fill:i===0?"#4fc3f7":"#ff5252", stroke:"#fff", strokeWidth:1.5, selectable:false, evented:false, _isMeasure:true}));
     });
@@ -652,13 +654,13 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       if (isBlank) {
         canvasW = cw - 20;
         canvasH = ch - 60;
-        scaleRef.current = 1;
+        scaleRef.current = 1; scaleXRef.current = 1; scaleYRef.current = 1;
       } else {
         const netW = totalW + PAD * 2;
         const netH = totalH + PAD * 2;
         const fitScale = Math.min(availW / netW, availH / netH);
         const pxPerMM = Math.max(fitScale, 2.0);
-        scaleRef.current = pxPerMM;
+        scaleRef.current = pxPerMM; scaleXRef.current = pxPerMM; scaleYRef.current = pxPerMM;
         canvasW = Math.min(Math.round(netW * pxPerMM), cw - 20);
         canvasH = Math.min(Math.round(netH * pxPerMM), ch - 60);
       }
@@ -1622,6 +1624,10 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             console.log("[Dieline] Expected:", origMmW.toFixed(2), "x", origMmH.toFixed(2), "mm");
             console.log("[Dieline] Verify: ", verifyW.toFixed(4), "x", verifyH.toFixed(4), "mm");
             console.log("[Dieline] Scale: scX=", finalScX.toFixed(6), "scY=", finalScY.toFixed(6), "px/mm=", newPxPerMm.toFixed(4));
+            // Store per-axis px/mm for Measure tool
+            scaleXRef.current = (group.width || 1) * finalScX / origMmW; // actual px per mm on X
+            scaleYRef.current = (group.height || 1) * finalScY / origMmH; // actual px per mm on Y
+            console.log("[Dieline] Measure scale: X=", scaleXRef.current.toFixed(4), "Y=", scaleYRef.current.toFixed(4), "px/mm");
             c.add(group); c.sendObjectToBack(group); c.requestRenderAll();
           } catch (err: any) { alert("Failed to load dieline: " + err.message); }
           e.target.value = "";
