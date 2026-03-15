@@ -1,4 +1,4 @@
-﻿# Packive Dev Rules & Roadmap
+# Packive Dev Rules & Roadmap
 > Updated: 2026-03-15 | Status: Phase 2 ready
 
 ## Export Strategy
@@ -81,3 +81,58 @@ Next.js, TypeScript, Fabric.js, clipper2-ts, opentype.js, svg2pdf.js, jsPDF, ONN
 - backup-before-table-rewrite
 - backup-restored-raster-20260309_220044
 - phase1-complete-20260314 (table fully working, font/PDF/outline OK)
+
+## Troubleshooting Log (표 텍스트/폰트/PDF)
+> 2026-03-15 Phase 1 중 발견된 핵심 문제와 해결법
+
+### 1. Fabric.js 표 안 폰트가 변경되지 않는 문제
+- **증상**: Google Fonts에서 폰트를 선택해도 표 텍스트에 적용되지 않음
+- **원인**: `updateAndRebuild` → `rebuildTable`이 표 전체를 삭제 후 재생성하는 방식이었음. 새 Textbox 생성 시 폰트가 아직 로드되지 않아 기본 폰트로 렌더링됨
+- **해결**: `fontFamily`, `fontWeight`, `fontSize`, `textAlign`, `lineHeight`, `textColor` 등은 `rebuildTable`을 호출하지 않고, 기존 Fabric.js Textbox 객체에 `o.set()` + `o.initDimensions()` + `o._clearCache()` + `cv.requestRenderAll()`로 직접 적용. `directProps` 배열로 분리하여 관리
+- **교훈**: Fabric.js에서 텍스트 속성 변경은 객체를 재생성하지 말고 기존 객체를 직접 수정해야 함
+
+### 2. Google Fonts 한글 글리프가 로드되지 않는 문제
+- **증상**: 영어는 폰트가 바뀌지만 한글은 바뀌지 않음 (measureText 결과 Inter와 동일)
+- **원인**: Google Fonts CSS는 unicode-range별로 @font-face를 분리 제공함. `loadGoogleFont`이 첫 번째 URL만 추출하여 라틴 서브셋만 로드됨
+- **해결**: CSS의 **모든 @font-face 블록**을 파싱하여 각각의 URL + unicode-range로 FontFace 객체를 생성하고 `document.fonts.add()`로 등록
+- **코드**: `loadGoogleFont` 함수에서 `css.match(/@font-face\s*\{[^}]+\}/g)`로 전체 블록 추출
+- **교훈**: Google Fonts는 CJK 폰트를 수십~수백 개 서브셋으로 분리하므로, 전체 서브셋을 로드해야 함
+
+### 3. Fabric.js Textbox 폰트 캐시 문제
+- **증상**: `fontFamily`를 변경해도 캔버스에 이전 폰트로 렌더링됨
+- **원인**: Fabric.js가 텍스트를 비트맵 캐시로 렌더링하여 폰트 변경을 감지하지 못함
+- **해결**: `o.set({ fontFamily, dirty: true })` → `o.initDimensions()` → `o._clearCache()` → `cv.requestRenderAll()` 순서로 호출
+- **교훈**: Fabric.js Textbox 속성 변경 시 반드시 `dirty=true`, `initDimensions()`, `_clearCache()` 세 가지를 모두 호출해야 함
+
+### 4. PDF에서 RGB/CMYK 선택 창이 나오는 문제
+- **증상**: Illustrator에서 PDF 열 때 "RGB와 CMYK 모두 사용" 경고
+- **원인**: `replacePdfColorsInString`에서 colorMap에 없는 색상을 RGB로 유지했음
+- **해결**: colorMap에 없는 색상도 `rgbToCmyk()` 폴백으로 변환. 그레이스케일(`g`/`G` 연산자)도 `0 0 0 K` CMYK로 변환
+- **교훈**: PDF CMYK 내보내기 시 모든 색상 연산자(rg/RG/g/G)를 빠짐없이 CMYK(k/K)로 변환해야 함
+
+### 5. PDF 배경이 Illustrator에서 별도 객체로 잡히는 문제
+- **증상**: PDF를 Illustrator에서 열면 배경이 선택 가능한 사각형으로 나타남
+- **원인 1**: jsPDF pages 배열에 PDF operator를 직접 삽입 → 별도 객체
+- **원인 2**: SVG에 `<rect>` 삽입 → svg2pdf가 별도 도형으로 변환
+- **해결**: 배경 rect 삽입 코드를 완전 제거. 패키지 디자인 PDF는 배경 없이 내보내는 것이 업계 표준
+- **교훈**: 인쇄용 PDF에 배경색을 넣지 않는 것이 정석
+
+### 6. 한글 텍스트 아웃라인이 불완전한 문제
+- **증상**: 영어는 패스가 정상이지만 한글은 고정점만 보이고 패스가 비어있음
+- **원인 1**: Google Fonts API가 woff2 URL을 반환하는데 opentype.js가 woff2를 파싱하지 못함
+- **원인 2**: opentype.js가 한글 복합 글리프를 한번에 getPath할 때 path가 불완전
+- **해결 1**: API의 User-Agent를 IE8로 변경하여 TTF 형식을 강제 반환
+- **해결 2**: CJK 문자가 포함된 텍스트는 글자별로 `font.getPath(char, x, y, fontSize)`를 호출하고, `glyph.advanceWidth`로 x 위치를 이동
+- **교훈**: opentype.js + CJK = 글자별 렌더링 필수. Google Fonts API에서 TTF를 받으려면 구형 User-Agent 사용
+
+### 7. 표 Copy/Paste 시 바운딩 박스만 나오는 문제
+- **증상**: 표를 Ctrl+C → Ctrl+V하면 빈 사각형만 나타남
+- **원인**: `o.clone()`이 표의 배경 rect 단일 객체만 복제. 표는 여러 개의 독립 객체(rect+line+textbox)로 구성됨
+- **해결**: 표 복사 시 `_tableConfig` JSON을 저장하고, 붙여넣기 시 `buildTableObjects(cfg)`로 전체 표를 새로 생성
+- **교훈**: Fabric.js Group을 사용하지 않는 표 구조에서는 복사/붙여넣기를 config 기반으로 처리해야 함
+
+### 8. Turbopack `String.repeat(-1)` 에러
+- **증상**: `npm run dev` 시 `RangeError: Invalid count value: -1` 반복
+- **원인**: `backups/` 폴더의 `.ts`/`.tsx` 파일을 Turbopack이 파싱하려다 실패
+- **해결**: backups 폴더의 확장자를 `.bak`으로 변경하고 `tsconfig.json`의 exclude에 `backups` 추가
+- **교훈**: 프로젝트 루트에 문법 오류가 있는 `.ts`/`.tsx` 백업 파일을 두지 말 것
