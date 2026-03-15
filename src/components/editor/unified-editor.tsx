@@ -3068,12 +3068,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                   <div className="text-center py-8">
                     <div className="text-2xl text-gray-300 mb-2">↖</div>
                     <div className="text-xs text-gray-400">Select an object to edit properties</div>
-                    <div className="mt-4 pt-4 border-t">
-                      <label className="text-[10px] text-gray-500">Canvas Background
-                        <input type="color" value="#FFFFFF" onChange={e => { const c=fcRef.current; if(c){c.backgroundColor=e.target.value; c.requestRenderAll();} }}
-                          className="w-full h-8 border rounded cursor-pointer mt-1" />
-                      </label>
-                    </div>
                   </div>
                 )}
               </div>
