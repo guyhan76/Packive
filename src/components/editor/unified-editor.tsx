@@ -1794,14 +1794,20 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 pad={15} unit={rulerUnit} mouseX={mousePos.x} mouseY={mousePos.y} onGuideCreate={addGuide} />
             <canvas ref={canvasElRef} className="shadow-lg" />
             {/* Status bar */}
-            <div className="absolute bottom-0 left-0 right-0 h-7 bg-white/90 border-t border-gray-200 flex items-center px-3 gap-4 text-[10px] text-gray-500">
-              <span>Net: {totalW.toFixed(1)} x {totalH.toFixed(1)} mm</span>
-              <span>Scale: {scaleRef.current.toFixed(1)} px/mm</span>
-              <span>Zoom: {zoom}%</span>
-              <span>Objects: {layersList.length}</span>
-              {selectedPanel && <span className="text-blue-600 font-medium">Panel: {selectedPanel}</span>}
-            </div>
-          </div>
+              {/* Status bar (Illustrator-style) */}
+              <div className="absolute bottom-0 left-0 right-0 h-7 bg-[#2b2b2b] border-t border-[#1a1a1a] flex items-center px-3 gap-3 text-[10px] text-[#888888] font-mono select-none">
+                {mousePos.x >= 0 && mousePos.y >= 0 && (
+                  <span className="text-[#aaaaaa]">
+                    X: {((mousePos.x + rulerScroll.left) / scaleRef.current - 15).toFixed(1)}{rulerUnit === "mm" ? "mm" : "in"}
+                    {" "}Y: {((mousePos.y + rulerScroll.top) / scaleRef.current - 15).toFixed(1)}{rulerUnit === "mm" ? "mm" : "in"}
+                  </span>
+                )}
+                {mousePos.x >= 0 && <span className="border-l border-[#444] h-3" />}
+                <span>Net: {totalW.toFixed(1)} × {totalH.toFixed(1)} mm</span>
+                <span>Zoom: {zoom}%</span>
+                <span>Objects: {layersList.length}</span>
+                {selectedPanel && <span className="text-[#4fc3f7] font-medium">Panel: {selectedPanel}</span>}
+              </div>
         </div>
 
         {/* ═══ RIGHT PANEL ═══ */}
