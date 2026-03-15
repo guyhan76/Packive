@@ -1,382 +1,237 @@
 // src/components/editor/ruler.tsx
 "use client";
-import React, { useRef, useEffect, useCallback, useState } from "react";
-
-const RULER_THICK = 22;
-const INCH_MM = 25.4;
-
-// ─── Color Palette (Illustrator-inspired) ───
-const C = {
-  bg: "#2b2b2b",
-  bgLight: "#3c3c3c",
-  border: "#1a1a1a",
-  tick: "#888888",
-  tickMajor: "#cccccc",
-  label: "#aaaaaa",
-  origin: "#ff6b6b",
-  cursor: "#4fc3f7",
-  guidePreview: "#00e5ff",
-  corner: "#2b2b2b",
-  cornerText: "#8c8c8c",
-  cornerHover: "#3c3c3c",
-};
+import React, { useRef, useEffect, useCallback } from "react";
 
 interface RulerProps {
   direction: "horizontal" | "vertical";
-  canvasWidth: number;
-  canvasHeight: number;
-  scale: number;        // px per mm
-  zoom: number;         // percentage 100=100%
-  scrollLeft: number;
+  canvasWidth: number;   // px
+  canvasHeight: number;  // px
+  scale: number;         // px per mm
+  zoom: number;          // percentage (100 = 100%)
+  scrollLeft: number;    // wrapper scroll offset
   scrollTop: number;
-  pad: number;          // mm (PAD=15)
+  pad: number;           // mm padding (PAD=15)
   unit: "mm" | "inch";
-  mouseX?: number;      // client mouse X relative to wrapper
-  mouseY?: number;      // client mouse Y relative to wrapper
-  onGuideCreate?: (pos: number, dir: "h" | "v") => void;
+  onGuideCreate?: (position: number, direction: "h" | "v") => void;
 }
 
-// Adaptive tick spacing: returns [majorStep, minorDivisions]
-function getTickSpacing(unit: "mm" | "inch", pxPerMM: number, zoom01: number): [number, number] {
-  if (unit === "mm") {
-    const pxPer1mm = pxPerMM * zoom01;
-    if (pxPer1mm >= 20)  return [5, 5];       // every 5mm, 1mm minor
-    if (pxPer1mm >= 8)   return [10, 10];      // every 10mm, 1mm minor
-    if (pxPer1mm >= 4)   return [20, 4];       // every 20mm, 5mm minor
-    if (pxPer1mm >= 2)   return [50, 5];       // every 50mm, 10mm minor
-    if (pxPer1mm >= 0.8) return [100, 10];     // every 100mm, 10mm minor
-    return [200, 4];
-  } else {
-    const pxPerInch = pxPerMM * INCH_MM * zoom01;
-    if (pxPerInch >= 400) return [0.25, 4];    // every 1/4", 1/16" minor
-    if (pxPerInch >= 200) return [0.5, 4];     // every 1/2", 1/8" minor
-    if (pxPerInch >= 100) return [1, 8];       // every 1", 1/8" minor
-    if (pxPerInch >= 50)  return [2, 4];       // every 2", 1/2" minor
-    if (pxPerInch >= 20)  return [5, 5];       // every 5", 1" minor
-    return [10, 5];
-  }
-}
+const RULER_SIZE = 24; // px width/height of ruler bar
+const INCH_TO_MM = 25.4;
 
 export default function Ruler({
   direction, canvasWidth, canvasHeight,
   scale, zoom, scrollLeft, scrollTop, pad,
-  unit, mouseX, mouseY, onGuideCreate
+  unit, onGuideCreate
 }: RulerProps) {
-  const cvRef = useRef<HTMLCanvasElement>(null);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef(false);
-  const [hovered, setHovered] = useState(false);
-  const [dragPos, setDragPos] = useState<number | null>(null); // px position during drag
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const dragging = useRef(false);
 
-  const isH = direction === "horizontal";
-  const z = zoom / 100;
-
-  // ─── Drawing ───
   const draw = useCallback(() => {
-    const el = cvRef.current;
+    const el = canvasRef.current;
     if (!el) return;
     const ctx = el.getContext("2d");
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const W = el.width / dpr;
-    const H = el.height / dpr;
-    const len = isH ? W : H;
+    const isH = direction === "horizontal";
+    const length = isH ? el.width / dpr : el.height / dpr;
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, W, H);
+    ctx.clearRect(0, 0, el.width / dpr, el.height / dpr);
 
-    // Background gradient
-    const grad = isH
-      ? ctx.createLinearGradient(0, 0, 0, RULER_THICK)
-      : ctx.createLinearGradient(0, 0, RULER_THICK, 0);
-    grad.addColorStop(0, C.bg);
-    grad.addColorStop(1, C.bgLight);
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, W, H);
+    // Background
+    ctx.fillStyle = "#f8f9fa";
+    ctx.fillRect(0, 0, isH ? length : RULER_SIZE, isH ? RULER_SIZE : length);
 
-    // Bottom/right border
-    ctx.strokeStyle = C.border;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    if (isH) { ctx.moveTo(0, RULER_THICK - 0.5); ctx.lineTo(W, RULER_THICK - 0.5); }
-    else     { ctx.moveTo(RULER_THICK - 0.5, 0); ctx.lineTo(RULER_THICK - 0.5, H); }
-    ctx.stroke();
+    // Border
+    ctx.strokeStyle = "#d1d5db";
+    ctx.lineWidth = 0.5;
+    if (isH) {
+      ctx.beginPath(); ctx.moveTo(0, RULER_SIZE - 0.5); ctx.lineTo(length, RULER_SIZE - 0.5); ctx.stroke();
+    } else {
+      ctx.beginPath(); ctx.moveTo(RULER_SIZE - 0.5, 0); ctx.lineTo(RULER_SIZE - 0.5, length); ctx.stroke();
+    }
 
-    // ─── Tick calculation ───
+    const z = zoom / 100;
     const scroll = isH ? scrollLeft : scrollTop;
-    const [majorStep, minorDiv] = getTickSpacing(unit, scale, z);
+    const pxPerUnit = unit === "mm" ? scale * z : scale * INCH_TO_MM * z;
+    const unitLabel = unit === "mm" ? "mm" : "in";
+
+    // Determine tick spacing based on zoom level
+    let majorStep: number;  // in unit (mm or inch)
+    let minorDiv: number;   // subdivisions per major
+
+    if (unit === "mm") {
+      const pxPer10mm = 10 * scale * z;
+      if (pxPer10mm > 200) { majorStep = 5; minorDiv = 5; }
+      else if (pxPer10mm > 80) { majorStep = 10; minorDiv = 10; }
+      else if (pxPer10mm > 40) { majorStep = 20; minorDiv = 4; }
+      else if (pxPer10mm > 20) { majorStep = 50; minorDiv = 5; }
+      else { majorStep = 100; minorDiv = 10; }
+    } else {
+      const pxPerInch = INCH_TO_MM * scale * z;
+      if (pxPerInch > 300) { majorStep = 0.5; minorDiv = 5; }
+      else if (pxPerInch > 120) { majorStep = 1; minorDiv = 8; }
+      else if (pxPerInch > 60) { majorStep = 2; minorDiv = 4; }
+      else { majorStep = 5; minorDiv = 5; }
+    }
+
     const minorStep = majorStep / minorDiv;
-    const unitScale = unit === "mm" ? scale * z : scale * INCH_MM * z;
 
-    // visible range in unit coords
-    const startU = (0 + scroll) / unitScale - (pad / (unit === "mm" ? 1 : INCH_MM));
-    const endU = (len + scroll) / unitScale - (pad / (unit === "mm" ? 1 : INCH_MM));
-    const firstTick = Math.floor(startU / minorStep) * minorStep;
-    const lastTick = Math.ceil(endU / minorStep) * minorStep;
+    // Calculate visible range in mm/inch
+    // Canvas coordinate = (mm + pad) * scale * zoom - scroll
+    // So: mm = (canvasPx + scroll) / (scale * zoom) - pad
+    const startUnit = -scroll / (scale * z) - pad;
+    const endUnit = (length - scroll) / (scale * z) - pad + (isH ? 0 : 0);
 
-    ctx.font = "500 9px Inter, -apple-system, system-ui, sans-serif";
+    // Round to nearest minor step
+    const firstTick = Math.floor(startUnit / minorStep) * minorStep;
+    const lastTick = Math.ceil(endUnit / minorStep) * minorStep;
 
-    for (let u = firstTick; u <= lastTick; u = +(u + minorStep).toFixed(8)) {
-      const padU = pad / (unit === "mm" ? 1 : INCH_MM);
-      const px = (u + padU) * unitScale - scroll;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.font = "9px Inter, system-ui, sans-serif";
 
-      if (px < -20 || px > len + 20) continue;
+    for (let u = firstTick; u <= lastTick; u += minorStep) {
+      // Convert unit to canvas pixel position
+      const px = (u + pad) * scale * z - scroll;
 
-      // Determine tick type
-      const remMajor = Math.abs(u % majorStep);
-      const isMajor = remMajor < minorStep * 0.01 || Math.abs(remMajor - majorStep) < minorStep * 0.01;
-      const halfStep = majorStep / 2;
-      const remHalf = Math.abs(u % halfStep);
-      const isMid = !isMajor && (remHalf < minorStep * 0.01 || Math.abs(remHalf - halfStep) < minorStep * 0.01);
+      if (px < -10 || px > length + 10) continue;
 
-      // Tick lengths (Illustrator style: from bottom/right edge)
+      const isMajor = Math.abs(u % majorStep) < minorStep * 0.01 ||
+                      Math.abs(u % majorStep - majorStep) < minorStep * 0.01;
+      const isMid = !isMajor && (Math.abs(u % (majorStep / 2)) < minorStep * 0.01);
+
       let tickLen: number;
-      if (isMajor) tickLen = RULER_THICK * 0.7;
-      else if (isMid) tickLen = RULER_THICK * 0.42;
-      else tickLen = RULER_THICK * 0.2;
+      if (isMajor) tickLen = RULER_SIZE * 0.65;
+      else if (isMid) tickLen = RULER_SIZE * 0.4;
+      else tickLen = RULER_SIZE * 0.22;
 
-      ctx.strokeStyle = isMajor ? C.tickMajor : C.tick;
-      ctx.lineWidth = isMajor ? 1 : 0.5;
-
-      // Snap to half pixel for crisp lines
-      const snappedPx = Math.round(px * 2) / 2;
-
+      ctx.strokeStyle = isMajor ? "#374151" : "#9ca3af";
+      ctx.lineWidth = isMajor ? 0.8 : 0.5;
       ctx.beginPath();
+
       if (isH) {
-        ctx.moveTo(snappedPx, RULER_THICK);
-        ctx.lineTo(snappedPx, RULER_THICK - tickLen);
+        ctx.moveTo(px, RULER_SIZE - tickLen);
+        ctx.lineTo(px, RULER_SIZE);
       } else {
-        ctx.moveTo(RULER_THICK, snappedPx);
-        ctx.lineTo(RULER_THICK - tickLen, snappedPx);
+        ctx.moveTo(RULER_SIZE - tickLen, px);
+        ctx.lineTo(RULER_SIZE, px);
       }
       ctx.stroke();
 
-      // Labels (major ticks only)
-      if (isMajor) {
-        let label: string;
-        if (unit === "mm") {
-          label = String(Math.round(u));
-        } else {
-          label = u % 1 === 0 ? String(Math.round(u)) : u.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
-        }
+      // Label on major ticks
+      if (isMajor && tickLen > RULER_SIZE * 0.5) {
+        const label = unit === "mm"
+          ? String(Math.round(u))
+          : u.toFixed(u % 1 === 0 ? 0 : 1);
 
-        ctx.fillStyle = C.label;
+        ctx.fillStyle = "#374151";
         if (isH) {
           ctx.textAlign = "center";
-          ctx.textBaseline = "bottom";
-          ctx.fillText(label, snappedPx, RULER_THICK - tickLen - 1);
+          ctx.textBaseline = "top";
+          ctx.fillText(label, px, 2);
         } else {
           ctx.save();
-          ctx.translate(RULER_THICK - tickLen - 1, snappedPx);
+          ctx.translate(2, px);
           ctx.rotate(-Math.PI / 2);
           ctx.textAlign = "center";
-          ctx.textBaseline = "bottom";
+          ctx.textBaseline = "top";
           ctx.fillText(label, 0, 0);
           ctx.restore();
         }
       }
     }
 
-    // ─── Origin marker (red triangle) ───
-    const originPx = pad * scale * z - scroll;
-    if (originPx > -10 && originPx < len + 10) {
-      ctx.fillStyle = C.origin;
-      ctx.beginPath();
+    // Zero origin marker
+    const zeroPx = pad * scale * z - scroll;
+    if (zeroPx > 0 && zeroPx < length) {
+      ctx.fillStyle = "#ef4444";
       if (isH) {
-        ctx.moveTo(originPx, RULER_THICK);
-        ctx.lineTo(originPx - 3, RULER_THICK - 5);
-        ctx.lineTo(originPx + 3, RULER_THICK - 5);
+        ctx.fillRect(zeroPx - 0.5, RULER_SIZE - 4, 1, 4);
       } else {
-        ctx.moveTo(RULER_THICK, originPx);
-        ctx.lineTo(RULER_THICK - 5, originPx - 3);
-        ctx.lineTo(RULER_THICK - 5, originPx + 3);
-      }
-      ctx.fill();
-    }
-
-    // ─── Mouse cursor indicator ───
-    const mousePx = isH ? (mouseX ?? -100) : (mouseY ?? -100);
-    if (mousePx >= 0 && mousePx <= len) {
-      ctx.strokeStyle = C.cursor;
-      ctx.lineWidth = 1;
-      ctx.setLineDash([]);
-      ctx.beginPath();
-      if (isH) {
-        ctx.moveTo(mousePx, 0);
-        ctx.lineTo(mousePx, RULER_THICK);
-      } else {
-        ctx.moveTo(0, mousePx);
-        ctx.lineTo(RULER_THICK, mousePx);
-      }
-      ctx.stroke();
-    }
-
-    // ─── Drag preview line ───
-    if (dragPos !== null) {
-      ctx.strokeStyle = C.guidePreview;
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 3]);
-      ctx.beginPath();
-      if (isH) {
-        ctx.moveTo(dragPos, 0);
-        ctx.lineTo(dragPos, RULER_THICK);
-      } else {
-        ctx.moveTo(0, dragPos);
-        ctx.lineTo(RULER_THICK, dragPos);
-      }
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Position tooltip
-      const padU = pad / (unit === "mm" ? 1 : INCH_MM);
-      const unitVal = (dragPos + scroll) / unitScale - padU;
-      const tooltipText = unit === "mm"
-        ? `${unitVal.toFixed(1)} mm`
-        : `${unitVal.toFixed(3)} in`;
-
-      ctx.fillStyle = C.guidePreview;
-      ctx.font = "bold 9px Inter, system-ui";
-      if (isH) {
-        ctx.textAlign = dragPos > len - 60 ? "right" : "left";
-        ctx.textBaseline = "bottom";
-        ctx.fillText(tooltipText, dragPos + (dragPos > len - 60 ? -4 : 4), RULER_THICK - 2);
-      } else {
-        ctx.save();
-        ctx.translate(2, dragPos + (dragPos > len - 40 ? -4 : 14));
-        ctx.textAlign = "left";
-        ctx.textBaseline = "top";
-        ctx.fillText(tooltipText, 0, 0);
-        ctx.restore();
+        ctx.fillRect(RULER_SIZE - 4, zeroPx - 0.5, 4, 1);
       }
     }
-  }, [direction, scale, zoom, scrollLeft, scrollTop, pad, unit, canvasWidth, canvasHeight, mouseX, mouseY, isH, dragPos]);
+  }, [direction, scale, zoom, scrollLeft, scrollTop, pad, unit, canvasWidth, canvasHeight]);
 
-  // ─── Resize observer ───
   useEffect(() => {
-    const wrap = wrapRef.current;
-    const el = cvRef.current;
-    if (!wrap || !el) return;
-
-    const ro = new ResizeObserver(() => {
-      const dpr = window.devicePixelRatio || 1;
-      const rect = wrap.getBoundingClientRect();
-      const w = isH ? rect.width : RULER_THICK;
-      const h = isH ? RULER_THICK : rect.height;
-      el.width = w * dpr;
-      el.height = h * dpr;
-      el.style.width = w + "px";
-      el.style.height = h + "px";
-      draw();
-    });
-    ro.observe(wrap);
-    return () => ro.disconnect();
-  }, [draw, isH]);
+    const el = canvasRef.current;
+    if (!el) return;
+    const dpr = window.devicePixelRatio || 1;
+    const isH = direction === "horizontal";
+    const parentW = el.parentElement?.clientWidth || 800;
+    const parentH = el.parentElement?.clientHeight || 600;
+    el.width = (isH ? parentW : RULER_SIZE) * dpr;
+    el.height = (isH ? RULER_SIZE : parentH) * dpr;
+    el.style.width = (isH ? parentW : RULER_SIZE) + "px";
+    el.style.height = (isH ? RULER_SIZE : parentH) + "px";
+    draw();
+  }, [draw, direction, canvasWidth, canvasHeight]);
 
   useEffect(() => { draw(); }, [draw]);
 
-  // ─── Drag to create guide ───
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    dragRef.current = true;
-    document.body.style.cursor = isH ? "s-resize" : "e-resize";
-    const rect = cvRef.current?.getBoundingClientRect();
-    if (rect) {
-      setDragPos(isH ? e.clientX - rect.left : e.clientY - rect.top);
-    }
-  }, [isH]);
+  // Drag to create guide
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    dragging.current = true;
+    document.body.style.cursor = direction === "horizontal" ? "row-resize" : "col-resize";
+  }, [direction]);
 
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      if (!dragRef.current) return;
-      const rect = cvRef.current?.getBoundingClientRect();
-      if (rect) {
-        setDragPos(isH ? e.clientX - rect.left : e.clientY - rect.top);
-      }
-    };
-    const onUp = (e: MouseEvent) => {
-      if (!dragRef.current) return;
-      dragRef.current = false;
-      document.body.style.cursor = "";
-      setDragPos(null);
+  const handleMouseUp = useCallback((e: React.MouseEvent) => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    document.body.style.cursor = "";
 
-      const el = cvRef.current;
-      if (!el || !onGuideCreate) return;
-      const rect = el.getBoundingClientRect();
-      const px = isH ? e.clientX - rect.left : e.clientY - rect.top;
-      const scroll = isH ? scrollLeft : scrollTop;
-      const padMM = pad;
-      const mm = (px + scroll) / (scale * z) - padMM;
-      // Only create if dragged beyond ruler area
-      const outOfRuler = isH ? (e.clientY > rect.bottom) : (e.clientX > rect.right);
-      if (outOfRuler) {
-        onGuideCreate(Math.round(mm * 100) / 100, isH ? "h" : "v");
-      }
-    };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-    return () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); };
-  }, [isH, scale, z, scrollLeft, scrollTop, pad, onGuideCreate]);
+    const el = canvasRef.current;
+    if (!el || !onGuideCreate) return;
+    const rect = el.getBoundingClientRect();
+    const isH = direction === "horizontal";
+    const z = zoom / 100;
+    const px = isH ? e.clientX - rect.left : e.clientY - rect.top;
+    const scroll = isH ? scrollLeft : scrollTop;
+
+    // Convert pixel to mm
+    const mm = (px + scroll) / (scale * z) - pad;
+    onGuideCreate(Math.round(mm * 100) / 100, isH ? "h" : "v");
+  }, [direction, zoom, scale, scrollLeft, scrollTop, pad, onGuideCreate]);
 
   return (
-    <div
-      ref={wrapRef}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+    <canvas
+      ref={canvasRef}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
       style={{
         position: "absolute",
-        ...(isH
-          ? { top: 0, left: RULER_THICK, right: 0, height: RULER_THICK }
-          : { top: RULER_THICK, left: 0, bottom: 0, width: RULER_THICK }),
-        zIndex: 30,
-        overflow: "hidden",
+        ...(direction === "horizontal"
+          ? { top: 0, left: RULER_SIZE, right: 0, height: RULER_SIZE, cursor: "row-resize" }
+          : { top: RULER_SIZE, left: 0, bottom: 0, width: RULER_SIZE, cursor: "col-resize" }
+        ),
+        zIndex: 20,
+        userSelect: "none",
       }}
-    >
-      <canvas
-        ref={cvRef}
-        onMouseDown={onMouseDown}
-        style={{
-          display: "block",
-          cursor: isH ? "s-resize" : "e-resize",
-        }}
-      />
-    </div>
+    />
   );
 }
 
-// ─── Corner unit toggle ───
+// Corner square (unit toggle)
 export function RulerCorner({ unit, onToggle }: { unit: "mm" | "inch"; onToggle: () => void }) {
-  const [hover, setHover] = useState(false);
   return (
     <div
       onClick={onToggle}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
       style={{
         position: "absolute", top: 0, left: 0,
-        width: RULER_THICK, height: RULER_THICK,
-        zIndex: 31,
-        background: hover ? C.cornerHover : C.corner,
-        borderRight: `1px solid ${C.border}`,
-        borderBottom: `1px solid ${C.border}`,
+        width: RULER_SIZE, height: RULER_SIZE,
+        zIndex: 21,
+        backgroundColor: "#f3f4f6",
+        borderRight: "0.5px solid #d1d5db",
+        borderBottom: "0.5px solid #d1d5db",
         display: "flex", alignItems: "center", justifyContent: "center",
         cursor: "pointer", userSelect: "none",
-        transition: "background 0.15s",
+        fontSize: "8px", fontWeight: 600, color: "#6b7280",
       }}
-      title={`Click to switch to ${unit === "mm" ? "inch" : "mm"}`}
+      title={`Switch to ${unit === "mm" ? "inch" : "mm"}`}
     >
-      <span style={{
-        fontSize: "8px",
-        fontWeight: 700,
-        color: hover ? "#ffffff" : C.cornerText,
-        letterSpacing: "0.3px",
-        textTransform: "uppercase",
-        transition: "color 0.15s",
-      }}>
-        {unit}
-      </span>
+      {unit}
     </div>
   );
 }
-
-export { RULER_THICK };

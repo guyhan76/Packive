@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 import React, { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useI18n } from "@/components/i18n-context";
 import { PACKIVE_SPOT_COLORS } from "@/data/packive-spot-colors";
-import Ruler, { RulerCorner, RULER_THICK } from "@/components/editor/ruler";
+import Ruler, { RulerCorner } from "@/components/editor/ruler";
 import { HLC_COLORS, HLC_HUE_CATEGORIES } from "@/data/cielab-hlc-colors";
 import { loadFOGRA39LUT, cmykToSrgb, cmykToHex as iccCmykToHex, srgbToCmyk, isLUTReady, isReverseLUTReady } from "@/lib/cmyk-engine";
 
@@ -217,7 +217,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [rulerUnit, setRulerUnit] = useState<"mm" | "inch">("mm");
   const [rulerScroll, setRulerScroll] = useState({ left: 0, top: 0 });
   const [guides, setGuides] = useState<Array<{ id: string; pos: number; dir: "h" | "v" }>>([]);
-  const [mousePos, setMousePos] = useState<{x: number; y: number}>({x: -100, y: -100});
   const zoomRef = useRef(100);
   const [drawMode, setDrawMode] = useState(false);
   const [eyedropperMode, setEyedropperMode] = useState(false);
@@ -298,6 +297,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   // ─── PADDING for die-cut display ───
   const PAD = 15; // mm padding around net
   const CANVAS_PAD = 30; // extra px padding in canvas
+
 
   // ─── Fold lines (mm coordinates) ───
   const foldLines = useMemo(() => {
@@ -406,6 +406,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
   const [saveStatus, setSaveStatus] = useState<string|null>(null);
 
+
+
   const fileSave = useCallback(() => {
     const c = fcRef.current; if (!c) return;
     try {
@@ -446,6 +448,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       alert("Load failed: " + e.message);
     }
   }, [pushHistory]);
+
 
   // ─── Layer management ───
   const refreshLayers = useCallback(() => {
@@ -904,6 +907,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     return () => document.removeEventListener("keydown", handler);
   }, [undo, redo, pushHistory, refreshLayers]);
 
+
   // ─── Add Text ───
   const addText = useCallback(async () => {
     const c = fcRef.current; if (!c) return;
@@ -1026,6 +1030,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     setShowShapePanel(false);
   }, [color, refreshLayers, pushHistory]);
 
+
   // ─── Add Image ───
   const addImage = useCallback(() => { fileRef.current?.click(); }, []);
   const onFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1139,6 +1144,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     setShowMarkPanel(false);
     e.target.value = "";
   }, [pushHistory, refreshLayers]);
+
 
   // ─── AI Copy ───
   const handleAiCopy = useCallback(async () => {
@@ -1262,6 +1268,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       _tableConfig: tableConfig,
     };
   }, []);
+
 
   const [canvasReady, setCanvasReady] = useState(false);
   const [selProps, setSelProps] = useState<any>(null);
@@ -1688,6 +1695,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             </div>
           )}
 
+
           {/* Barcode Popup */}
           {showBarcodePanel && (
             <div className="absolute left-1 top-1 z-30 bg-white rounded-xl shadow-xl border p-3 w-56">
@@ -1780,36 +1788,31 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             </div>
           )}
 
+
+
           {/* ═══ CANVAS AREA ═══ */}
-          <div ref={wrapperRef} onScroll={(e) => { const t = e.target as HTMLDivElement; setRulerScroll({ left: t.scrollLeft, top: t.scrollTop }); }} onMouseMove={(e) => { const r = (e.currentTarget as HTMLDivElement).getBoundingClientRect(); setMousePos({ x: e.clientX - r.left - RULER_THICK + (rulerScroll?.left || 0), y: e.clientY - r.top - RULER_THICK + (rulerScroll?.top || 0) }); }} onMouseLeave={() => setMousePos({x:-100,y:-100})} className="flex-1 overflow-auto bg-gray-100 relative pb-7"
-            style={{ paddingLeft: RULER_THICK, paddingTop: RULER_THICK, cursor: drawMode ? "crosshair" : "default" }}>
+          <div ref={wrapperRef} onScroll={(e) => setRulerScroll({ left: (e.target as HTMLDivElement).scrollLeft, top: (e.target as HTMLDivElement).scrollTop })} className="flex-1 overflow-auto bg-gray-100 relative flex items-center justify-center pb-7"
+            style={{ paddingLeft: 24, paddingTop: 24, cursor: drawMode ? "crosshair" : "default" }}>
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
-              {/* ─── Rulers (Illustrator-style) ─── */}
+              {/* Rulers */}
               <RulerCorner unit={rulerUnit} onToggle={() => setRulerUnit(u => u === "mm" ? "inch" : "mm")} />
               <Ruler direction="horizontal" canvasWidth={fcRef.current?.getWidth() || 800} canvasHeight={fcRef.current?.getHeight() || 600}
                 scale={scaleRef.current} zoom={zoom} scrollLeft={rulerScroll.left} scrollTop={rulerScroll.top}
-                pad={15} unit={rulerUnit} mouseX={mousePos.x} mouseY={mousePos.y} onGuideCreate={addGuide} />
+                pad={15} unit={rulerUnit} onGuideCreate={addGuide} />
               <Ruler direction="vertical" canvasWidth={fcRef.current?.getWidth() || 800} canvasHeight={fcRef.current?.getHeight() || 600}
                 scale={scaleRef.current} zoom={zoom} scrollLeft={rulerScroll.left} scrollTop={rulerScroll.top}
-                pad={15} unit={rulerUnit} mouseX={mousePos.x} mouseY={mousePos.y} onGuideCreate={addGuide} />
+                pad={15} unit={rulerUnit} onGuideCreate={addGuide} />
             <canvas ref={canvasElRef} className="shadow-lg" />
             {/* Status bar */}
-              {/* Status bar (Illustrator-style) */}
-              <div className="absolute bottom-0 left-0 right-0 h-7 bg-[#2b2b2b] border-t border-[#1a1a1a] flex items-center px-3 gap-3 text-[10px] text-[#888888] font-mono select-none">
-                {mousePos.x >= 0 && mousePos.y >= 0 && (
-                  <span className="text-[#aaaaaa]">
-                    X: {((mousePos.x + rulerScroll.left) / scaleRef.current - 15).toFixed(1)}{rulerUnit === "mm" ? "mm" : "in"}
-                    {" "}Y: {((mousePos.y + rulerScroll.top) / scaleRef.current - 15).toFixed(1)}{rulerUnit === "mm" ? "mm" : "in"}
-                  </span>
-                )}
-                {mousePos.x >= 0 && <span className="border-l border-[#444] h-3" />}
-                <span>Net: {totalW.toFixed(1)} × {totalH.toFixed(1)} mm</span>
-                <span>Zoom: {zoom}%</span>
-                <span>Objects: {layersList.length}</span>
-                {selectedPanel && <span className="text-[#4fc3f7] font-medium">Panel: {selectedPanel}</span>}
-              </div>
-        </div>
+            <div className="absolute bottom-0 left-0 right-0 h-7 bg-white/90 border-t border-gray-200 flex items-center px-3 gap-4 text-[10px] text-gray-500">
+              <span>Net: {totalW.toFixed(1)} x {totalH.toFixed(1)} mm</span>
+              <span>Scale: {scaleRef.current.toFixed(1)} px/mm</span>
+              <span>Zoom: {zoom}%</span>
+              <span>Objects: {layersList.length}</span>
+              {selectedPanel && <span className="text-blue-600 font-medium">Panel: {selectedPanel}</span>}
             </div>
+          </div>
+        </div>
 
         {/* ═══ RIGHT PANEL ═══ */}
         <div className="w-80 bg-white border-l border-gray-200 flex flex-col shrink-0 overflow-hidden">
@@ -2738,6 +2741,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                                        </button>
                                      ))}
                                    </div>
+
 
                                    {/* Color grid */}
                                    {(() => {
