@@ -519,10 +519,10 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const handleMeasureClick = useCallback((opt: any) => {
     if (!measureMode) return;
     const cv = fcRef.current; if (!cv) return;
-    const ptr = cv.getViewportPoint(opt.e);
+    const e = opt.e; const cv2 = fcRef.current!; const vpt = cv2.viewportTransform || [1,0,0,1,0,0]; const rect = cv2.getElement().getBoundingClientRect(); const px = (e.clientX - rect.left) / vpt[0] - vpt[4] / vpt[0]; const py = (e.clientY - rect.top) / vpt[3] - vpt[5] / vpt[3];
     const s = scaleRef.current;
-    const mmX = +(ptr.x / s - 15).toFixed(2);
-    const mmY = +(ptr.y / s - 15).toFixed(2);
+    const mmX = +(px / s - 15).toFixed(2);
+    const mmY = +(py / s - 15).toFixed(2);
     setMeasurePts(prev => {
       const next = prev.length >= 2 ? [{x:mmX,y:mmY}] : [...prev, {x:mmX,y:mmY}];
       if (next.length === 2) {
@@ -1854,16 +1854,16 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           <div ref={wrapperRef} onScroll={(e) => { const t=e.target as HTMLDivElement; setRulerScroll({left:t.scrollLeft,top:t.scrollTop}); }} onMouseMove={(e) => { if(!showRuler)return; const r=e.currentTarget.getBoundingClientRect(); setMousePos({x:e.clientX-r.left-RULER_THICK+(rulerScroll?.left||0),y:e.clientY-r.top-RULER_THICK+(rulerScroll?.top||0)}); }} onMouseLeave={() => setMousePos({x:-100,y:-100})} className="flex-1 overflow-auto bg-gray-100 relative pb-7"
             style={{ paddingLeft: showRuler ? RULER_THICK : 0, paddingTop: showRuler ? RULER_THICK : 0, cursor: measureMode ? "crosshair" : drawMode ? "crosshair" : "default" }}>
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
-              {showRuler && (<>
+              {/* Rulers - conditional */}
               {/* Rulers */}
-              <RulerCorner unit={rulerUnit} onToggle={() => setRulerUnit(u => u === "mm" ? "inch" : "mm")} />
-              <Ruler direction="horizontal" canvasWidth={fcRef.current?.getWidth() || 800} canvasHeight={fcRef.current?.getHeight() || 600}
+              {showRuler && <RulerCorner unit={rulerUnit} onToggle={() => setRulerUnit(u => u === "mm" ? "inch" : "mm")}  />}
+              {showRuler && <Ruler direction="horizontal" canvasWidth={fcRef.current?.getWidth() || 800} canvasHeight={fcRef.current?.getHeight() || 600}
                 scale={scaleRef.current} zoom={zoom} scrollLeft={rulerScroll.left} scrollTop={rulerScroll.top}
-                pad={15} unit={rulerUnit} onGuideCreate={addGuide} />
-              <Ruler direction="vertical" canvasWidth={fcRef.current?.getWidth() || 800} canvasHeight={fcRef.current?.getHeight() || 600}
+                pad={15} unit={rulerUnit} onGuideCreate={addGuide}  />}
+              {showRuler && <Ruler direction="vertical" canvasWidth={fcRef.current?.getWidth() || 800} canvasHeight={fcRef.current?.getHeight() || 600}
                 scale={scaleRef.current} zoom={zoom} scrollLeft={rulerScroll.left} scrollTop={rulerScroll.top}
-                pad={15} unit={rulerUnit} onGuideCreate={addGuide} />
-              </>)}
+                pad={15} unit={rulerUnit} onGuideCreate={addGuide}  />}
+
             <canvas ref={canvasElRef} className="shadow-lg" />
               {/* Status bar */}
               <div className="absolute bottom-0 left-0 right-0 h-7 bg-[#2c2c2c] border-t border-[#1a1a1a] flex items-center px-3 gap-3 text-[10px] text-[#888] font-mono select-none">
