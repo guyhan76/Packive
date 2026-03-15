@@ -752,24 +752,81 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       else if ((e.ctrlKey || e.metaKey) && e.key === "y") { e.preventDefault(); redo(); }
       else if ((e.ctrlKey||e.metaKey) && e.key==="s") { e.preventDefault(); fileSave(); }
       else if ((e.ctrlKey||e.metaKey) && e.key==="c") {
+        e.preventDefault();
         const cv=fcRef.current; if(!cv) return;
         const o=cv.getActiveObject(); if(!o) return;
-        const cloned = await o.clone(); ["_tableConfig","_isTable","_cmykFill","_cmykStroke","_spotFillName","_spotFillPantone","_spotStrokeName","_spotStrokePantone"].forEach(k => { if ((o as any)[k] !== undefined) (cloned as any)[k] = (o as any)[k]; }); (window as any).__pkClip=cloned;
+        if ((o as any)._tableId) {
+          // Table: 전체 표 객체들의 config 저장
+          const tableId = (o as any)._tableId;
+          const cfg = (o as any)._tableConfig;
+          const allObjs = cv.getObjects().filter((obj:any) => obj._tableId === tableId);
+          const baseLeft = Math.min(...allObjs.map((obj:any) => obj.left || 0));
+          const baseTop = Math.min(...allObjs.map((obj:any) => obj.top || 0));
+          (window as any).__pkClip = { type: "table", config: cfg, left: baseLeft, top: baseTop };
+        } else {
+          const cloned = await o.clone();
+          ["_cmykFill","_cmykStroke","_spotFillName","_spotFillPantone","_spotStrokeName","_spotStrokePantone"].forEach(k => {
+            if ((o as any)[k] !== undefined) (cloned as any)[k] = (o as any)[k];
+          });
+          (window as any).__pkClip = { type: "object", obj: cloned };
+        }
       }
       else if ((e.ctrlKey||e.metaKey) && e.key==="v") {
         e.preventDefault();
         const cv=fcRef.current; if(!cv) return;
-        const cl=(window as any).__pkClip; if(!cl) return;
-        const p = await cl.clone(); ["_tableConfig","_isTable","_cmykFill","_cmykStroke","_spotFillName","_spotFillPantone","_spotStrokeName","_spotStrokePantone"].forEach(k => { if ((cl as any)[k] !== undefined) (p as any)[k] = (cl as any)[k]; });
-        p.set({left:(p.left||0)+20,top:(p.top||0)+20});
-        cv.add(p); cv.setActiveObject(p);
-        cv.requestRenderAll(); pushHistory(); refreshLayers();
+        const clip = (window as any).__pkClip; if(!clip) return;
+        if (clip.type === "table" && clip.config) {
+          // Table paste: rebuildTable 사용하지 않고 직접 생성
+          try {
+            const cfg = JSON.parse(clip.config);
+            const { buildTableObjects } = await import("@/lib/table-engine");
+            const F = await import("fabric");
+            const objs = buildTableObjects(cfg, F);
+            const newLeft = (clip.left || 100) + 30;
+            const newTop = (clip.top || 100) + 30;
+            objs.forEach((o: any) => {
+              o.set({ left: o.left + newLeft, top: o.top + newTop });
+              o._isTable = true;
+              o._tableConfig = JSON.stringify(cfg);
+              o.name = `Table ${cfg.rows}\u00d7${cfg.cols}`;
+            });
+            const bgObj = objs.find((o:any) => o._tableRole === "bg");
+            objs.forEach((o: any) => cv.add(o));
+            if (bgObj) cv.setActiveObject(bgObj);
+            cv.requestRenderAll();
+            pushHistory(); refreshLayers();
+          } catch(err) { console.error("[PASTE] Table paste error:", err); }
+        } else if (clip.type === "object" && clip.obj) {
+          const p = await clip.obj.clone();
+          ["_cmykFill","_cmykStroke","_spotFillName","_spotFillPantone","_spotStrokeName","_spotStrokePantone"].forEach(k => {
+            if ((clip.obj as any)[k] !== undefined) (p as any)[k] = (clip.obj as any)[k];
+          });
+          p.set({left:(p.left||0)+20,top:(p.top||0)+20});
+          cv.add(p); cv.setActiveObject(p);
+          cv.requestRenderAll(); pushHistory(); refreshLayers();
+        }
       }
       else if ((e.ctrlKey||e.metaKey) && e.key==="x") {
+        e.preventDefault();
         const cv=fcRef.current; if(!cv) return;
         const o=cv.getActiveObject(); if(!o) return;
-        const cloned = await o.clone(); ["_tableConfig","_isTable","_cmykFill","_cmykStroke","_spotFillName","_spotFillPantone","_spotStrokeName","_spotStrokePantone"].forEach(k => { if ((o as any)[k] !== undefined) (cloned as any)[k] = (o as any)[k]; }); (window as any).__pkClip=cloned;
-        cv.remove(o); cv.requestRenderAll();
+        if ((o as any)._tableId) {
+          const tableId = (o as any)._tableId;
+          const cfg = (o as any)._tableConfig;
+          const allObjs = cv.getObjects().filter((obj:any) => obj._tableId === tableId);
+          const baseLeft = Math.min(...allObjs.map((obj:any) => obj.left || 0));
+          const baseTop = Math.min(...allObjs.map((obj:any) => obj.top || 0));
+          (window as any).__pkClip = { type: "table", config: cfg, left: baseLeft, top: baseTop };
+          allObjs.forEach((obj:any) => cv.remove(obj));
+        } else {
+          const cloned = await o.clone();
+          ["_cmykFill","_cmykStroke","_spotFillName","_spotFillPantone","_spotStrokeName","_spotStrokePantone"].forEach(k => {
+            if ((o as any)[k] !== undefined) (cloned as any)[k] = (o as any)[k];
+          });
+          (window as any).__pkClip = { type: "object", obj: cloned };
+          cv.remove(o);
+        }
+        cv.discardActiveObject(); cv.requestRenderAll();
         pushHistory(); refreshLayers();
       }
       else if (e.key === "Delete" || e.key === "Backspace") {
