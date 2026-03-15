@@ -1587,11 +1587,41 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             console.log("[Dieline] Final:   ", finalMmW.toFixed(2), "x", finalMmH.toFixed(2), "mm");
             console.log("[Dieline] Error: W=", (finalMmW - origMmW).toFixed(4), "mm, H=", (finalMmH - origMmH).toFixed(4), "mm");
 
-            // Center on canvas
-            const cw2 = c.getWidth(), ch2 = c.getHeight();
-            group.set({ scaleX: scX, scaleY: scY, left: cw2 / 2, top: ch2 / 2, originX: "center", originY: "center" });
-            console.log("[Dieline] Applied scaleX:", scX.toFixed(6), "scaleY:", scY.toFixed(6));
+            // ── Resize canvas to fit dieline at accurate px/mm ──
+            // Available space: use wrapper dimensions
+            const wrapper = (cv as any).wrapperEl?.parentElement || document.querySelector("[data-canvas-wrapper]");
+            const availW = wrapper ? wrapper.clientWidth - 60 : 1200;
+            const availH = wrapper ? wrapper.clientHeight - 60 : 800;
 
+            // Calculate optimal px/mm so the dieline fits in view
+            const PAD_MM = 15;
+            const totalMmW = origMmW + PAD_MM * 2;
+            const totalMmH = origMmH + PAD_MM * 2;
+            const fitScale = Math.min(availW / totalMmW, availH / totalMmH);
+            const newPxPerMm = Math.max(fitScale, 0.5); // minimum 0.5 px/mm
+
+            // Resize canvas
+            const newCanvasW = Math.round(totalMmW * newPxPerMm);
+            const newCanvasH = Math.round(totalMmH * newPxPerMm);
+            cv.setDimensions({ width: newCanvasW, height: newCanvasH });
+            scaleRef.current = newPxPerMm;
+            console.log("[Dieline] Canvas resized:", newCanvasW, "x", newCanvasH, "px, scale:", newPxPerMm.toFixed(4), "px/mm");
+
+            // Recalculate scale with new px/mm
+            const finalScX = (origMmW * newPxPerMm) / (group.width || 1);
+            const finalScY = (origMmH * newPxPerMm) / (group.height || 1);
+
+            // Position: center with padding
+            const leftPos = PAD_MM * newPxPerMm + (origMmW * newPxPerMm) / 2;
+            const topPos = PAD_MM * newPxPerMm + (origMmH * newPxPerMm) / 2;
+            group.set({ scaleX: finalScX, scaleY: finalScY, left: leftPos, top: topPos, originX: "center", originY: "center" });
+
+            // Verify accuracy
+            const verifyW = ((group.width || 1) * finalScX) / newPxPerMm;
+            const verifyH = ((group.height || 1) * finalScY) / newPxPerMm;
+            console.log("[Dieline] Expected:", origMmW.toFixed(2), "x", origMmH.toFixed(2), "mm");
+            console.log("[Dieline] Verify: ", verifyW.toFixed(4), "x", verifyH.toFixed(4), "mm");
+            console.log("[Dieline] Scale: scX=", finalScX.toFixed(6), "scY=", finalScY.toFixed(6), "px/mm=", newPxPerMm.toFixed(4));
             c.add(group); c.sendObjectToBack(group); c.requestRenderAll();
           } catch (err: any) { alert("Failed to load dieline: " + err.message); }
           e.target.value = "";
