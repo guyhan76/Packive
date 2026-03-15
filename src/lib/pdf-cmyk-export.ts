@@ -290,18 +290,6 @@ export async function exportCmykPdf(
   canvas.renderAll();
   let svgString = canvas.toSVG({ width: canvasW, height: canvasH });
   console.log("[PDF] Step 3: SVG generated, length:", svgString.length);
-
-  // Insert background as SVG rect (not jsPDF operator) so Illustrator treats it as part of artwork
-  if (savedBgColor && savedBgColor !== "transparent" && savedBgColor !== "none" && savedBgColor !== "") {
-    const bgHex = normalizeColor(savedBgColor);
-    if (bgHex) {
-      const bgRgb = hexToRgb(bgHex);
-      if (bgRgb) {
-        // Insert a <rect> as the first child of the SVG so it sits behind all content
-        const bgRect = '<rect x="0" y="0" width="' + canvasW + '" height="' + canvasH + '" fill="rgb(' + bgRgb.r + ',' + bgRgb.g + ',' + bgRgb.b + ')" />';
-        svgString = svgString.replace(/(<svg[^>]*>)/, '$1\n' + bgRect);
-        console.log("[PDF] Background rect inserted into SVG:", bgHex);
-      }
     }
   }
 
