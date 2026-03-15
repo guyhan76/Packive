@@ -190,33 +190,91 @@ export async function convertTextToOutlines(svgEl: Element): Promise<number> {
         const tFill = tspan.getAttribute("fill") || tspan.style?.fill || attrs.fill;
         const tFontSize = parseFloat(tspan.getAttribute("font-size") || String(attrs.fontSize));
 
-        const path = font.getPath(text, tx, ty, tFontSize);
-        const pathData = path.toPathData(2);
+        // Check if text contains CJK characters
+        const hasCJK = /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(text);
 
-        const pathEl = doc.createElementNS("http://www.w3.org/2000/svg", "path");
-        pathEl.setAttribute("d", pathData);
-        pathEl.setAttribute("fill", tFill);
-        if (attrs.stroke !== "none") {
-          pathEl.setAttribute("stroke", attrs.stroke);
-          pathEl.setAttribute("stroke-width", String(attrs.strokeWidth));
+        if (hasCJK) {
+          // Render character by character for CJK to handle composite glyphs properly
+          let xOffset = tx;
+          for (const char of text) {
+            const charPath = font.getPath(char, xOffset, ty, tFontSize);
+            const charPathData = charPath.toPathData(2);
+            if (charPathData && charPathData !== "M0 0Z" && charPathData.length > 10) {
+              const pathEl = doc.createElementNS("http://www.w3.org/2000/svg", "path");
+              pathEl.setAttribute("d", charPathData);
+              pathEl.setAttribute("fill", tFill);
+              if (attrs.stroke !== "none") {
+                pathEl.setAttribute("stroke", attrs.stroke);
+                pathEl.setAttribute("stroke-width", String(attrs.strokeWidth));
+              }
+              g.appendChild(pathEl);
+            }
+            // Advance x position based on glyph width
+            const glyph = font.charToGlyph(char);
+            if (glyph && glyph.advanceWidth) {
+              xOffset += (glyph.advanceWidth / font.unitsPerEm) * tFontSize;
+            } else {
+              xOffset += tFontSize * 0.6; // fallback advance
+            }
+          }
+        } else {
+          // Latin text - render all at once
+          const path = font.getPath(text, tx, ty, tFontSize);
+          const pathData = path.toPathData(2);
+          if (pathData && pathData.length > 5) {
+            const pathEl = doc.createElementNS("http://www.w3.org/2000/svg", "path");
+            pathEl.setAttribute("d", pathData);
+            pathEl.setAttribute("fill", tFill);
+            if (attrs.stroke !== "none") {
+              pathEl.setAttribute("stroke", attrs.stroke);
+              pathEl.setAttribute("stroke-width", String(attrs.strokeWidth));
+            }
+            g.appendChild(pathEl);
+          }
         }
-        g.appendChild(pathEl);
       }
     } else {
       const text = textEl.textContent || "";
       if (!text.trim()) continue;
 
-      const path = font.getPath(text, attrs.x, attrs.y, attrs.fontSize);
-      const pathData = path.toPathData(2);
+      const hasCJK = /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(text);
 
-      const pathEl = doc.createElementNS("http://www.w3.org/2000/svg", "path");
-      pathEl.setAttribute("d", pathData);
-      pathEl.setAttribute("fill", attrs.fill);
-      if (attrs.stroke !== "none") {
-        pathEl.setAttribute("stroke", attrs.stroke);
-        pathEl.setAttribute("stroke-width", String(attrs.strokeWidth));
+      if (hasCJK) {
+        let xOffset = attrs.x;
+        for (const char of text) {
+          const charPath = font.getPath(char, xOffset, attrs.y, attrs.fontSize);
+          const charPathData = charPath.toPathData(2);
+          if (charPathData && charPathData !== "M0 0Z" && charPathData.length > 10) {
+            const pathEl = doc.createElementNS("http://www.w3.org/2000/svg", "path");
+            pathEl.setAttribute("d", charPathData);
+            pathEl.setAttribute("fill", attrs.fill);
+            if (attrs.stroke !== "none") {
+              pathEl.setAttribute("stroke", attrs.stroke);
+              pathEl.setAttribute("stroke-width", String(attrs.strokeWidth));
+            }
+            g.appendChild(pathEl);
+          }
+          const glyph = font.charToGlyph(char);
+          if (glyph && glyph.advanceWidth) {
+            xOffset += (glyph.advanceWidth / font.unitsPerEm) * attrs.fontSize;
+          } else {
+            xOffset += attrs.fontSize * 0.6;
+          }
+        }
+      } else {
+        const path = font.getPath(text, attrs.x, attrs.y, attrs.fontSize);
+        const pathData = path.toPathData(2);
+        if (pathData && pathData.length > 5) {
+          const pathEl = doc.createElementNS("http://www.w3.org/2000/svg", "path");
+          pathEl.setAttribute("d", pathData);
+          pathEl.setAttribute("fill", attrs.fill);
+          if (attrs.stroke !== "none") {
+            pathEl.setAttribute("stroke", attrs.stroke);
+            pathEl.setAttribute("stroke-width", String(attrs.strokeWidth));
+          }
+          g.appendChild(pathEl);
+        }
       }
-      g.appendChild(pathEl);
     }
 
     textEl.parentNode?.replaceChild(g, textEl);
