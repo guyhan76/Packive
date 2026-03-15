@@ -176,8 +176,15 @@ function replacePdfColorsInString(pdf: string, colorMap: Map<string, CMYKColor>)
       replaced++;
       return c + " " + m + " " + y + " " + k + " " + cmykOp;
     }
-    // colorMap에 없는 색상은 RGB 유지 (PDF 뷰어가 정확히 표시)
-    return match;
+    // colorMap에 없는 색상도 CMYK로 변환 (RGB 잔류 방지)
+    const fallbackCmyk = rgbToCmyk(ri, gi, bi);
+    const fc = (fallbackCmyk.c / 100).toFixed(4);
+    const fm = (fallbackCmyk.m / 100).toFixed(4);
+    const fy = (fallbackCmyk.y / 100).toFixed(4);
+    const fk = (fallbackCmyk.k / 100).toFixed(4);
+    const fOp = op === "rg" ? "k" : "K";
+    replaced++;
+    return fc + " " + fm + " " + fy + " " + fk + " " + fOp;
   });
 
   const grayFillRe = new RegExp("(?<=\\n|^)" + NUM + "\\s+(g|G)(?=\\n|$)", "gm");
@@ -191,7 +198,10 @@ function replacePdfColorsInString(pdf: string, colorMap: Map<string, CMYKColor>)
       replaced++;
       return "0.0000 0.0000 0.0000 0.0000 " + (op === "g" ? "k" : "K");
     }
-    return match;
+    // 중간 회색도 CMYK로 변환
+    const gk = (1 - v);
+    replaced++;
+    return "0.0000 0.0000 0.0000 " + gk.toFixed(4) + " " + (op === "g" ? "k" : "K");
   });
 
   console.log("[PDF] CMYK replaced:", replaced, "/", total, "color operators (string mode)");
