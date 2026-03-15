@@ -22,15 +22,24 @@ interface RulerProps {
 
 function getTickSpacing(unit: "mm"|"inch", pxPerMM: number, z: number): [number, number] {
   if (unit === "mm") {
-    const p = pxPerMM * z;
-    if (p >= 20) return [5, 5]; if (p >= 8) return [10, 10];
-    if (p >= 4) return [20, 4]; if (p >= 2) return [50, 5];
-    if (p >= 0.8) return [100, 10]; return [200, 4];
+    const p = pxPerMM * z; // px per 1mm at current zoom
+    // Show finer divisions at all zoom levels
+    if (p >= 40) return [5, 5];     // major=5mm, minor=1mm
+    if (p >= 20) return [5, 5];     // major=5mm, minor=1mm
+    if (p >= 10) return [10, 10];   // major=10mm, minor=1mm
+    if (p >= 5) return [10, 5];     // major=10mm, minor=2mm
+    if (p >= 2) return [20, 4];     // major=20mm, minor=5mm
+    if (p >= 1) return [50, 5];     // major=50mm, minor=10mm
+    if (p >= 0.5) return [100, 10]; // major=100mm, minor=10mm
+    return [100, 5];                // major=100mm, minor=20mm
   } else {
-    const p = pxPerMM * INCH_MM * z;
-    if (p >= 400) return [0.25, 4]; if (p >= 200) return [0.5, 4];
-    if (p >= 100) return [1, 8]; if (p >= 50) return [2, 4];
-    if (p >= 20) return [5, 5]; return [10, 5];
+    const p = pxPerMM * INCH_MM * z; // px per 1inch
+    if (p >= 400) return [0.125, 2]; // major=1/8in, minor=1/16in
+    if (p >= 200) return [0.25, 4];  // major=1/4in, minor=1/16in
+    if (p >= 100) return [0.5, 4];   // major=1/2in, minor=1/8in
+    if (p >= 50) return [1, 8];      // major=1in, minor=1/8in
+    if (p >= 20) return [2, 4];      // major=2in, minor=1/2in
+    return [5, 5];                   // major=5in, minor=1in
   }
 }
 
