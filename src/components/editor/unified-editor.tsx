@@ -3,6 +3,7 @@ import React, { useRef, useState, useCallback, useEffect, useMemo } from "react"
 import { createPortal } from "react-dom";
 import { useI18n } from "@/components/i18n-context";
 import { PACKIVE_SPOT_COLORS } from "@/data/packive-spot-colors";
+import Ruler, { RulerCorner } from "@/components/editor/ruler";
 import { HLC_COLORS, HLC_HUE_CATEGORIES } from "@/data/cielab-hlc-colors";
 import { loadFOGRA39LUT, cmykToSrgb, cmykToHex as iccCmykToHex, srgbToCmyk, isLUTReady, isReverseLUTReady } from "@/lib/cmyk-engine";
 
@@ -213,6 +214,9 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     return "Inter";
   }, []);
   const [zoom, setZoom] = useState(100);
+  const [rulerUnit, setRulerUnit] = useState<"mm" | "inch">("mm");
+  const [rulerScroll, setRulerScroll] = useState({ left: 0, top: 0 });
+  const [guides, setGuides] = useState<Array<{ id: string; pos: number; dir: "h" | "v" }>>([]);
   const zoomRef = useRef(100);
   const [drawMode, setDrawMode] = useState(false);
   const [eyedropperMode, setEyedropperMode] = useState(false);
@@ -463,6 +467,37 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   }, []);
 
   // ─── Zoom ───
+
+  // ─── Ruler Guide ───
+  const addGuide = useCallback((pos: number, dir: "h" | "v") => {
+    const cv = fcRef.current;
+    if (!cv) return;
+    const s = scaleRef.current;
+    const pad = 15; // PAD
+    const id = "guide_" + Date.now();
+    const F = (window as any).__fabric || require("fabric");
+    if (dir === "h") {
+      const y = (pos + pad) * s;
+      const line = new F.Line([0, y, cv.getWidth(), y], {
+        stroke: "#00bcd4", strokeWidth: 0.8, strokeDashArray: [6, 3],
+        selectable: false, evented: false, _isGuide: true, _guideId: id, _guidePos: pos, _guideDir: dir,
+        name: `Guide H ${pos.toFixed(1)}mm`
+      });
+      cv.add(line);
+    } else {
+      const x = (pos + pad) * s;
+      const line = new F.Line([x, 0, x, cv.getHeight()], {
+        stroke: "#00bcd4", strokeWidth: 0.8, strokeDashArray: [6, 3],
+        selectable: false, evented: false, _isGuide: true, _guideId: id, _guidePos: pos, _guideDir: dir,
+        name: `Guide V ${pos.toFixed(1)}mm`
+      });
+      cv.add(line);
+    }
+    cv.requestRenderAll();
+    setGuides(prev => [...prev, { id, pos, dir }]);
+    console.log(`[RULER] Guide added: ${dir === "h" ? "horizontal" : "vertical"} at ${pos.toFixed(1)}mm`);
+  }, []);
+
   const applyZoom = useCallback((newZoom: number, point?: {x: number, y: number}) => {
     const c = fcRef.current; if (!c) return;
     const z = Math.max(25, Math.min(800, newZoom));
@@ -1756,9 +1791,17 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
 
           {/* ═══ CANVAS AREA ═══ */}
-          <div ref={wrapperRef} className="flex-1 overflow-auto bg-gray-100 relative flex items-center justify-center pb-7"
-            style={{ cursor: drawMode ? "crosshair" : "default" }}>
+          <div ref={wrapperRef} onScroll={(e) => setRulerScroll({ left: (e.target as HTMLDivElement).scrollLeft, top: (e.target as HTMLDivElement).scrollTop })} className="flex-1 overflow-auto bg-gray-100 relative flex items-center justify-center pb-7"
+            style={{ paddingLeft: 24, paddingTop: 24, cursor: drawMode ? "crosshair" : "default" }}>
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
+              {/* Rulers */}
+              <RulerCorner unit={rulerUnit} onToggle={() => setRulerUnit(u => u === "mm" ? "inch" : "mm")} />
+              <Ruler direction="horizontal" canvasWidth={fcRef.current?.getWidth() || 800} canvasHeight={fcRef.current?.getHeight() || 600}
+                scale={scaleRef.current} zoom={zoom} scrollLeft={rulerScroll.left} scrollTop={rulerScroll.top}
+                pad={15} unit={rulerUnit} onGuideCreate={addGuide} />
+              <Ruler direction="vertical" canvasWidth={fcRef.current?.getWidth() || 800} canvasHeight={fcRef.current?.getHeight() || 600}
+                scale={scaleRef.current} zoom={zoom} scrollLeft={rulerScroll.left} scrollTop={rulerScroll.top}
+                pad={15} unit={rulerUnit} onGuideCreate={addGuide} />
             <canvas ref={canvasElRef} className="shadow-lg" />
             {/* Status bar */}
             <div className="absolute bottom-0 left-0 right-0 h-7 bg-white/90 border-t border-gray-200 flex items-center px-3 gap-4 text-[10px] text-gray-500">
