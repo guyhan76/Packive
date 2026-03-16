@@ -6,6 +6,8 @@ import { PACKIVE_SPOT_COLORS } from "@/data/packive-spot-colors";
 import Ruler, { RulerCorner, RULER_THICK } from "@/components/editor/ruler";
 import { HLC_COLORS, HLC_HUE_CATEGORIES } from "@/data/cielab-hlc-colors";
 import { loadFOGRA39LUT, cmykToSrgb, cmykToHex as iccCmykToHex, srgbToCmyk, isLUTReady, isReverseLUTReady } from "@/lib/cmyk-engine";
+import { calcSnap, type SnapLine } from "@/lib/snap-engine";
+import { alignObjects, distributeObjects } from "@/lib/align-utils";
 
 // ─── Types ───
 interface UnifiedEditorProps {
@@ -218,6 +220,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [rulerUnit, setRulerUnit] = useState<"mm" | "inch">("mm");
   const [rulerScroll, setRulerScroll] = useState({ left: 0, top: 0 });
   const [guides, setGuides] = useState<Array<{ id: string; pos: number; dir: "h" | "v" }>>([]);
+  const [snapEnabled, setSnapEnabled] = useState(true);
+  const [snapLines, setSnapLines] = useState<SnapLine[]>([]);
   const [mousePos, setMousePos] = useState<{x:number;y:number}>({x:-100,y:-100});
   const [measureMode, setMeasureMode] = useState(false);
   const [measurePts, setMeasurePts] = useState<{x:number;y:number}[]>([]);
@@ -494,6 +498,23 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     console.log(`[RULER] Guide added: ${dir === "h" ? "horizontal" : "vertical"} at ${pos.toFixed(1)}mm`);
   }, []);
 
+  const removeGuide = useCallback((id: string) => {
+    const cv = fcRef.current; if (!cv) return;
+    const guideObj = cv.getObjects().find((o: any) => o._guideId === id);
+    if (guideObj) { cv.remove(guideObj); cv.requestRenderAll(); }
+    setGuides(prev => prev.filter(g => g.id !== id));
+    console.log("[RULER] Guide removed:", id);
+  }, []);
+
+  const clearAllGuides = useCallback(() => {
+    const cv = fcRef.current; if (!cv) return;
+    const guideObjs = cv.getObjects().filter((o: any) => o._isGuide);
+    guideObjs.forEach(o => cv.remove(o));
+    cv.requestRenderAll();
+    setGuides([]);
+    console.log("[RULER] All guides cleared");
+  }, []);
+
   const applyZoom = useCallback((newZoom: number, point?: {x: number, y: number}) => {
     const c = fcRef.current; if (!c) return;
     const z = Math.max(25, Math.min(800, newZoom));
@@ -763,6 +784,18 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       canvas.on("selection:cleared", () => refreshLayers());
 
       // Mouse wheel zoom
+
+        // ─── Snap on move ───
+        canvas.on("object:moving", (e: any) => {
+          if (!e.target) return;
+          if (!snapEnabled) { setSnapLines([]); return; }
+          const snap = calcSnap(e.target, canvas, 8);
+          e.target.set({ left: snap.x, top: snap.y });
+          e.target.setCoords();
+          setSnapLines(snap.lines);
+        });
+        canvas.on("object:modified", () => setSnapLines([]));
+        canvas.on("mouse:up", () => setSnapLines([]));
       canvas.on("mouse:wheel", (opt: any) => {
         opt.e.preventDefault(); opt.e.stopPropagation();
         const delta = opt.e.deltaY > 0 ? -10 : 10;
@@ -1906,6 +1939,17 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 pad={15} unit={rulerUnit} onGuideCreate={addGuide}  /></div>
 
 
+
+              {/* Snap guide lines overlay */}
+              {snapLines.length > 0 && (
+                <svg style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 50 }}>
+                  {snapLines.map((sl, idx) => (
+                    sl.type === "v"
+                      ? <line key={idx} x1={sl.pos} y1={0} x2={sl.pos} y2="100%" stroke="#3b82f6" strokeWidth={1} strokeDasharray="4 4" opacity={0.7} />
+                      : <line key={idx} x1={0} y1={sl.pos} x2="100%" y2={sl.pos} stroke="#3b82f6" strokeWidth={1} strokeDasharray="4 4" opacity={0.7} />
+                  ))}
+                </svg>
+              )}
               {/* Measure crosshair overlay - always mounted, visibility toggled */}
               <div
                 style={{
@@ -1924,6 +1968,10 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 {measureMode && <span className="border-l border-[#444] h-3" />}
                 <span>Net: {totalW.toFixed(1)} x {totalH.toFixed(1)} mm</span>
                 <span>Zoom: {zoom}%</span>
+                <span className="mx-1 text-gray-300">|</span>
+                <button onClick={() => setSnapEnabled(p => !p)} className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${snapEnabled ? "bg-blue-100 text-blue-700" : "text-gray-400 hover:text-gray-600"}`}>
+                  {snapEnabled ? "Snap ON" : "Snap OFF"}
+                </button>
                 <span>Objects: {layersList.length}</span>
                 {selectedPanel && <span className="text-[#4fc3f7]">Panel: {selectedPanel}</span>}
               </div>
@@ -3060,6 +3108,33 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             )}
 
 
+
+            {/* ─── Align & Distribute ─── */}
+            {rightTab === "properties" && selProps && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <div className="text-[10px] font-semibold text-gray-500 mb-2">ALIGN</div>
+                <div className="grid grid-cols-6 gap-1 mb-2">
+                  {(["left","centerH","right","top","centerV","bottom"] as const).map(t => (
+                    <button key={t} onClick={() => { const c = fcRef.current; if(c) { alignObjects(c, t); pushHistory(); } }}
+                      className="h-7 rounded bg-gray-50 hover:bg-blue-50 text-[9px] text-gray-600 hover:text-blue-700 transition-colors"
+                      title={t}>
+                      {t === "left" ? "⫷" : t === "centerH" ? "⫿" : t === "right" ? "⫸" : t === "top" ? "⤒" : t === "centerV" ? "⬌" : "⤓"}
+                    </button>
+                  ))}
+                </div>
+                <div className="text-[10px] font-semibold text-gray-500 mb-2">DISTRIBUTE</div>
+                <div className="grid grid-cols-2 gap-1">
+                  <button onClick={() => { const c = fcRef.current; if(c) { distributeObjects(c, "horizontal"); pushHistory(); } }}
+                    className="h-7 rounded bg-gray-50 hover:bg-green-50 text-[9px] text-gray-600 hover:text-green-700 transition-colors">
+                    ↔ Horizontal
+                  </button>
+                  <button onClick={() => { const c = fcRef.current; if(c) { distributeObjects(c, "vertical"); pushHistory(); } }}
+                    className="h-7 rounded bg-gray-50 hover:bg-green-50 text-[9px] text-gray-600 hover:text-green-700 transition-colors">
+                    ↕ Vertical
+                  </button>
+                </div>
+              </div>
+            )}
             {/* ─── Layers Tab ─── */}
             {rightTab === "layers" && (
               <div className="space-y-1">
