@@ -139,7 +139,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
   // ─── UI state ───
   const [rightTab, setRightTab] = useState<RightTab>("properties");
-  const [aiSubView, setAiSubView] = useState<"menu" | "copy" | "review" | "image">("menu");
   const [spotTarget, setSpotTarget] = useState<"fill" | "stroke">("fill");
   const [accOpen, setAccOpen] = useState<Record<string, boolean>>({ position: true, typography: true, color: false, spot: false });
   const toggleAcc = (key: string) => setAccOpen(prev => ({ ...prev, [key]: !prev[key] }));
@@ -260,17 +259,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [exporting, setExporting] = useState<string | null>(null);
 
   // AI states
-  const [copyProduct, setCopyProduct] = useState("");
-  const [copyBrand, setCopyBrand] = useState("");
-  const [copyResult, setCopyResult] = useState<any>(null);
-  const [copyLoading, setCopyLoading] = useState(false);
-  const [reviewResult, setReviewResult] = useState<any>(null);
-  const [reviewLoading, setReviewLoading] = useState(false);
-  const [aiImgCategory, setAiImgCategory] = useState<'logo'|'product'|'background'|'illustration'|'icon'|'free'>('product');
-  const [aiImgPrompt, setAiImgPrompt] = useState("");
-  const [aiImgTransparent, setAiImgTransparent] = useState(true);
-  const [aiImgLoading, setAiImgLoading] = useState(false);
-  const [aiImgResults, setAiImgResults] = useState<string[]>([]);
 
   // ─── Color Mode & CMYK/Spot states ───
   const [colorMode, setColorMode] = useState<ColorMode>("cmyk");
@@ -1199,59 +1187,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   }, [pushHistory, refreshLayers]);
 
 
-  // ─── AI Copy ───
-  const handleAiCopy = useCallback(async () => {
-    if (!copyProduct.trim()) return; setCopyLoading(true); setCopyResult(null);
-    try {
-      const r = await fetch("/api/ai/generate-copy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productName: copyProduct, brandName: copyBrand || undefined, language: locale }) });
-      const d = await r.json(); if (d.error) throw new Error(d.error); setCopyResult(d);
-    } catch (e: any) { alert("AI Copy: " + e.message); }
-    setCopyLoading(false);
-  }, [copyProduct, copyBrand, locale]);
 
-  const applyCopyToCanvas = useCallback((field: string, value: string) => {
-    const c = fcRef.current; if (!c) return;
-    const F = fabricModRef.current; if (!F) return;
-    const sz: Record<string, number> = { headline: 28, description: 16, slogan: 20, features: 14, backPanel: 12 };
-    const t = new F.IText(value, {
-      left: c.getWidth() / 2, top: c.getHeight() / 2, originX: "center", originY: "center",
-      fontSize: Math.round((sz[field] || 16) * scaleRef.current), fill: "#000", fontFamily: selectedFont,
-    });
-    c.add(t); c.setActiveObject(t); c.renderAll(); refreshLayers(); pushHistory();
-  }, [selectedFont, refreshLayers, pushHistory]);
 
-  // ─── AI Review ───
-  const handleAiReview = useCallback(async () => {
-    const c = fcRef.current; if (!c) return; setReviewLoading(true); setReviewResult(null);
-    try {
-      const d = c.toDataURL({ format: "png", multiplier: 2 });
-      const r = await fetch("/api/ai/review-design", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageBase64: d.replace(/^data:image\/[a-z]+;base64,/, ""), boxType: boxType, dimensions: { width: totalW, height: totalH }, material: material, language: locale }) });
-      const data = await r.json(); if (data.error) throw new Error(data.error); setReviewResult(data);
-    } catch (e: any) { alert("AI Review: " + e.message); }
-    setReviewLoading(false);
-  }, [boxType, totalW, totalH, material, locale]);
-
-  // ─── AI Image ───
-  const handleAiImage = useCallback(async () => {
-    if (!aiImgPrompt.trim() || aiImgLoading) return;
-    setAiImgLoading(true);
-    try {
-      const r = await fetch("/api/ai/generate-image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ category: aiImgCategory, prompt: aiImgPrompt, transparent: aiImgTransparent }) });
-      const data = await r.json(); if (data.error) throw new Error(data.error);
-      if (data.image) setAiImgResults(prev => [data.image, ...prev].slice(0, 12));
-    } catch (e: any) { alert("Image generation failed: " + (e.message || "Unknown")); }
-    finally { setAiImgLoading(false); }
-  }, [aiImgPrompt, aiImgCategory, aiImgTransparent, aiImgLoading]);
-
-  const addAiImageToCanvas = useCallback(async (src: string) => {
-    const cv = fcRef.current; if (!cv) return;
-    const { FabricImage } = await import("fabric");
-    const img = await FabricImage.fromURL(src);
-    const maxSize = Math.min(cv.getWidth(), cv.getHeight()) * 0.4;
-    const scale = Math.min(maxSize / (img.width || 300), maxSize / (img.height || 300));
-    img.set({ left: cv.getWidth() / 2, top: cv.getHeight() / 2, originX: "center", originY: "center", scaleX: scale, scaleY: scale });
-    cv.add(img); cv.setActiveObject(img); cv.renderAll(); pushHistory();
-  }, [pushHistory]);
 
   // ─── Export ───
   const handleExport = useCallback(async (type: "png" | "pdf" | "dieline") => {
@@ -2002,7 +1939,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
               { id: "ai", label: "AI", icon: "🤖" },
               { id: "layers", label: "Layers", icon: "☰" },
             ] as { id: RightTab; label: string; icon: string }[]).map(tab => (
-              <button key={tab.id} onClick={() => { setRightTab(tab.id); if (tab.id === "ai") setAiSubView("menu"); }}
+              <button key={tab.id} onClick={() => { setRightTab(tab.id); }}
                 className={`flex-1 py-2 text-center text-[10px] font-medium transition-colors ${
                   rightTab === tab.id ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/50" : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
                 }`}>
@@ -3080,125 +3017,48 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
               </div>
             )}
 
-            {/* ─── AI Tab (unified) ─── */}
+
+            {/* ─── AI Tab ─── */}
             {rightTab === "ai" && (
               <div className="space-y-3">
-                {aiSubView === "menu" && (
-                  <div className="space-y-2">
-                    <div className="text-xs font-semibold text-gray-700">AI Assistant</div>
-                    <button onClick={() => setAiSubView("copy")} className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-purple-400 hover:bg-purple-50/50 transition-all group">
-                      <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center text-lg group-hover:bg-purple-200 transition-colors">✍</div>
-                      <div className="text-left">
-                        <div className="text-xs font-semibold text-gray-700">Copy Generator</div>
-                        <div className="text-[10px] text-gray-400">AI가 제품 카피를 생성합니다</div>
-                      </div>
-                    </button>
-                    <button onClick={() => setAiSubView("review")} className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-green-400 hover:bg-green-50/50 transition-all group">
-                      <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center text-lg group-hover:bg-green-200 transition-colors">🔍</div>
-                      <div className="text-left">
-                        <div className="text-xs font-semibold text-gray-700">Design Review</div>
-                        <div className="text-[10px] text-gray-400">디자인 품질을 AI가 분석합니다</div>
-                      </div>
-                    </button>
-                    <button onClick={() => setAiSubView("image")} className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-indigo-400 hover:bg-indigo-50/50 transition-all group">
-                      <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center text-lg group-hover:bg-indigo-200 transition-colors">🎨</div>
-                      <div className="text-left">
-                        <div className="text-xs font-semibold text-gray-700">Image Generator</div>
-                        <div className="text-[10px] text-gray-400">AI 이미지를 생성합니다</div>
-                      </div>
-                    </button>
+                <div className="p-4 text-center">
+                  <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-blue-50 flex items-center justify-center text-2xl">🎨</div>
+                  <div className="text-sm font-semibold text-gray-700 mb-1">AI Vector Generation</div>
+                  <div className="text-[10px] text-gray-400 leading-relaxed">
+                    Recraft V4 Vector API integration coming soon.
                   </div>
-                )}
-
-                {aiSubView === "copy" && (
-                  <div className="space-y-3">
-                    <button onClick={() => setAiSubView("menu")} className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-700">← Back</button>
-                    <div className="text-xs font-semibold text-gray-700">AI Copy Generator</div>
-                    <input value={copyProduct} onChange={e => setCopyProduct(e.target.value)} placeholder="Product name" className="w-full border rounded-lg px-3 py-2 text-sm" />
-                    <input value={copyBrand} onChange={e => setCopyBrand(e.target.value)} placeholder="Brand name (optional)" className="w-full border rounded-lg px-3 py-2 text-sm" />
-                    <button onClick={handleAiCopy} disabled={copyLoading || !copyProduct.trim()}
-                      className="w-full py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 disabled:opacity-50">
-                      {copyLoading ? "Generating..." : "Generate Copy"}
-                    </button>
-                    {copyResult && (
-                      <div className="space-y-2 pt-2 border-t">
-                        {Object.entries(copyResult).filter(([k]) => k !== "error").map(([key, val]) => (
-                          <div key={key} className="bg-gray-50 rounded-lg p-2">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-[10px] font-semibold text-gray-500 uppercase">{key}</span>
-                              <button onClick={() => applyCopyToCanvas(key, val as string)} className="text-[10px] text-blue-600 hover:text-blue-800">+ Add</button>
-                            </div>
-                            <div className="text-xs text-gray-700">{val as string}</div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                </div>
+                <div className="space-y-2 px-1">
+                  <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm">🖼️</span>
+                      <span className="text-xs font-medium text-gray-600">AI Illustration</span>
+                    </div>
+                    <div className="text-[10px] text-gray-400">Generate editable SVG illustrations from text prompts</div>
                   </div>
-                )}
-
-                {aiSubView === "review" && (
-                  <div className="space-y-3">
-                    <button onClick={() => setAiSubView("menu")} className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-700">← Back</button>
-                    <div className="text-xs font-semibold text-gray-700">AI Design Review</div>
-                    <p className="text-[10px] text-gray-400">Analyze your current design for quality, readability, and packaging best practices.</p>
-                    <button onClick={handleAiReview} disabled={reviewLoading}
-                      className="w-full py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50">
-                      {reviewLoading ? "Analyzing..." : "Review Design"}
-                    </button>
-                    {reviewResult && (
-                      <div className="space-y-2 pt-2 border-t">
-                        {reviewResult.score != null && (
-                          <div className="text-center py-2">
-                            <div className={`text-3xl font-bold ${reviewResult.score >= 80 ? "text-green-600" : reviewResult.score >= 60 ? "text-yellow-600" : "text-red-600"}`}>{reviewResult.score}</div>
-                            <div className="text-[10px] text-gray-400">/ 100</div>
-                          </div>
-                        )}
-                        {reviewResult.feedback && <div className="text-xs text-gray-700 bg-gray-50 rounded-lg p-2">{reviewResult.feedback}</div>}
-                        {reviewResult.suggestions && Array.isArray(reviewResult.suggestions) && (
-                          <div className="space-y-1">
-                            {reviewResult.suggestions.map((s: string, i: number) => (
-                              <div key={i} className="text-xs text-gray-600 bg-yellow-50 rounded p-1.5">&#8226; {s}</div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                  <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm">🔷</span>
+                      <span className="text-xs font-medium text-gray-600">AI Pattern</span>
+                    </div>
+                    <div className="text-[10px] text-gray-400">Create seamless vector patterns for packaging</div>
                   </div>
-                )}
-
-                {aiSubView === "image" && (
-                  <div className="space-y-3">
-                    <button onClick={() => setAiSubView("menu")} className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-700">← Back</button>
-                    <div className="text-xs font-semibold text-gray-700">AI Image Generator</div>
-                    <select value={aiImgCategory} onChange={e => setAiImgCategory(e.target.value as any)} className="w-full border rounded-lg px-3 py-2 text-sm">
-                      <option value="logo">Logo</option><option value="product">Product</option><option value="background">Background</option>
-                      <option value="illustration">Illustration</option><option value="icon">Icon</option><option value="free">Free Prompt</option>
-                    </select>
-                    <textarea value={aiImgPrompt} onChange={e => setAiImgPrompt(e.target.value)} placeholder="Describe the image..." rows={3} className="w-full border rounded-lg px-3 py-2 text-sm resize-none" />
-                    <label className="flex items-center gap-2 text-xs text-gray-600">
-                      <input type="checkbox" checked={aiImgTransparent} onChange={e => setAiImgTransparent(e.target.checked)} className="rounded" />
-                      Transparent background
-                    </label>
-                    <button onClick={handleAiImage} disabled={aiImgLoading || !aiImgPrompt.trim()}
-                      className="w-full py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50">
-                      {aiImgLoading ? "Generating..." : "Generate Image"}
-                    </button>
-                    {aiImgResults.length > 0 && (
-                      <div className="grid grid-cols-2 gap-2 pt-2 border-t">
-                        {aiImgResults.map((src, i) => (
-                          <div key={i} className="relative group cursor-pointer rounded-lg overflow-hidden border hover:border-blue-400" onClick={() => addAiImageToCanvas(src)}>
-                            <img src={src} alt="" className="w-full h-24 object-cover" />
-                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 flex items-center justify-center transition-colors">
-                              <span className="text-white text-xs font-medium opacity-0 group-hover:opacity-100">+ Add</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                  <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm">⭐</span>
+                      <span className="text-xs font-medium text-gray-600">AI Icon</span>
+                    </div>
+                    <div className="text-[10px] text-gray-400">Generate vector icons and symbols</div>
                   </div>
-                )}
+                </div>
+                <div className="px-1">
+                  <div className="p-2 rounded-lg bg-blue-50 text-center">
+                    <div className="text-[10px] text-blue-500 font-medium">Phase 3-3 에서 구현 예정</div>
+                  </div>
+                </div>
               </div>
             )}
+
 
             {/* ─── Layers Tab ─── */}
             {rightTab === "layers" && (
