@@ -10,6 +10,7 @@ import { calcSnap, type SnapLine } from "@/lib/snap-engine";
 import { alignObjects, distributeObjects } from "@/lib/align-utils";
 import { addBleedGuides, removeBleedGuides, toggleBleedGuides } from "@/lib/bleed-guide";
 import { runPreflight, type PreflightResult } from "@/lib/preflight";
+import { RECRAFT_STYLES, PACKAGING_PRESETS } from "@/lib/recraft";
 
 // ─── Types ───
 interface UnifiedEditorProps {
@@ -226,6 +227,19 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [showBleedGuides, setShowBleedGuides] = useState(false);
   const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null);
   const [showPreflight, setShowPreflight] = useState(false);
+  // ─── AI Panel State ───
+  const [aiTab, setAiTab] = useState<"generate"|"vectorize"|"removebg"|"credits">("generate");
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiCategory, setAiCategory] = useState<"illustration"|"pattern"|"icon">("illustration");
+  const [aiModel, setAiModel] = useState<"recraftv4_vector"|"recraftv4_pro_vector">("recraftv4_vector");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResult, setAiResult] = useState<{svgUrl:string; svgContent:string; creditsUsed:number} | null>(null);
+  const [aiError, setAiError] = useState("");
+  const [aiCredits, setAiCredits] = useState<number|null>(null);
+  const [aiVecLoading, setAiVecLoading] = useState(false);
+  const [aiVecResult, setAiVecResult] = useState<{svgUrl:string; svgContent:string} | null>(null);
+  const [aiBgLoading, setAiBgLoading] = useState(false);
+  const [aiBgResult, setAiBgResult] = useState<string|null>(null);
   const [snapLines, setSnapLines] = useState<SnapLine[]>([]);
   const [mousePos, setMousePos] = useState<{x:number;y:number}>({x:-100,y:-100});
   const [measureMode, setMeasureMode] = useState(false);
@@ -519,6 +533,114 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     setGuides([]);
     console.log("[RULER] All guides cleared");
   }, []);
+  // ─── AI: Fetch Credits ───
+  const fetchAiCredits = useCallback(async () => {
+    try {
+      const resp = await fetch("/api/ai/credits");
+      const data = await resp.json();
+      if (data.success) setAiCredits(data.credits);
+    } catch {}
+  }, []);
+
+  // ─── AI: Generate Vector ───
+  const handleAiGenerate = useCallback(async () => {
+    if (!aiPrompt.trim() || aiLoading) return;
+    setAiLoading(true);
+    setAiError("");
+    setAiResult(null);
+    try {
+      const styleMap: Record<string, string> = {
+        illustration: "vector_illustration",
+        pattern: "digital_illustration",
+        icon: "icon",
+      };
+      const resp = await fetch("/api/ai/generate-vector", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: aiPrompt.trim(),
+          model: aiModel,
+          style: styleMap[aiCategory] || "vector_illustration",
+        }),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        setAiResult({ svgUrl: data.svgUrl, svgContent: data.svgContent, creditsUsed: data.creditsUsed });
+        fetchAiCredits();
+      } else {
+        setAiError(data.error || "Generation failed");
+      }
+    } catch (e: unknown) {
+      setAiError(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setAiLoading(false);
+    }
+  }, [aiPrompt, aiModel, aiCategory, aiLoading, fetchAiCredits]);
+
+  // ─── AI: Add SVG to Canvas ───
+  const addAiSvgToCanvas = useCallback((svgContent: string) => {
+    const c = canvasRef.current;
+    if (!c || !svgContent) return;
+    fabric.loadSVGFromString(svgContent, (objects: fabric.Object[], options: { width?: number; height?: number }) => {
+      const group = new fabric.Group(objects, {
+        left: (c.getWidth() / 2) - ((options.width || 200) / 4),
+        top: (c.getHeight() / 2) - ((options.height || 200) / 4),
+        scaleX: 0.5,
+        scaleY: 0.5,
+      });
+      c.add(group);
+      c.setActiveObject(group);
+      c.renderAll();
+      if (typeof pushHistory === "function") pushHistory();
+    });
+  }, [pushHistory]);
+
+  // ─── AI: Vectorize Image ───
+  const handleAiVectorize = useCallback(async (file: File) => {
+    setAiVecLoading(true);
+    setAiVecResult(null);
+    setAiError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const resp = await fetch("/api/ai/vectorize", { method: "POST", body: formData });
+      const data = await resp.json();
+      if (data.success) {
+        setAiVecResult({ svgUrl: data.svgUrl, svgContent: data.svgContent });
+        fetchAiCredits();
+      } else {
+        setAiError(data.error || "Vectorization failed");
+      }
+    } catch (e: unknown) {
+      setAiError(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setAiVecLoading(false);
+    }
+  }, [fetchAiCredits]);
+
+  // ─── AI: Remove Background ───
+  const handleAiRemoveBg = useCallback(async (file: File) => {
+    setAiBgLoading(true);
+    setAiBgResult(null);
+    setAiError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const resp = await fetch("/api/ai/remove-bg", { method: "POST", body: formData });
+      const data = await resp.json();
+      if (data.success) {
+        setAiBgResult(data.imageUrl);
+        fetchAiCredits();
+      } else {
+        setAiError(data.error || "Background removal failed");
+      }
+    } catch (e: unknown) {
+      setAiError(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setAiBgLoading(false);
+    }
+  }, [fetchAiCredits]);
+
 
   const applyZoom = useCallback((newZoom: number, point?: {x: number, y: number}) => {
     const c = fcRef.current; if (!c) return;
@@ -3086,50 +3208,220 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             )}
 
 
-            {/* ─── AI Tab ─── */}
+                        {/* ─── AI Tab (Recraft V4) ─── */}
             {rightTab === "ai" && (
-              <div className="space-y-3">
-                <div className="p-4 text-center">
-                  <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-blue-50 flex items-center justify-center text-2xl">🎨</div>
-                  <div className="text-sm font-semibold text-gray-700 mb-1">AI Vector Generation</div>
-                  <div className="text-[10px] text-gray-400 leading-relaxed">
-                    Recraft V4 Vector API integration coming soon.
-                  </div>
+              <div className="p-3 space-y-3 text-xs overflow-y-auto" style={{maxHeight:"calc(100vh - 200px)"}}>
+                {/* Sub-tab navigation */}
+                <div className="flex gap-1 bg-neutral-800 rounded p-0.5">
+                  {([["generate","Generate"],["vectorize","Vectorize"],["removebg","Remove BG"],["credits","Credits"]] as const).map(([k,l])=>(
+                    <button key={k} onClick={()=>{ setAiTab(k as typeof aiTab); if(k==="credits") fetchAiCredits(); }}
+                      className={`flex-1 py-1.5 rounded text-[10px] font-medium transition-colors ${aiTab===k?"bg-blue-600 text-white":"text-neutral-400 hover:text-white"}`}>
+                      {l}
+                    </button>
+                  ))}
                 </div>
-                <div className="space-y-2 px-1">
-                  <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm">🖼️</span>
-                      <span className="text-xs font-medium text-gray-600">AI Illustration</span>
+
+                {/* Error display */}
+                {aiError && (
+                  <div className="bg-red-900/30 border border-red-700 rounded p-2 text-red-300 text-[10px]">
+                    {aiError}
+                    <button onClick={()=>setAiError("")} className="ml-2 text-red-400 hover:text-red-200">✕</button>
+                  </div>
+                )}
+
+                {/* ── Generate Tab ── */}
+                {aiTab === "generate" && (
+                  <div className="space-y-3">
+                    {/* Model selector */}
+                    <div>
+                      <label className="text-neutral-400 text-[10px] mb-1 block">Model</label>
+                      <div className="flex gap-1">
+                        <button onClick={()=>setAiModel("recraftv4_vector")}
+                          className={`flex-1 py-1.5 rounded text-[10px] ${aiModel==="recraftv4_vector"?"bg-blue-600 text-white":"bg-neutral-700 text-neutral-300"}`}>
+                          V4 Vector ($0.08)
+                        </button>
+                        <button onClick={()=>setAiModel("recraftv4_pro_vector")}
+                          className={`flex-1 py-1.5 rounded text-[10px] ${aiModel==="recraftv4_pro_vector"?"bg-purple-600 text-white":"bg-neutral-700 text-neutral-300"}`}>
+                          V4 Pro ($0.30)
+                        </button>
+                      </div>
                     </div>
-                    <div className="text-[10px] text-gray-400">Generate editable SVG illustrations from text prompts</div>
-                  </div>
-                  <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm">🔷</span>
-                      <span className="text-xs font-medium text-gray-600">AI Pattern</span>
+
+                    {/* Category */}
+                    <div>
+                      <label className="text-neutral-400 text-[10px] mb-1 block">Category</label>
+                      <div className="flex gap-1">
+                        {([["illustration","Illustration"],["pattern","Pattern"],["icon","Icon"]] as const).map(([k,l])=>(
+                          <button key={k} onClick={()=>setAiCategory(k)}
+                            className={`flex-1 py-1.5 rounded text-[10px] ${aiCategory===k?"bg-emerald-600 text-white":"bg-neutral-700 text-neutral-300"}`}>
+                            {l}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <div className="text-[10px] text-gray-400">Create seamless vector patterns for packaging</div>
-                  </div>
-                  <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm">⭐</span>
-                      <span className="text-xs font-medium text-gray-600">AI Icon</span>
+
+                    {/* Quick Presets */}
+                    <div>
+                      <label className="text-neutral-400 text-[10px] mb-1 block">Quick Presets</label>
+                      <div className="grid grid-cols-2 gap-1">
+                        {PACKAGING_PRESETS.filter(p => aiCategory === "illustration" ? p.category === "illustration" : aiCategory === "icon" ? p.category === "icon" : p.category === "pattern").map(p=>(
+                          <button key={p.id} onClick={()=>setAiPrompt(p.prompt)}
+                            className="text-left py-1.5 px-2 rounded bg-neutral-700 hover:bg-neutral-600 text-neutral-300 text-[10px] truncate">
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <div className="text-[10px] text-gray-400">Generate vector icons and symbols</div>
+
+                    {/* Prompt */}
+                    <div>
+                      <label className="text-neutral-400 text-[10px] mb-1 block">Prompt</label>
+                      <textarea value={aiPrompt} onChange={e=>setAiPrompt(e.target.value)}
+                        placeholder="Describe the vector design you want..."
+                        className="w-full h-20 bg-neutral-800 border border-neutral-600 rounded p-2 text-white text-[11px] resize-none focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Generate button */}
+                    <button onClick={handleAiGenerate} disabled={aiLoading || !aiPrompt.trim()}
+                      className={`w-full py-2.5 rounded font-medium text-[11px] transition-colors ${
+                        aiLoading || !aiPrompt.trim()
+                          ? "bg-neutral-700 text-neutral-500 cursor-not-allowed"
+                          : "bg-blue-600 hover:bg-blue-500 text-white"
+                      }`}>
+                      {aiLoading ? "Generating SVG..." : `Generate (${UNIT_COSTS[aiModel]} units)`}
+                    </button>
+
+                    {/* Result */}
+                    {aiResult && (
+                      <div className="space-y-2">
+                        <div className="bg-neutral-800 rounded p-2 border border-neutral-600">
+                          <div className="bg-white rounded p-2 flex items-center justify-center" style={{minHeight:120}}>
+                            <div dangerouslySetInnerHTML={{__html: aiResult.svgContent}} style={{maxWidth:"100%",maxHeight:150}} />
+                          </div>
+                        </div>
+                        <div className="flex gap-1">
+                          <button onClick={()=>addAiSvgToCanvas(aiResult.svgContent)}
+                            className="flex-1 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-medium">
+                            Add to Canvas
+                          </button>
+                          <a href={aiResult.svgUrl} download="recraft-vector.svg" target="_blank" rel="noreferrer"
+                            className="py-2 px-3 rounded bg-neutral-700 hover:bg-neutral-600 text-white text-[11px]">
+                            Download
+                          </a>
+                        </div>
+                        <div className="text-neutral-500 text-[10px]">
+                          Used: {aiResult.creditsUsed} units (${(aiResult.creditsUsed/1000).toFixed(3)})
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-                <div className="px-1">
-                  <div className="p-2 rounded-lg bg-blue-50 text-center">
-                    <div className="text-[10px] text-blue-500 font-medium">Phase 3-3 에서 구현 예정</div>
+                )}
+
+                {/* ── Vectorize Tab ── */}
+                {aiTab === "vectorize" && (
+                  <div className="space-y-3">
+                    <p className="text-neutral-400 text-[10px]">Upload a PNG/JPG image to convert to SVG vector (10 units)</p>
+                    <label className={`block w-full py-6 rounded border-2 border-dashed text-center cursor-pointer transition-colors ${
+                      aiVecLoading ? "border-neutral-700 text-neutral-600" : "border-neutral-600 hover:border-blue-500 text-neutral-400 hover:text-blue-400"
+                    }`}>
+                      <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
+                        disabled={aiVecLoading}
+                        onChange={e=>{ const f=e.target.files?.[0]; if(f) handleAiVectorize(f); e.target.value=""; }} />
+                      {aiVecLoading ? "Vectorizing..." : "Click to upload image"}
+                    </label>
+                    {aiVecResult && (
+                      <div className="space-y-2">
+                        <div className="bg-white rounded p-2 flex items-center justify-center" style={{minHeight:120}}>
+                          <div dangerouslySetInnerHTML={{__html: aiVecResult.svgContent}} style={{maxWidth:"100%",maxHeight:150}} />
+                        </div>
+                        <div className="flex gap-1">
+                          <button onClick={()=>addAiSvgToCanvas(aiVecResult.svgContent)}
+                            className="flex-1 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-medium">
+                            Add to Canvas
+                          </button>
+                          <a href={aiVecResult.svgUrl} download="vectorized.svg" target="_blank" rel="noreferrer"
+                            className="py-2 px-3 rounded bg-neutral-700 hover:bg-neutral-600 text-white text-[11px]">
+                            Download
+                          </a>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
+                )}
+
+                {/* ── Remove BG Tab ── */}
+                {aiTab === "removebg" && (
+                  <div className="space-y-3">
+                    <p className="text-neutral-400 text-[10px]">Upload a PNG/JPG to remove background (10 units)</p>
+                    <label className={`block w-full py-6 rounded border-2 border-dashed text-center cursor-pointer transition-colors ${
+                      aiBgLoading ? "border-neutral-700 text-neutral-600" : "border-neutral-600 hover:border-blue-500 text-neutral-400 hover:text-blue-400"
+                    }`}>
+                      <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
+                        disabled={aiBgLoading}
+                        onChange={e=>{ const f=e.target.files?.[0]; if(f) handleAiRemoveBg(f); e.target.value=""; }} />
+                      {aiBgLoading ? "Removing background..." : "Click to upload image"}
+                    </label>
+                    {aiBgResult && (
+                      <div className="space-y-2">
+                        <div className="bg-neutral-800 rounded p-2 border border-neutral-600">
+                          <div className="bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAADFJREFUOE9jfPbs2X8GPEBYWBifNAPjqAHDIwwYR8OAcTQMGEfDgHE0DBhHw4BxNAwA9XMkEGfHzEoAAAAASUVORK5CYII=')] rounded p-2 flex items-center justify-center" style={{minHeight:120}}>
+                            <img src={aiBgResult} alt="Background removed" style={{maxWidth:"100%",maxHeight:150}} />
+                          </div>
+                        </div>
+                        <div className="flex gap-1">
+                          <button onClick={()=>{
+                            const c=canvasRef.current; if(!c||!aiBgResult) return;
+                            fabric.Image.fromURL(aiBgResult, (img: fabric.Image)=>{
+                              img.scaleToWidth(Math.min(300, c.getWidth()/2));
+                              img.set({left:c.getWidth()/2-(img.getScaledWidth()/2), top:c.getHeight()/2-(img.getScaledHeight()/2)});
+                              c.add(img); c.setActiveObject(img); c.renderAll();
+                              if(typeof pushHistory==="function") pushHistory();
+                            }, {crossOrigin:"anonymous"});
+                          }} className="flex-1 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-medium">
+                            Add to Canvas
+                          </button>
+                          <a href={aiBgResult} download="bg-removed.png" target="_blank" rel="noreferrer"
+                            className="py-2 px-3 rounded bg-neutral-700 hover:bg-neutral-600 text-white text-[11px]">
+                            Download
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Credits Tab ── */}
+                {aiTab === "credits" && (
+                  <div className="space-y-3">
+                    <div className="bg-neutral-800 rounded p-4 text-center border border-neutral-600">
+                      <div className="text-3xl font-bold text-white mb-1">
+                        {aiCredits !== null ? aiCredits.toLocaleString() : "—"}
+                      </div>
+                      <div className="text-neutral-400 text-[10px]">API Units Remaining</div>
+                      {aiCredits !== null && (
+                        <div className="text-neutral-500 text-[10px] mt-1">${(aiCredits/1000).toFixed(2)} USD</div>
+                      )}
+                    </div>
+                    <button onClick={fetchAiCredits}
+                      className="w-full py-2 rounded bg-neutral-700 hover:bg-neutral-600 text-white text-[11px]">
+                      Refresh
+                    </button>
+                    <div className="space-y-1">
+                      <div className="text-neutral-400 text-[10px] font-medium">Cost per request:</div>
+                      <div className="flex justify-between text-[10px]"><span className="text-neutral-400">V4 Vector</span><span className="text-white">80 units ($0.08)</span></div>
+                      <div className="flex justify-between text-[10px]"><span className="text-neutral-400">V4 Pro Vector</span><span className="text-white">300 units ($0.30)</span></div>
+                      <div className="flex justify-between text-[10px]"><span className="text-neutral-400">Vectorize</span><span className="text-white">10 units ($0.01)</span></div>
+                      <div className="flex justify-between text-[10px]"><span className="text-neutral-400">Remove BG</span><span className="text-white">10 units ($0.01)</span></div>
+                    </div>
+                    <a href="https://app.recraft.ai/profile/api" target="_blank" rel="noreferrer"
+                      className="block w-full py-2 rounded bg-blue-600 hover:bg-blue-500 text-white text-[11px] text-center">
+                      Buy More Units
+                    </a>
+                  </div>
+                )}
               </div>
-            )}
-
-
-
-            {/* ─── Align & Distribute ─── */}
+            )}{/* ─── Align & Distribute ─── */}
             {rightTab === "properties" && selProps && (
               <div className="mt-3 pt-3 border-t border-gray-100">
                 <div className="text-[10px] font-semibold text-gray-500 mb-2">ALIGN</div>
