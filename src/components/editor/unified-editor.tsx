@@ -8,6 +8,8 @@ import { HLC_COLORS, HLC_HUE_CATEGORIES } from "@/data/cielab-hlc-colors";
 import { loadFOGRA39LUT, cmykToSrgb, cmykToHex as iccCmykToHex, srgbToCmyk, isLUTReady, isReverseLUTReady } from "@/lib/cmyk-engine";
 import { calcSnap, type SnapLine } from "@/lib/snap-engine";
 import { alignObjects, distributeObjects } from "@/lib/align-utils";
+import { addBleedGuides, removeBleedGuides, toggleBleedGuides } from "@/lib/bleed-guide";
+import { runPreflight, type PreflightResult } from "@/lib/preflight";
 
 // ─── Types ───
 interface UnifiedEditorProps {
@@ -221,6 +223,9 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [rulerScroll, setRulerScroll] = useState({ left: 0, top: 0 });
   const [guides, setGuides] = useState<Array<{ id: string; pos: number; dir: "h" | "v" }>>([]);
   const [snapEnabled, setSnapEnabled] = useState(true);
+  const [showBleedGuides, setShowBleedGuides] = useState(false);
+  const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null);
+  const [showPreflight, setShowPreflight] = useState(false);
   const [snapLines, setSnapLines] = useState<SnapLine[]>([]);
   const [mousePos, setMousePos] = useState<{x:number;y:number}>({x:-100,y:-100});
   const [measureMode, setMeasureMode] = useState(false);
@@ -1972,6 +1977,21 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 <button onClick={() => setSnapEnabled(p => !p)} className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${snapEnabled ? "bg-blue-100 text-blue-700" : "text-gray-400 hover:text-gray-600"}`}>
                   {snapEnabled ? "Snap ON" : "Snap OFF"}
                 </button>
+                <button onClick={async () => {
+                  const cv = fcRef.current; if (!cv) return;
+                  if (showBleedGuides) { removeBleedGuides(cv); setShowBleedGuides(false); }
+                  else { await addBleedGuides(cv, { scale: scaleRef.current, canvasWidth: cv.getWidth(), canvasHeight: cv.getHeight() }); setShowBleedGuides(true); }
+                }} className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${showBleedGuides ? "bg-red-100 text-red-700" : "text-gray-400 hover:text-gray-600"}`}>
+                  {showBleedGuides ? "Bleed ON" : "Bleed OFF"}
+                </button>
+                <button onClick={() => {
+                  const cv = fcRef.current; if (!cv) return;
+                  const result = runPreflight(cv, { scale: scaleRef.current });
+                  setPreflightResult(result);
+                  setShowPreflight(true);
+                }} className="px-1.5 py-0.5 rounded text-[10px] font-medium text-gray-400 hover:text-orange-600 hover:bg-orange-50 transition-colors">
+                  Pre-flight
+                </button>
                 <span>Objects: {layersList.length}</span>
                 {selectedPanel && <span className="text-[#4fc3f7]">Panel: {selectedPanel}</span>}
               </div>
@@ -3185,6 +3205,47 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
               ))}
             </div>
             <button onClick={() => setShowExport(false)} className="mt-4 w-full py-2 text-sm text-gray-500 hover:text-gray-700">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Pre-flight Modal ═══ */}
+      {showPreflight && preflightResult && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowPreflight(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-96 max-h-[70vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-gray-800 mb-1">Pre-flight Check</h3>
+            <div className="flex gap-3 mb-4 text-xs">
+              <span className={`px-2 py-0.5 rounded ${preflightResult.summary.errors > 0 ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                {preflightResult.summary.errors > 0 ? `${preflightResult.summary.errors} Errors` : "No Errors"}
+              </span>
+              <span className="px-2 py-0.5 rounded bg-yellow-100 text-yellow-700">{preflightResult.summary.warnings} Warnings</span>
+              <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700">{preflightResult.summary.info} Info</span>
+            </div>
+            {preflightResult.issues.length === 0 ? (
+              <div className="text-center py-8 text-green-600">
+                <div className="text-3xl mb-2">✓</div>
+                <div className="text-sm font-medium">All checks passed!</div>
+                <div className="text-xs text-gray-400 mt-1">Your design is print-ready</div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {preflightResult.issues.map((issue, idx) => (
+                  <div key={idx} className={`p-3 rounded-lg text-xs ${
+                    issue.severity === "error" ? "bg-red-50 border border-red-200" :
+                    issue.severity === "warning" ? "bg-yellow-50 border border-yellow-200" :
+                    "bg-blue-50 border border-blue-200"
+                  }`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm">{issue.severity === "error" ? "🔴" : issue.severity === "warning" ? "🟡" : "🔵"}</span>
+                      <span className="font-medium text-gray-700">{issue.code}</span>
+                    </div>
+                    <div className="text-gray-600 ml-6">{issue.message}</div>
+                    {issue.details && <div className="text-gray-400 ml-6 mt-0.5">{issue.details}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+            <button onClick={() => setShowPreflight(false)} className="mt-4 w-full py-2 text-sm text-gray-500 hover:text-gray-700">Close</button>
           </div>
         </div>
       )}
