@@ -30,8 +30,7 @@ export async function POST(req: NextRequest) {
       {
         prompt: prompt.trim(),
         model: selectedModel,
-        style: style || undefined,
-        size: size || "1024x1024",
+size: size || "1024x1024",
         colors: colors || undefined,
         responseFormat: "url",
       }

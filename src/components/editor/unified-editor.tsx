@@ -549,18 +549,18 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     setAiError("");
     setAiResult(null);
     try {
-      const styleMap: Record<string, string> = {
-        illustration: "vector_illustration",
-        pattern: "digital_illustration",
-        icon: "icon",
+      const categoryPromptPrefix: Record<string, string> = {
+        illustration: "vector illustration style, ",
+        pattern: "seamless pattern design, ",
+        icon: "minimal icon design, ",
       };
+      const enhancedPrompt = categoryPromptPrefix[aiCategory] + aiPrompt.trim();
       const resp = await fetch("/api/ai/generate-vector", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: aiPrompt.trim(),
+          prompt: enhancedPrompt,
           model: aiModel,
-          style: styleMap[aiCategory] || "vector_illustration",
         }),
       });
       const data = await resp.json();
@@ -568,7 +568,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
         setAiResult({ svgUrl: data.svgUrl, svgContent: data.svgContent, creditsUsed: data.creditsUsed });
         fetchAiCredits();
       } else {
-        setAiError(data.error || "Generation failed");
+        setAiError(data.error || "Generation failed - check console for details"); console.error("[AI Generate]", data);
       }
     } catch (e: unknown) {
       setAiError(e instanceof Error ? e.message : "Network error");
@@ -579,10 +579,13 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
   // ─── AI: Add SVG to Canvas ───
   const addAiSvgToCanvas = useCallback((svgContent: string) => {
-    const c = canvasRef.current;
-    if (!c || !svgContent) return;
-    fabric.loadSVGFromString(svgContent, (objects: fabric.Object[], options: { width?: number; height?: number }) => {
-      const group = new fabric.Group(objects, {
+    const c = fcRef.current;
+    const F = fabricModRef.current;
+    if (!c || !F || !svgContent) return;
+    F.loadSVGFromString(svgContent).then(({ objects, options }: { objects: fabric.Object[]; options: { width?: number; height?: number } }) => {
+      const filtered = objects.filter(Boolean) as fabric.Object[];
+      if (filtered.length === 0) return;
+      const group = new F.Group(filtered, {
         left: (c.getWidth() / 2) - ((options.width || 200) / 4),
         top: (c.getHeight() / 2) - ((options.height || 200) / 4),
         scaleX: 0.5,
@@ -591,8 +594,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       c.add(group);
       c.setActiveObject(group);
       c.renderAll();
-      if (typeof pushHistory === "function") pushHistory();
-    });
+      pushHistory();
+    }).catch((e: unknown) => { console.error("[AI SVG Load]", e); });
   }, [pushHistory]);
 
   // ─── AI: Vectorize Image ───
@@ -2088,7 +2091,9 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 <div style={{ position: "absolute", left: 0, top: mousePos.y + (showRuler ? RULER_THICK : 0) + (wrapperRef.current?.getBoundingClientRect().top || 0), width: "100%", height: 0, borderTop: "0.5px dashed #4fc3f7", opacity: 0.7 }} />
                 <div style={{ position: "absolute", top: 0, left: mousePos.x + (showRuler ? RULER_THICK : 0) + (wrapperRef.current?.getBoundingClientRect().left || 0), height: "100%", width: 0, borderLeft: "0.5px dashed #4fc3f7", opacity: 0.7 }} />
               </div>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'center',minWidth:'100%',minHeight:'100%',padding:'40px'}}>
             <canvas ref={canvasElRef} className="shadow-lg" />
+            </div>
               {/* Status bar */}
               <div className="absolute bottom-0 left-0 right-0 h-7 bg-[#2c2c2c] border-t border-[#1a1a1a] flex items-center px-3 gap-3 text-[10px] text-[#888] font-mono select-none">
                 {measureMode && <span className="text-[#4fc3f7] font-medium">{measureResult || "Measure: click first point"}</span>}
@@ -3210,7 +3215,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
                         {/* ─── AI Tab (Recraft V4) ─── */}
             {rightTab === "ai" && (
-              <div className="p-3 space-y-3 text-xs overflow-y-auto" style={{maxHeight:"calc(100vh - 200px)"}}>
+              <div className="p-3 space-y-3 text-xs overflow-y-auto overflow-x-hidden" style={{maxHeight:"calc(100vh - 200px)",contain:"layout"}}>
                 {/* Sub-tab navigation */}
                 <div className="flex gap-1 bg-neutral-800 rounded p-0.5">
                   {([["generate","Generate"],["vectorize","Vectorize"],["removebg","Remove BG"],["credits","Credits"]] as const).map(([k,l])=>(
@@ -3289,15 +3294,15 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                           ? "bg-neutral-700 text-neutral-500 cursor-not-allowed"
                           : "bg-blue-600 hover:bg-blue-500 text-white"
                       }`}>
-                      {aiLoading ? "Generating SVG..." : `Generate (${UNIT_COSTS[aiModel]} units)`}
+                      {aiLoading ? "Generating SVG..." : `Generate (${(aiModel === "recraftv4_pro_vector" ? 300 : 80)} units)`}
                     </button>
 
                     {/* Result */}
                     {aiResult && (
                       <div className="space-y-2">
                         <div className="bg-neutral-800 rounded p-2 border border-neutral-600">
-                          <div className="bg-white rounded p-2 flex items-center justify-center" style={{minHeight:120}}>
-                            <div dangerouslySetInnerHTML={{__html: aiResult.svgContent}} style={{maxWidth:"100%",maxHeight:150}} />
+                          <div className="bg-white rounded p-2 flex items-center justify-center" style={{minHeight:140,maxHeight:220,overflow:"hidden"}}>
+                            <div dangerouslySetInnerHTML={{__html: aiResult.svgContent.replace(/<svg/, '<svg style="width:100%;height:100%;max-width:100%;max-height:200px"')}} style={{width:"100%",maxHeight:150,overflow:"hidden"}} />
                           </div>
                         </div>
                         <div className="flex gap-1">
@@ -3332,8 +3337,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     </label>
                     {aiVecResult && (
                       <div className="space-y-2">
-                        <div className="bg-white rounded p-2 flex items-center justify-center" style={{minHeight:120}}>
-                          <div dangerouslySetInnerHTML={{__html: aiVecResult.svgContent}} style={{maxWidth:"100%",maxHeight:150}} />
+                        <div className="bg-white rounded p-2 flex items-center justify-center" style={{minHeight:140,maxHeight:220,overflow:"hidden"}}>
+                          <div dangerouslySetInnerHTML={{__html: aiVecResult.svgContent.replace(/<svg/, '<svg style="width:100%;height:100%;max-width:100%;max-height:200px"')}} style={{width:"100%",maxHeight:150,overflow:"hidden"}} />
                         </div>
                         <div className="flex gap-1">
                           <button onClick={()=>addAiSvgToCanvas(aiVecResult.svgContent)}
@@ -3371,13 +3376,13 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                         </div>
                         <div className="flex gap-1">
                           <button onClick={()=>{
-                            const c=canvasRef.current; if(!c||!aiBgResult) return;
-                            fabric.Image.fromURL(aiBgResult, (img: fabric.Image)=>{
+                            const c=fcRef.current; const F=fabricModRef.current; if(!c||!F||!aiBgResult) return;
+                            F.Image.fromURL(aiBgResult, {crossOrigin:"anonymous"}).then((img: fabric.Image)=>{
                               img.scaleToWidth(Math.min(300, c.getWidth()/2));
                               img.set({left:c.getWidth()/2-(img.getScaledWidth()/2), top:c.getHeight()/2-(img.getScaledHeight()/2)});
                               c.add(img); c.setActiveObject(img); c.renderAll();
-                              if(typeof pushHistory==="function") pushHistory();
-                            }, {crossOrigin:"anonymous"});
+                              pushHistory();
+                            }).catch((e: unknown)=>{console.error("[AI BG Load]",e);});
                           }} className="flex-1 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-medium">
                             Add to Canvas
                           </button>

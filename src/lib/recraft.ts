@@ -121,7 +121,10 @@ export async function generateVector(
     response_format: params.responseFormat || "url",
   };
 
-  if (params.style) body.style = params.style;
+  // style is only supported by V2/V3 models, skip for V4
+  if (params.style && params.model && !params.model.startsWith("recraftv4")) {
+    body.style = params.style;
+  }
   if (params.colors?.length) body.controls = { colors: params.colors };
 
   const resp = await fetch(`${RECRAFT_BASE}/images/generations`, {
