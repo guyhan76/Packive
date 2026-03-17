@@ -790,10 +790,11 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       // Canvas creation (blank or normal mode)
       const isBlank = (L === 0 && W === 0 && D === 0);
       let canvasW: number, canvasH: number, availW: number, availH: number;
-      availW = cw - 20; availH = ch - 60;
+      const rulerPad = showRuler ? RULER_THICK : 0;
+      availW = cw - rulerPad - 20; availH = ch - rulerPad - 40;
       if (isBlank) {
-        canvasW = cw - 20;
-        canvasH = ch - 60;
+        canvasW = Math.max(availW - 40, 400);
+        canvasH = Math.max(availH - 40, 300);
         scaleRef.current = 1; scaleXRef.current = 1; scaleYRef.current = 1;
       } else {
         const netW = totalW + PAD * 2;
@@ -801,12 +802,13 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
         const fitScale = Math.min(availW / netW, availH / netH);
         const pxPerMM = Math.max(fitScale, 2.0);
         scaleRef.current = pxPerMM; scaleXRef.current = pxPerMM; scaleYRef.current = pxPerMM;
-        canvasW = Math.min(Math.round(netW * pxPerMM), cw - 20);
-        canvasH = Math.min(Math.round(netH * pxPerMM), ch - 60);
+        canvasW = Math.min(Math.round(netW * pxPerMM), availW);
+        canvasH = Math.min(Math.round(netH * pxPerMM), availH);
       }
 
       const el = canvasElRef.current!;
       el.width = canvasW; el.height = canvasH;
+      console.log("[Canvas Init] wrapper:", cw, "x", ch, "| rulerPad:", showRuler ? RULER_THICK : 0, "| availW:", availW, "availH:", availH, "| canvasW:", canvasW, "canvasH:", canvasH, "| isBlank:", isBlank);
       el.style.width = canvasW + 'px'; el.style.height = canvasH + 'px';
 
       if (disposed) return;
@@ -819,6 +821,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       });
 
       fcRef.current = canvas;
+      canvas.backgroundColor = '#FFFFFF';
+      canvas.requestRenderAll();
       setCanvasReady(true);
       canvas.fireRightClick = true;
       canvas.stopContextMenu = true;
@@ -965,7 +969,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
       // Fit to screen
       const fitZ = Math.floor(Math.min(availW / canvasW, availH / canvasH) * 100);
-      if (fitZ < 100) applyZoom(Math.max(25, fitZ));
+            if (fitZ < 95) applyZoom(Math.max(25, fitZ)); // 95~100 → keep 100%
     };
 
     boot();
@@ -1690,25 +1694,30 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             console.log("[Dieline] Final:   ", finalMmW.toFixed(2), "x", finalMmH.toFixed(2), "mm");
             console.log("[Dieline] Error: W=", (finalMmW - origMmW).toFixed(4), "mm, H=", (finalMmH - origMmH).toFixed(4), "mm");
 
-            // ── Resize canvas to fit dieline at accurate px/mm ──
-            // Available space: use wrapper dimensions
-            const wrapper = (c as any).wrapperEl?.parentElement || document.querySelector("[data-canvas-wrapper]");
-            const availW = wrapper ? wrapper.clientWidth - 60 : 1200;
-            const availH = wrapper ? wrapper.clientHeight - 60 : 800;
+            // ── Resize canvas to fit dieline ──
+            const wrapper = wrapperRef.current;
+            const rulerPadD = showRuler ? RULER_THICK : 0;
+            const dieAvailW = wrapper ? wrapper.clientWidth - rulerPadD - 20 : 1200;
+            const dieAvailH = wrapper ? wrapper.clientHeight - rulerPadD - 40 : 800;
 
-            // Calculate optimal px/mm so the dieline fits in view
+            // Use a fixed high-quality px/mm (at least 2.0), canvas = full available area
             const PAD_MM = 15;
             const totalMmW = origMmW + PAD_MM * 2;
             const totalMmH = origMmH + PAD_MM * 2;
-            const fitScale = Math.min(availW / totalMmW, availH / totalMmH);
-            const newPxPerMm = Math.max(fitScale, 0.5); // minimum 0.5 px/mm
 
-            // Resize canvas
-            const newCanvasW = Math.round(totalMmW * newPxPerMm);
-            const newCanvasH = Math.round(totalMmH * newPxPerMm);
+            // Canvas uses full available space
+            const newCanvasW = dieAvailW;
+            const newCanvasH = dieAvailH;
             c.setDimensions({ width: newCanvasW, height: newCanvasH });
+
+            // Calculate px/mm so dieline fits in canvas, then apply as zoom
+            const fitPxPerMmW = (newCanvasW - PAD_MM * 2) / origMmW;
+            const fitPxPerMmH = (newCanvasH - PAD_MM * 2) / origMmH;
+            const newPxPerMm = Math.min(fitPxPerMmW, fitPxPerMmH);
             scaleRef.current = newPxPerMm;
-            console.log("[Dieline] Canvas resized:", newCanvasW, "x", newCanvasH, "px, scale:", newPxPerMm.toFixed(4), "px/mm");
+            c.backgroundColor = '#FFFFFF';
+            c.requestRenderAll();
+            console.log("[Dieline Resize] wrapper:", wrapper?.clientWidth, "x", wrapper?.clientHeight, "| canvas:", newCanvasW, "x", newCanvasH, "| pxPerMm:", newPxPerMm.toFixed(3));
 
             // Recalculate scale with new px/mm
             const finalScX = (origMmW * newPxPerMm) / (group.width || 1);
@@ -2055,7 +2064,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
 
           {/* ═══ CANVAS AREA ═══ */}
-          <div ref={wrapperRef} onScroll={(e) => { const t=e.target as HTMLDivElement; setRulerScroll({left:t.scrollLeft,top:t.scrollTop}); }} onMouseMove={(e) => { const r=e.currentTarget.getBoundingClientRect(); setMousePos({x:e.clientX-r.left-RULER_THICK+(rulerScroll?.left||0),y:e.clientY-r.top-RULER_THICK+(rulerScroll?.top||0)}); }} onMouseLeave={() => setMousePos({x:-100,y:-100})} className="flex-1 overflow-auto bg-gray-100 relative pb-7"
+          <div ref={wrapperRef} onScroll={(e) => { const t=e.target as HTMLDivElement; setRulerScroll({left:t.scrollLeft,top:t.scrollTop}); }} onMouseMove={(e) => { const r=e.currentTarget.getBoundingClientRect(); setMousePos({x:e.clientX-r.left-RULER_THICK+(rulerScroll?.left||0),y:e.clientY-r.top-RULER_THICK+(rulerScroll?.top||0)}); }} onMouseLeave={() => setMousePos({x:-100,y:-100})} className="flex-1 overflow-auto bg-gray-100 relative pb-8"
             style={{ paddingLeft: showRuler ? RULER_THICK : 0, paddingTop: showRuler ? RULER_THICK : 0, cursor: measureMode ? "crosshair" : drawMode ? "crosshair" : "default" }}>
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
               {/* Rulers - conditional */}
@@ -2063,23 +2072,13 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
               <div style={{visibility: showRuler ? "visible" : "hidden"}}><RulerCorner unit={rulerUnit} onToggle={() => setRulerUnit(u => u === "mm" ? "inch" : "mm")}  /></div>
               <div style={{visibility: showRuler ? "visible" : "hidden"}}><Ruler direction="horizontal" canvasWidth={fcRef.current?.getWidth() || 800} canvasHeight={fcRef.current?.getHeight() || 600}
                 scale={scaleXRef.current} zoom={zoom} scrollLeft={rulerScroll.left} scrollTop={rulerScroll.top}
-                pad={15} unit={rulerUnit} onGuideCreate={addGuide}  /></div>
+                pad={0} unit={rulerUnit} onGuideCreate={addGuide}  /></div>
               <div style={{visibility: showRuler ? "visible" : "hidden"}}><Ruler direction="vertical" canvasWidth={fcRef.current?.getWidth() || 800} canvasHeight={fcRef.current?.getHeight() || 600}
                 scale={scaleYRef.current} zoom={zoom} scrollLeft={rulerScroll.left} scrollTop={rulerScroll.top}
-                pad={15} unit={rulerUnit} onGuideCreate={addGuide}  /></div>
+                pad={0} unit={rulerUnit} onGuideCreate={addGuide}  /></div>
 
 
 
-              {/* Snap guide lines overlay */}
-              {snapLines.length > 0 && (
-                <svg style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 50 }}>
-                  {snapLines.map((sl, idx) => (
-                    sl.type === "v"
-                      ? <line key={idx} x1={sl.pos} y1={0} x2={sl.pos} y2="100%" stroke="#3b82f6" strokeWidth={1} strokeDasharray="4 4" opacity={0.7} />
-                      : <line key={idx} x1={0} y1={sl.pos} x2="100%" y2={sl.pos} stroke="#3b82f6" strokeWidth={1} strokeDasharray="4 4" opacity={0.7} />
-                  ))}
-                </svg>
-              )}
               {/* Measure crosshair overlay - always mounted, visibility toggled */}
               <div
                 style={{
@@ -2091,8 +2090,37 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 <div style={{ position: "absolute", left: 0, top: mousePos.y + (showRuler ? RULER_THICK : 0) + (wrapperRef.current?.getBoundingClientRect().top || 0), width: "100%", height: 0, borderTop: "0.5px dashed #4fc3f7", opacity: 0.7 }} />
                 <div style={{ position: "absolute", top: 0, left: mousePos.x + (showRuler ? RULER_THICK : 0) + (wrapperRef.current?.getBoundingClientRect().left || 0), height: "100%", width: 0, borderLeft: "0.5px dashed #4fc3f7", opacity: 0.7 }} />
               </div>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'center',minWidth:'100%',minHeight:'100%',padding:'40px'}}>
-            <canvas ref={canvasElRef} className="shadow-lg" />
+            <div id='canvas-centering-wrapper'>
+            <div style={{position:'relative',display:'inline-block'}}>
+              <canvas ref={canvasElRef} className="shadow-lg" style={{border:"1px solid #e0e0e0"}} />
+              {/* Snap guide lines overlay - canvas-local coords */}
+              {snapEnabled && snapLines.length > 0 && fcRef.current && (
+                <svg
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: fcRef.current.getWidth(),
+                    height: fcRef.current.getHeight(),
+                    pointerEvents: "none",
+                    zIndex: 50,
+                  }}
+                >
+                  {snapLines.map((sl, idx) => {
+                    const vpt = fcRef.current!.viewportTransform || [1,0,0,1,0,0];
+                    const z = vpt[0] || 1;
+                    const px = vpt[4] || 0;
+                    const py = vpt[5] || 0;
+                    const screenPos = sl.type === "v" ? sl.pos * z + px : sl.pos * z + py;
+                    const w = fcRef.current!.getWidth();
+                    const h = fcRef.current!.getHeight();
+                    return sl.type === "v"
+                      ? <line key={idx} x1={screenPos} y1={0} x2={screenPos} y2={h} stroke="#3b82f6" strokeWidth={1} strokeDasharray="6 4" opacity={0.9} />
+                      : <line key={idx} x1={0} y1={screenPos} x2={w} y2={screenPos} stroke="#3b82f6" strokeWidth={1} strokeDasharray="6 4" opacity={0.9} />;
+                  })}
+                </svg>
+              )}
+            </div>
             </div>
               {/* Status bar */}
               <div className="absolute bottom-0 left-0 right-0 h-7 bg-[#2c2c2c] border-t border-[#1a1a1a] flex items-center px-3 gap-3 text-[10px] text-[#888] font-mono select-none">
@@ -2101,7 +2129,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 <span>Net: {totalW.toFixed(1)} x {totalH.toFixed(1)} mm</span>
                 <span>Zoom: {zoom}%</span>
                 <span className="mx-1 text-gray-300">|</span>
-                <button onClick={() => setSnapEnabled(p => !p)} className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${snapEnabled ? "bg-blue-100 text-blue-700" : "text-gray-400 hover:text-gray-600"}`}>
+                <button onClick={() => { setSnapEnabled(p => { if(p) setSnapLines([]); return !p; }); }} className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${snapEnabled ? "bg-blue-100 text-blue-700" : "text-gray-400 hover:text-gray-600"}`}>
                   {snapEnabled ? "Snap ON" : "Snap OFF"}
                 </button>
                 <button onClick={async () => {

@@ -1,13 +1,7 @@
-/**
- * Packive Snap Engine
- * - 요소 이동 시 가이드, 다른 요소 모서리/중앙에 스냅
- * - 스냅 라인 시각화 데이터 반환
- */
-
+﻿// snap-engine.ts – canvas-local coordinate snap system
 export interface SnapLine {
-  type: "h" | "v";
-  pos: number;       // canvas px
-  label?: string;
+  type: "v" | "h";   // vertical or horizontal
+  pos: number;        // canvas-local coordinate (px)
 }
 
 export interface SnapResult {
@@ -16,128 +10,105 @@ export interface SnapResult {
   lines: SnapLine[];
 }
 
-interface Bounds {
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
-  centerX: number;
-  centerY: number;
-}
-
-function getBounds(obj: any): Bounds {
-  const br = obj.getBoundingRect(true);
-  return {
-    left: br.left,
-    top: br.top,
-    right: br.left + br.width,
-    bottom: br.top + br.height,
-    centerX: br.left + br.width / 2,
-    centerY: br.top + br.height / 2,
-  };
-}
-
 /**
- * 캔버스 위의 모든 스냅 대상(다른 요소 + 가이드 + 캔버스 경계)을 수집하여
- * 이동 중인 요소의 최적 위치를 반환합니다.
- *
- * @param moving   이동 중인 Fabric 객체
- * @param canvas   Fabric canvas 인스턴스
- * @param threshold 스냅 감지 거리 (px)
- * @returns SnapResult { x, y, lines }
+ * Calculate snap for a moving object.
+ * All coordinates are in canvas-local space (not screen pixels).
+ * @param moving - the Fabric object being dragged
+ * @param canvas - the Fabric canvas instance
+ * @param threshold - snap distance in canvas-local px (default 8)
  */
 export function calcSnap(
   moving: any,
   canvas: any,
-  threshold: number = 8
+  threshold = 8
 ): SnapResult {
-  const lines: SnapLine[] = [];
-  const mb = getBounds(moving);
-  let dx = 0;
-  let dy = 0;
+  const zoom = canvas.viewportTransform?.[0] || 1;
+  const adjustedThreshold = threshold / zoom;
 
-  // 스냅 대상 좌표 수집
-  const hTargets: number[] = [];  // 수평 (y 좌표)
-  const vTargets: number[] = [];  // 수직 (x 좌표)
+  // Canvas dimensions in local coordinates
+  const cw = canvas.getWidth() / zoom;
+  const ch = canvas.getHeight() / zoom;
 
-  // 1. 캔버스 경계
-  const cw = canvas.getWidth();
-  const ch = canvas.getHeight();
-  vTargets.push(0, cw / 2, cw);
-  hTargets.push(0, ch / 2, ch);
+  // Moving object bounds (local coordinates)
+  const ml = moving.left ?? 0;
+  const mt = moving.top ?? 0;
+  const mw = (moving.width ?? 0) * (moving.scaleX ?? 1);
+  const mh = (moving.height ?? 0) * (moving.scaleY ?? 1);
+  const mc = ml + mw / 2;  // center x
+  const mm = mt + mh / 2;  // center y
+  const mr = ml + mw;      // right
+  const mb = mt + mh;      // bottom
 
-  // 2. 다른 요소들의 모서리/중앙
-  const objects = canvas.getObjects().filter((o: any) =>
-    o !== moving &&
-    o.selectable !== false &&
-    !o._isGuideLayer &&
-    !o._isGuide &&
-    o.visible !== false
-  );
+  // Snap targets: canvas edges + center
+  const vTargets: number[] = [0, cw / 2, cw];
+  const hTargets: number[] = [0, ch / 2, ch];
 
+  // Add other objects as snap targets
+  const objects = canvas.getObjects ? canvas.getObjects() : [];
   for (const obj of objects) {
-    const b = getBounds(obj);
-    vTargets.push(b.left, b.centerX, b.right);
-    hTargets.push(b.top, b.centerY, b.bottom);
+    if (obj === moving) continue;
+    if (obj.excludeFromSnap) continue;
+    // Skip special objects
+    const name = (obj.name || "").toLowerCase();
+    if (name.includes("guide") || name.includes("dieline") || name.includes("bleed") || name.includes("safety")) continue;
+
+    const ol = obj.left ?? 0;
+    const ot = obj.top ?? 0;
+    const ow = (obj.width ?? 0) * (obj.scaleX ?? 1);
+    const oh = (obj.height ?? 0) * (obj.scaleY ?? 1);
+
+    vTargets.push(ol, ol + ow / 2, ol + ow);
+    hTargets.push(ot, ot + oh / 2, ot + oh);
   }
 
-  // 3. 사용자 가이드 라인
-  const guides = canvas.getObjects().filter((o: any) => o._isGuide);
-  for (const g of guides) {
-    if (g._guideDir === "h") {
-      hTargets.push(g.top || g.y1 || 0);
-    } else {
-      vTargets.push(g.left || g.x1 || 0);
-    }
-  }
-
-  // 수직 스냅 (x축)
-  const movingVPoints = [mb.left, mb.centerX, mb.right];
-  let bestVDist = threshold + 1;
-  let bestVDx = 0;
-  let bestVLine = 0;
-
-  for (const mp of movingVPoints) {
-    for (const tp of vTargets) {
-      const dist = Math.abs(mp - tp);
-      if (dist < bestVDist) {
-        bestVDist = dist;
-        bestVDx = tp - mp;
-        bestVLine = tp;
+  // Find best vertical snap
+  let bestV: { dist: number; target: number; edge: string } | null = null;
+  const movingVEdges = [
+    { pos: ml, edge: "left" },
+    { pos: mc, edge: "center" },
+    { pos: mr, edge: "right" },
+  ];
+  for (const ve of movingVEdges) {
+    for (const t of vTargets) {
+      const d = Math.abs(ve.pos - t);
+      if (d < adjustedThreshold && (!bestV || d < bestV.dist)) {
+        bestV = { dist: d, target: t, edge: ve.edge };
       }
     }
   }
 
-  if (bestVDist <= threshold) {
-    dx = bestVDx;
-    lines.push({ type: "v", pos: bestVLine });
-  }
-
-  // 수평 스냅 (y축)
-  const movingHPoints = [mb.top, mb.centerY, mb.bottom];
-  let bestHDist = threshold + 1;
-  let bestHDy = 0;
-  let bestHLine = 0;
-
-  for (const mp of movingHPoints) {
-    for (const tp of hTargets) {
-      const dist = Math.abs(mp - tp);
-      if (dist < bestHDist) {
-        bestHDist = dist;
-        bestHDy = tp - mp;
-        bestHLine = tp;
+  // Find best horizontal snap
+  let bestH: { dist: number; target: number; edge: string } | null = null;
+  const movingHEdges = [
+    { pos: mt, edge: "top" },
+    { pos: mm, edge: "middle" },
+    { pos: mb, edge: "bottom" },
+  ];
+  for (const he of movingHEdges) {
+    for (const t of hTargets) {
+      const d = Math.abs(he.pos - t);
+      if (d < adjustedThreshold && (!bestH || d < bestH.dist)) {
+        bestH = { dist: d, target: t, edge: he.edge };
       }
     }
   }
 
-  if (bestHDist <= threshold) {
-    dy = bestHDy;
-    lines.push({ type: "h", pos: bestHLine });
+  // Calculate adjusted position
+  let newX = ml;
+  let newY = mt;
+  const lines: SnapLine[] = [];
+
+  if (bestV) {
+    const offset = bestV.edge === "left" ? 0 : bestV.edge === "center" ? mw / 2 : mw;
+    newX = bestV.target - offset;
+    lines.push({ type: "v", pos: bestV.target });
   }
 
-  return {
-    x: (moving.left || 0) + dx,
-    y: (moving.top || 0) + dy,
-    lines,
-  };
+  if (bestH) {
+    const offset = bestH.edge === "top" ? 0 : bestH.edge === "middle" ? mh / 2 : mh;
+    newY = bestH.target - offset;
+    lines.push({ type: "h", pos: bestH.target });
+  }
+
+  return { x: newX, y: newY, lines };
 }
