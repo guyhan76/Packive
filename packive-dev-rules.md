@@ -83,3 +83,17 @@ src/components/editor/ruler.tsx (176 lines) - 눈금자
 - 3,600줄 단일 파일은 유지보수의 적이다
 - requestRenderAll()을 Canvas 생성 직후 호출해야 흰 배경이 보인다
 - 캔버스 위치와 Ruler 0점은 반드시 동일한 기준점을 사용해야 한다
+
+
+## 8. Bleed 기능 재설계 (확정)
+
+기존: Bleed ON/OFF 토글 버튼으로 가이드 선 표시/숨김
+변경: 아래 3가지로 재설계
+
+1. 칼선 업로드 시 외곽 3mm 영역을 자동으로 은은하게 표시 (반투명, 항상 표시)
+2. Pre-flight 검사에서 bleed 영역 이미지 채움 여부 자동 검사
+3. PDF/X-4 내보내기 시 BleedBox 자동 설정
+
+- Bleed ON/OFF 토글 버튼은 제거
+- 칼선이 없는 빈 캔버스에서는 bleed 표시 안 함
+- bleed 영역 색상: 반투명 빨간색 (opacity 0.1 정도)
