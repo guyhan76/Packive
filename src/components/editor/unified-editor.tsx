@@ -2178,8 +2178,8 @@ allObjs.forEach((o: any, i: number) => {
                         }}
                         className="group flex flex-col items-center p-3 rounded-xl border border-gray-100 hover:border-blue-400 hover:shadow-lg transition-all duration-200 bg-white hover:bg-gradient-to-b hover:from-blue-50/40 hover:to-white cursor-pointer">
                           {/* SVG preview */}
-                          <div className="w-full aspect-[5/3] flex items-center justify-center mb-2 rounded-lg bg-gray-50/80 group-hover:bg-blue-50/60 transition-colors overflow-hidden">
-                            <img src={t.svgPath} alt={t.code} className="w-[85%] h-[85%] object-contain opacity-60 group-hover:opacity-100 transition-opacity" />
+                          <div className="w-full aspect-[5/3] flex items-center justify-center mb-2 rounded-lg bg-white group-hover:bg-gray-50 transition-colors overflow-hidden">
+                            <img src={t.svgPath} alt={t.code} className="w-[85%] h-[85%] object-contain opacity-100 transition-opacity" />
                           </div>
                           <div className="w-full text-center">
                             <div className="text-xs font-bold text-gray-800 group-hover:text-blue-700 leading-tight">{t.code}</div>
