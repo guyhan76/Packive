@@ -1,11 +1,7 @@
-// EasyPackMaker API Service
-// Endpoint: POST https://easypackmaker.com/generator/api
-// Auth: SHA-256 token from sorted params + password
-
 import crypto from 'crypto';
 
 export interface EpmApiConfig {
-  userName: string;
+  username: string;
   password: string;
 }
 
@@ -15,85 +11,62 @@ export interface EpmModelParams {
   D: string;
   Th: string;
   Units: string;
+  H?: string;
+  B?: string;
 }
 
 export interface EpmModelOptions {
-  DimensionType?: 'In' | 'Out' | 'Crease';
-  FluteDir?: 'Vertical' | 'Horizontal';
+  DimensionType?: 'In' | 'Crease' | 'Out';
   KnifeInfo?: boolean;
   GlueZone?: boolean;
   Sizes?: boolean;
-  GlueFlapCorr?: boolean;
-  LinesColors?: {
-    cutColor?: string;
-    creaseColor?: string;
-    perforationColor?: string;
-    zipperColor?: string;
-    infoColor?: string;
-  };
-}
-
-export interface EpmRequest {
-  UserName: string;
-  Token: string;
-  OrderId: string;
-  ModelName?: string;
-  ModelId?: string;
-  PreviewOnly?: boolean;
-  SizesOnly?: boolean;
-  ModelParams?: EpmModelParams | null;
-  ModelOptions?: EpmModelOptions;
-  GetCatalog?: string;
+  FullFlap?: boolean;
+  Notch?: boolean;
+  Lock?: boolean;
 }
 
 export interface EpmResponse {
-  Status: number;
-  StatusMessage?: string;
-  ModelData?: string;       // base64 PDF
-  ModelPreview?: string | string[];  // base64 PNG
-  ModelDescription?: any;
-  ErrorMessage?: string;
+  Status: 'Success' | 'Failed';
+  ErrorCode: number;
+  Details?: string;
+  Model?: string;       // base64 PDF
+  Preview?: string;      // base64 PNG preview
+  ModelsCatalog?: any[];
 }
 
 /**
- * Generate SHA-256 token for EasyPackMaker API
- * 1. Collect all request params (excluding Token)
- * 2. Sort by key alphabetically
- * 3. Concatenate values
- * 4. SHA-256 hash
+ * Generate EasyPackMaker API token
+ * Algorithm:
+ * 1. Collect all request fields EXCEPT "Token"
+ * 2. Add "Password" as a field with the API password value
+ * 3. Sort all field keys alphabetically
+ * 4. Concatenate the values in sorted key order
+ * 5. SHA-256 hash the result
  */
-export function generateToken(params: Record<string, any>, password: string): string {
-  // Flatten nested objects for token generation
-  const flat: Record<string, string> = {};
-
-  for (const [key, value] of Object.entries(params)) {
+export function generateToken(
+  fields: Record<string, any>,
+  password: string
+): string {
+  // Remove Token if present, add Password
+  const allFields: Record<string, string> = {};
+  
+  for (const [key, value] of Object.entries(fields)) {
     if (key === 'Token') continue;
-    if (value === null || value === undefined) continue;
-
-    if (typeof value === 'object' && !Array.isArray(value)) {
-      // For nested objects (ModelParams, ModelOptions), include each sub-key
-      for (const [subKey, subVal] of Object.entries(value)) {
-        if (subVal !== null && subVal !== undefined) {
-          flat[subKey] = String(subVal);
-        }
-      }
-    } else {
-      flat[key] = String(value);
+    // Only include top-level string/number values (not objects)
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      allFields[key] = String(value);
     }
   }
-
-  // Add password
-  flat['Password'] = password;
+  allFields['Password'] = password;
 
   // Sort keys alphabetically
-  const sortedKeys = Object.keys(flat).sort();
-
+  const sortedKeys = Object.keys(allFields).sort();
+  
   // Concatenate values
-  const concatenated = sortedKeys.map(k => flat[k]).join('');
-
-  // SHA-256 hash
-  const hash = crypto.createHash('sha256').update(concatenated).digest('hex');
-  return hash;
+  const raw = sortedKeys.map(k => allFields[k]).join('');
+  
+  // SHA-256
+  return crypto.createHash('sha256').update(raw, 'utf8').digest('hex');
 }
 
 /**
@@ -101,30 +74,20 @@ export function generateToken(params: Record<string, any>, password: string): st
  */
 export async function callEpmApi(
   config: EpmApiConfig,
-  modelName: string,
-  orderId: string,
-  modelParams: EpmModelParams,
-  modelOptions: EpmModelOptions = {},
-  previewOnly: boolean = false
+  requestBody: Record<string, any>
 ): Promise<EpmResponse> {
-  const requestBody: Record<string, any> = {
-    UserName: config.userName,
-    OrderId: orderId,
-    ModelName: modelName,
+  const fields = { ...requestBody, UserName: config.username };
+  const token = generateToken(fields, config.password);
+  
+  const body = {
+    ...fields,
+    Token: token,
   };
-
-  if (modelParams) requestBody.ModelParams = modelParams;
-  if (Object.keys(modelOptions).length > 0) requestBody.ModelOptions = modelOptions;
-  if (previewOnly) requestBody.PreviewOnly = true;
-
-  // Generate token
-  const token = generateToken(requestBody, config.password);
-  requestBody.Token = token;
 
   const response = await fetch('https://easypackmaker.com/generator/api', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(requestBody),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -135,29 +98,38 @@ export async function callEpmApi(
 }
 
 /**
- * Get catalog of all available models
+ * Get full template catalog
  */
 export async function getEpmCatalog(config: EpmApiConfig): Promise<EpmResponse> {
-  const requestBody: Record<string, any> = {
-    UserName: config.userName,
-    GetCatalog: 'all',
-  };
-
-  const token = generateToken(requestBody, config.password);
-  requestBody.Token = token;
-
-  const response = await fetch('https://easypackmaker.com/generator/api', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(requestBody),
-  });
-
-  return response.json();
+  return callEpmApi(config, { GetCatalog: 'all' });
 }
 
 /**
- * Decode base64 PDF data to Buffer
+ * Generate a dieline model
  */
-export function decodePdf(base64Data: string): Buffer {
-  return Buffer.from(base64Data, 'base64');
+export async function generateModel(
+  config: EpmApiConfig,
+  modelName: string,
+  params: EpmModelParams,
+  options?: EpmModelOptions,
+  orderId?: string
+): Promise<EpmResponse> {
+  const body: Record<string, any> = {
+    ModelName: modelName,
+    OrderId: orderId || `packive_${Date.now()}`,
+    ModelParams: params,
+  };
+
+  if (options) {
+    body.ModelOptions = options;
+  }
+
+  return callEpmApi(config, body);
+}
+
+/**
+ * Decode base64 PDF to Buffer
+ */
+export function decodePdf(base64: string): Buffer {
+  return Buffer.from(base64, 'base64');
 }

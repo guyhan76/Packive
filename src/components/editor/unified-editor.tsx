@@ -2337,22 +2337,111 @@ allObjs.forEach((o: any, i: number) => {
                         Cancel
                       </button>
                       <button
-                        onClick={async () => {
-                          try {
-                            const result = generateDieline(selectedBoxCode, { length: dimLength, width: dimWidth, height: dimHeight });
-                            if (!result) { alert('This box type is not yet supported for parametric generation.\nAPI integration coming soon!'); return; }
-                            const c = fcRef.current; if (!c) return;
-                            const existing = c.getObjects().filter((o: any) => o._isDieline);
-                            existing.forEach((o: any) => c.remove(o));
-                            const { objects: objs, options: opts } = await fabricModRef.current.loadSVGFromString(result.svg);
-                            if (objs.length === 0) { alert('Failed to generate dieline'); return; }
-                            const group = new fabricModRef.current.Group(objs, { originX: 'center', originY: 'center' });
-                            (group as any)._isDieline = true;
-                            const origW = group.width ?? result.viewBoxW;
-                            const origH = group.height ?? result.viewBoxH;
-                            const cW = c.getWidth(); const cH = c.getHeight();
-                            const fitScale = Math.min(cW * 0.85 / origW, cH * 0.85 / origH);
-                            group.set({ scaleX: fitScale, scaleY: fitScale, left: cW / 2, top: cH / 2, selectable: false, evented: false });
+                              onClick={async () => {
+                   
+        try {
+                   
+          // Convert box code to EasyPackMaker model name
+          const modelName = selectedBoxCode
+            .replace(/^FEFCO\s+/i, 'fefco_')
+            .replace(/^ECMA\s+/i, '')
+            .replace(/\./g, '_');
+                   
+          // Show loading state
+          const btn = document.activeElement as HTMLButtonElement;
+          const origText = btn?.textContent || '';
+          if (btn) { btn.textContent = 'Generating...'; btn.disabled = true; }
+                   
+          // Call EasyPackMaker API via our Next.js route
+          const apiRes = await fetch('/api/dieline', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              modelName,
+              length: dimLength,
+              width: dimWidth,
+              depth: dimHeight,
+              thickness: thickness,
+              units: 'mm',
+            }),
+          });
+                   
+          const data = await apiRes.json();
+          if (btn) { btn.textContent = origText; btn.disabled = false; }
+                   
+          if (!apiRes.ok || !data.success) {
+            alert(data.error || 'Failed to generate dieline');
+            return;
+          }
+                   
+          // Load SVG into Fabric.js canvas
+          const c = fcRef.current; if (!c) return;
+                   
+          const existing = c.getObjects().filter((o: any) => o._isDieline);
+          existing.forEach((o: any) => c.remove(o));
+                   
+          const { objects: objs } = await fabricModRef.current.loadSVGFromString(data.svg);
+          if (!objs || objs.length === 0) { alert('Failed to parse SVG dieline'); return; }
+                   
+          const group = new fabricModRef.current.Group(objs, { originX: 'center', originY: 'center' });
+          (group as any)._isDieline = true;
+                   
+          // Inkscape converts PDF (pt) to SVG (px) at 96/72 = 1.3333 ratio
+          // PDF 1pt = 1/72 inch = 25.4/72 mm = 0.352778 mm
+          // Inkscape SVG 1px = 1/96 inch = 25.4/96 mm = 0.264583 mm
+          // So: svgPx * (25.4/96) = mm, OR equivalently svgPx * (72/96) = pt, pt * (25.4/72) = mm
+          // The exact conversion: 1 svgPx = 25.4/96 mm = 0.26458333... mm
+          //
+          // However Inkscape may crop/adjust the viewBox slightly.
+          // Best approach: parse the SVG viewBox and use the PDF MediaBox for exact mapping.
+          
+          const svgPxW = group.width || 500;
+          const svgPxH = group.height || 500;
+          
+          // Extract viewBox from SVG string for precise dimensions
+          const vbMatch = data.svg?.match(/viewBox="([^"]+)"/);
+          const vbParts = vbMatch ? vbMatch[1].split(/\s+/).map(Number) : [0, 0, svgPxW, svgPxH];
+          const viewBoxW = vbParts[2] || svgPxW;
+          const viewBoxH = vbParts[3] || svgPxH;
+          
+          // PDF MediaBox in points (from API response or fallback calculation)
+          // Inkscape scales PDF pt -> SVG px at exactly 96/72 = 4/3
+          // So: PDF pt = SVG px * (72/96) = SVG px * 0.75
+          // And: mm = PDF pt * (25.4/72) = SVG px * 0.75 * (25.4/72) = SVG px * (25.4/96)
+          // 
+          // Use exact fraction to avoid floating point drift:
+          const svgMmW = viewBoxW * 25.4 / 96;
+          const svgMmH = viewBoxH * 25.4 / 96;
+          
+          // scaleXRef = canvas px per mm
+          const sX = scaleXRef.current;
+          const sY = scaleYRef?.current || sX;
+          
+          // Exact scale: mm * canvasPxPerMm / svgPx
+          const exactScaleX = sX * 25.4 / 96;
+          const exactScaleY = sY * 25.4 / 96;
+          
+          console.log(`[Dieline] viewBox=${viewBoxW.toFixed(1)}x${viewBoxH.toFixed(1)}, svgMm=${svgMmW.toFixed(2)}x${svgMmH.toFixed(2)}mm, scale=${exactScaleX.toFixed(6)}, sX=${sX.toFixed(3)}`);
+          
+          // Expand canvas if dieline is larger than current canvas
+          const neededW = viewBoxW * 25.4 / 96 * sX + 80; // 80px padding
+          const neededH = viewBoxH * 25.4 / 96 * sY + 80;
+          const cW = c.getWidth();
+          const cH = c.getHeight();
+          
+          if (neededW > cW || neededH > cH) {
+            const newW = Math.max(cW, Math.ceil(neededW));
+            const newH = Math.max(cH, Math.ceil(neededH));
+            c.setDimensions({ width: newW, height: newH });
+            console.log(`[Dieline] Canvas expanded: ${cW}x${cH} -> ${newW}x${newH}px for ${svgMmW.toFixed(0)}x${svgMmH.toFixed(0)}mm dieline`);
+          }
+          
+          const finalCW = c.getWidth();
+          const finalCH = c.getHeight();
+          
+          console.log(`[Dieline] Exact mm scale: ${svgMmW.toFixed(1)}x${svgMmH.toFixed(1)}mm, scaleX=${exactScaleX.toFixed(4)}, sX=${sX.toFixed(3)}`);
+          
+          group.set({ scaleX: exactScaleX, scaleY: exactScaleY, left: finalCW / 2, top: finalCH / 2, selectable: false, evented: false });
 
                             
 
