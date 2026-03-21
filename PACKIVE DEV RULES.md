@@ -1031,3 +1031,66 @@ Packive = **"패키지 구조 인식 + CMYK 네이티브 + 인쇄 생산 특화 
 - [Adobe Firefly](https://www.adobe.com/products/firefly.html)
 
 *이 문서는 개발 진행에 따라 지속적으로 업데이트합니다.*
+
+
+---
+
+## EasyPackMaker API Integration (2025-03-21)
+
+### API Credentials
+- **Username**: Guyhan76 (ID: 161951)
+- **Password**: stored in `.env.local` as `EPM_PASSWORD`
+- **Endpoint**: `https://easypackmaker.com/generator/api`
+- **Catalog**: 654 FEFCO/ECMA templates available
+
+### Token Generation Algorithm
+1. Collect all request fields **except** `Token`
+2. **Include** `Password` as a field (key: `Password`, value: the API password)
+3. Sort all fields by **key name alphabetically**
+4. Concatenate the **values** in that sorted order
+5. Compute **SHA-256** hash of the concatenated string
+6. Use the hash as the `Token` value (exclude `Password` from the final request body)
+
+**Example (GetCatalog request):**
+- Fields: `GetCatalog=all`, `Password=IoZrEZpmFF8T53DI`, `UserName=Guyhan76`
+- Sorted keys: GetCatalog, Password, UserName
+- Concatenated values: `allIoZrEZpmFF8T53DIGuyhan76`
+- Token: SHA-256 of above string
+
+### Dieline Pipeline
+Copy
+Browser (box selection + dimensions) -> POST /api/dieline (Next.js API route) -> EasyPackMaker API (SHA-256 token auth) -> PDF (base64) received -> Inkscape CLI: PDF -> SVG conversion -> SVG returned to client -> Fabric.js canvas renders SVG at exact mm scale
+
+
+### Key Technical Decisions
+
+#### SVG Scaling (mm accuracy)
+- Inkscape exports SVG at **96 DPI** (1 px = 25.4/96 mm = 0.264583 mm)
+- Canvas uses `scaleXRef.current` (px per mm)
+- Formula: `exactScale = (svgPx * 25.4 / 96) * canvasPxPerMm / svgPx`
+- Measured accuracy: **< 0.6 mm error** on 1042 mm dieline (0.06%)
+
+#### Inkscape CLI
+- Path: `C:\Program Files\Inkscape\bin\inkscape.exe`
+- Command: `inkscape --export-type=svg --export-filename=output.svg input.pdf`
+- Timeout: 30 seconds
+
+#### API Cost
+- Same parameters = **cached (free)**
+- Changed parameters = **USD 0.47 per request**
+
+#### Dieline SVG Icon Guidelines
+- Cut lines: `#000000` (pure black K100)
+- Crease lines: `#444444` (dark gray)
+- Panel fill: `#aaaaaa` (medium gray)
+- Stroke-width: proportional to viewBox size (`viewBox_width * 0.0015`, min 2)
+- Card background: white for maximum contrast
+
+### File Structure
+- `src/lib/easypackmaker-api.ts` -- API client (token generation, model request)
+- `src/app/api/dieline/route.ts` -- Next.js API route (PDF generation + Inkscape conversion)
+- `public/dielines/` -- SVG icon thumbnails for box type cards
+- `.env.local` -- `EPM_USERNAME`, `EPM_PASSWORD`
+
+### Environment Variables Required
+EPM_USERNAME=Guyhan76 EPM_PASSWORD=<API password from easypackmaker.com/profile>
