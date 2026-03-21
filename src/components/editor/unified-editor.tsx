@@ -3,6 +3,7 @@ import React, { useRef, useState, useCallback, useEffect, useMemo } from "react"
 import { createPortal } from "react-dom";
 import { detectPanels } from '@/lib/panel-map';
 import { DIELINE_TEMPLATES, BOX_CATEGORIES, getTemplatesByCategory, getCategoriesWithTemplates } from '@/lib/dieline-templates';
+import { generateDieline, BoxDimensions } from '@/lib/dieline-generator';
 import { useI18n } from "@/components/i18n-context";
 import { PACKIVE_SPOT_COLORS } from "@/data/packive-spot-colors";
 import Ruler, { RulerCorner, RULER_THICK } from "@/components/editor/ruler";
@@ -262,6 +263,80 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [showMarkPanel, setShowMarkPanel] = useState(false);
   const [showDielinePanel, setShowDielinePanel] = useState(false);
   const [boxCategoryFilter, setBoxCategoryFilter] = useState('all');
+  const [showDimModal, setShowDimModal] = useState(false);
+  const [selectedBoxCode, setSelectedBoxCode] = useState('');
+  const [selectedBoxName, setSelectedBoxName] = useState('');
+  const [dimLength, setDimLength] = useState(300);
+  const [dimWidth, setDimWidth] = useState(200);
+  const [dimHeight, setDimHeight] = useState(250);
+  const [fluteType, setFluteType] = useState('C');
+  const [thickness, setThickness] = useState(4.0);
+  const [materialColor, setMaterialColor] = useState('#C4A265');
+  const [materialCmyk, setMaterialCmyk] = useState<[number,number,number,number]>([0, 20, 50, 30]);
+  const [showCmykPicker, setShowCmykPicker] = useState(false);
+  const [pickerHue, setPickerHue] = useState(30);
+  const [pickerSat, setPickerSat] = useState(50);
+  const [pickerVal, setPickerVal] = useState(70);
+
+  const hsvToRgb = (h: number, s: number, v: number): [number, number, number] => {
+    const ss = s / 100, vv = v / 100;
+    const c = vv * ss, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = vv - c;
+    let r = 0, g = 0, b = 0;
+    if (h < 60)       { r = c; g = x; b = 0; }
+    else if (h < 120) { r = x; g = c; b = 0; }
+    else if (h < 180) { r = 0; g = c; b = x; }
+    else if (h < 240) { r = 0; g = x; b = c; }
+    else if (h < 300) { r = x; g = 0; b = c; }
+    else              { r = c; g = 0; b = x; }
+    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+  };
+
+  const applyHsv = (h: number, s: number, v: number) => {
+    setPickerHue(h); setPickerSat(s); setPickerVal(v);
+    const [R, G, B] = hsvToRgb(h, s, v);
+    const cmyk = srgbToCmyk(R, G, B);
+    setMaterialCmyk(cmyk);
+    setMaterialColor(iccCmykToHex(cmyk[0], cmyk[1], cmyk[2], cmyk[3]));
+  };
+  const [isEcma, setIsEcma] = useState(false);
+
+  // Flute type → thickness auto-mapping
+  const FLUTE_MAP: Record<string, { label: string; thickness: number; desc: string }> = {
+    A:  { label: "A flute",   thickness: 5.0, desc: "Large shipping boxes" },
+    B:  { label: "B flute",   thickness: 3.0, desc: "Small retail boxes" },
+    C:  { label: "C flute",   thickness: 4.0, desc: "Most common, general use" },
+    E:  { label: "E flute",   thickness: 1.5, desc: "Cosmetic & premium boxes" },
+    F:  { label: "F flute",   thickness: 1.0, desc: "Ultra-thin micro flute" },
+    G:  { label: "G flute",   thickness: 0.8, desc: "Finest micro flute" },
+    CA: { label: "CA double", thickness: 8.7, desc: "Heavy-duty double wall" },
+    BA: { label: "BA double", thickness: 7.8, desc: "Double wall, strong" },
+    CB: { label: "CB double", thickness: 6.8, desc: "Double wall, standard" },
+    BB: { label: "BB double", thickness: 5.8, desc: "Double wall, compact" },
+    EC: { label: "EC double", thickness: 5.3, desc: "Double wall, medium" },
+    EB: { label: "EB double", thickness: 4.4, desc: "Double wall, thin" },
+  };
+
+  const ECMA_THICKNESS = [
+    { label: "0.3 mm (SBS thin)",    value: 0.3 },
+    { label: "0.4 mm (SBS standard)", value: 0.4 },
+    { label: "0.5 mm (FBB light)",   value: 0.5 },
+    { label: "0.6 mm (FBB standard)", value: 0.6 },
+    { label: "0.8 mm (CRB heavy)",   value: 0.8 },
+  ];
+
+  const MATERIAL_COLORS: Array<{id:string; label:string; cmyk:[number,number,number,number]; hex:string}> = [
+    { id: "kraft",  label: "Kraft",  cmyk: [0, 20, 50, 30], hex: iccCmykToHex(0, 20, 50, 30) },
+    { id: "white",  label: "White",  cmyk: [0, 0, 0, 0],    hex: iccCmykToHex(0, 0, 0, 0) },
+    { id: "ivory",  label: "Ivory",  cmyk: [0, 2, 12, 0],   hex: iccCmykToHex(0, 2, 12, 0) },
+    { id: "gray",   label: "Gray",   cmyk: [0, 0, 0, 40],   hex: iccCmykToHex(0, 0, 0, 40) },
+    { id: "black",  label: "Black",  cmyk: [0, 0, 0, 100],  hex: iccCmykToHex(0, 0, 0, 100) },
+  ];
+
+  useEffect(() => {
+    if (!isEcma && FLUTE_MAP[fluteType]) {
+      setThickness(FLUTE_MAP[fluteType].thickness);
+    }
+  }, [fluteType, isEcma]);
   const [barcodeType, setBarcodeType] = useState<'qrcode'|'ean13'|'upca'|'code128'|'code39'|'itf14'>('qrcode');
   const [barcodeValue, setBarcodeValue] = useState("");
   const [tableRows, setTableRows] = useState(4);
@@ -2129,35 +2204,13 @@ allObjs.forEach((o: any, i: number) => {
                       const ecmaItems = templates.filter(t => { const cat = BOX_CATEGORIES.find(c => c.id === t.category); return cat && cat.standard === 'ECMA'; });
 
                       const renderCard = (t: typeof templates[0]) => (
-                        <button key={t.id} onClick={async () => {
-                          const c = fcRef.current; const F = fabricModRef.current;
-                          if (!c || !F) return;
-                          try {
-                            const resp = await fetch(t.svgPath);
-                            const svgStr = await resp.text();
-                            c.getObjects().filter((o: any) => o._isDieLine || o.name === '__dieline_upload__').forEach((o: any) => c.remove(o));
-                            const result = await F.loadSVGFromString(svgStr);
-                            const objs = result.objects.filter(Boolean);
-                            if (objs.length === 0) { alert('Failed to parse SVG'); return; }
-                            const group = new F.Group(objs);
-                            const origW = group.width || 800;
-                            const origH = group.height || 600;
-                            const cW = c.width || 1074;
-                            const cH = c.height || 576;
-                            const fitScale = Math.min(cW * 0.85 / origW, cH * 0.85 / origH);
-                            group.set({
-                              scaleX: fitScale, scaleY: fitScale,
-                              originX: 'center', originY: 'center',
-                              left: cW / 2, top: cH / 2,
-                              _isDieLine: true, _isGuideLayer: true,
-                              selectable: false, evented: false,
-                              name: '__dieline_upload__',
-                            });
-                            c.add(group);
-                            c.requestRenderAll();
-                            setShowDielinePanel(false);
-                            setDielineFileName(t.code);
-                          } catch(err) { console.error('Template load error:', err); alert('Failed to load template'); }
+                        <button key={t.id} onClick={() => {
+                          setSelectedBoxCode(t.code);
+                      setSelectedBoxName(t.name);
+                      setIsEcma(t.code.startsWith('ECMA'));
+                      if (t.code.startsWith('ECMA')) { setThickness(0.4); } else { setThickness(FLUTE_MAP[fluteType]?.thickness ?? 4.0); }
+                          setShowDimModal(true);
+                          setShowDielinePanel(false);
                         }}
                         className="group flex flex-col items-center p-3 rounded-xl border border-gray-100 hover:border-blue-400 hover:shadow-lg transition-all duration-200 bg-white hover:bg-gradient-to-b hover:from-blue-50/40 hover:to-white cursor-pointer">
                           {/* SVG preview */}
@@ -2207,6 +2260,322 @@ allObjs.forEach((o: any, i: number) => {
                     <p className="text-[10px] text-gray-400 text-center">
                       Custom dieline? Use <strong className="text-gray-500">Upload Dieline</strong> to import EPS / SVG
                     </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Dimension Input Modal */}
+              {showDimModal && (
+                <div className="fixed inset-0 bg-black/40 z-[100] flex items-center justify-center" onClick={() => setShowDimModal(false)}>
+                  <div className="bg-white rounded-2xl shadow-2xl w-[480px] max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                    {/* Header */}
+                    <div className="px-6 pt-5 pb-3 border-b border-gray-100">
+                      <h3 className="text-lg font-bold text-gray-900">{selectedBoxCode}</h3>
+                      <p className="text-sm text-gray-400 mt-0.5">{selectedBoxName}</p>
+                    </div>
+
+                    <div className="px-6 py-4 space-y-5">
+                      {/* === Section 1: Dimensions === */}
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className="w-5 h-5 rounded bg-blue-100 flex items-center justify-center">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                          </div>
+                          <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Dimensions (mm)</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-[10px] font-medium text-gray-400 mb-1 uppercase">Length</label>
+                            <input type="number" value={dimLength} onChange={(e) => setDimLength(Number(e.target.value))}
+                              min={10} max={2000} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-center text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition" />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-medium text-gray-400 mb-1 uppercase">Width</label>
+                            <input type="number" value={dimWidth} onChange={(e) => setDimWidth(Number(e.target.value))}
+                              min={10} max={2000} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-center text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition" />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-medium text-gray-400 mb-1 uppercase">{isEcma ? 'Depth' : 'Height'}</label>
+                            <input type="number" value={dimHeight} onChange={(e) => setDimHeight(Number(e.target.value))}
+                              min={10} max={2000} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-center text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* === Section 2: Flute / Thickness === */}
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className="w-5 h-5 rounded bg-amber-100 flex items-center justify-center">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.5"><path d="M4 19h16M4 15h16M4 11h16M4 7h16"/></svg>
+                          </div>
+                          <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                            {isEcma ? 'Board Thickness' : 'Flute Type & Thickness'}
+                          </span>
+                        </div>
+
+                        {!isEcma ? (
+                          <div className="space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              {Object.entries(FLUTE_MAP).map(([key, val]) => (
+                                <button key={key} onClick={() => setFluteType(key)}
+                                  className={`text-left px-3 py-2 rounded-lg border transition text-xs ${
+                                    fluteType === key
+                                      ? 'border-amber-500 bg-amber-50 ring-1 ring-amber-500'
+                                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                                  }`}>
+                                  <div className="font-semibold text-gray-800">{val.label}</div>
+                                  <div className="text-gray-400 mt-0.5">{val.thickness} mm · {val.desc}</div>
+                                </button>
+                              ))}
+                            </div>
+                            <div className="flex items-center gap-2 mt-2 px-1">
+                              <span className="text-xs text-gray-500">Thickness:</span>
+                              <span className="text-sm font-bold text-amber-700">{thickness} mm</span>
+                              <span className="text-[10px] text-gray-400">(auto from flute type)</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="grid grid-cols-1 gap-1.5">
+                              {ECMA_THICKNESS.map((t) => (
+                                <button key={t.value} onClick={() => setThickness(t.value)}
+                                  className={`text-left px-3 py-2 rounded-lg border transition text-xs ${
+                                    thickness === t.value
+                                      ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500'
+                                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                                  }`}>
+                                  <span className="font-semibold text-gray-800">{t.label}</span>
+                                </button>
+                              ))}
+                            </div>
+                            <div className="flex items-center gap-2 mt-2 px-1">
+                              <span className="text-xs text-gray-500">Thickness:</span>
+                              <span className="text-sm font-bold text-blue-700">{thickness} mm</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* === Section 3: Material Color === */}
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className="w-5 h-5 rounded bg-purple-100 flex items-center justify-center">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+                          </div>
+                          <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Material Color (CMYK)</span>
+                        </div>
+
+                        {/* Preset colors */}
+                        <div className="flex items-center gap-3">
+                          {MATERIAL_COLORS.map((m) => (
+                            <button key={m.id} onClick={() => {
+                              setMaterialColor(m.hex);
+                              setMaterialCmyk(m.cmyk);
+                              setShowCmykPicker(false);
+                            }}
+                              className="group flex flex-col items-center gap-1 transition"
+                              title={`${m.label} — C:${m.cmyk[0]} M:${m.cmyk[1]} Y:${m.cmyk[2]} K:${m.cmyk[3]}`}>
+                              <div className={`w-9 h-9 rounded-full border-2 transition ${
+                                materialColor === m.hex && !showCmykPicker
+                                  ? 'border-blue-500 ring-2 ring-blue-200 scale-110'
+                                  : 'border-gray-200 hover:border-gray-400'
+                              }`} style={{ backgroundColor: m.hex }} />
+                              <span className={`text-[9px] font-medium ${
+                                materialColor === m.hex && !showCmykPicker ? 'text-blue-600' : 'text-gray-400'
+                              }`}>{m.label}</span>
+                            </button>
+                          ))}
+
+                          {/* Custom CMYK button */}
+                          <button onClick={() => setShowCmykPicker(!showCmykPicker)}
+                            className="flex flex-col items-center gap-1 transition">
+                            <div className={`w-9 h-9 rounded-full border-2 flex items-center justify-center transition ${
+                              showCmykPicker
+                                ? 'border-blue-500 ring-2 ring-blue-200 scale-110'
+                                : 'border-gray-200 hover:border-gray-400'
+                            }`} style={{ backgroundColor: showCmykPicker ? materialColor : '#fff' }}>
+                              {!showCmykPicker && (
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+                              )}
+                            </div>
+                            <span className={`text-[9px] font-medium ${showCmykPicker ? 'text-blue-600' : 'text-gray-400'}`}>Custom</span>
+                          </button>
+                        </div>
+
+                        {/* CMYK value display */}
+                        <div className="mt-2 px-1 flex items-center gap-3 text-[10px]">
+                          <div className="flex items-center gap-1">
+                            <div className="w-3 h-3 rounded-full border border-gray-300" style={{ backgroundColor: materialColor }} />
+                            <span className="text-gray-500 font-mono">
+                              C:{materialCmyk[0]} M:{materialCmyk[1]} Y:{materialCmyk[2]} K:{materialCmyk[3]}
+                            </span>
+                          </div>
+                          <span className="text-gray-300">|</span>
+                          <span className="text-gray-400 font-mono">{materialColor.toUpperCase()}</span>
+                        </div>
+
+                        {/* CMYK Visual Color Picker */}
+                        {showCmykPicker && (
+                          <div className="mt-3 bg-gray-50 rounded-xl overflow-hidden">
+                            <div className="p-3 space-y-2">
+                              {/* Saturation-Value 2D Panel */}
+                              <div className="relative w-full h-40 rounded-lg overflow-hidden cursor-crosshair select-none"
+                                style={{
+                                  background: `hsl(${pickerHue}, 100%, 50%)`
+                                }}
+                                onMouseDown={(e) => {
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  const pick = (cx: number, cy: number) => {
+                                    const s = Math.max(0, Math.min(100, ((cx - rect.left) / rect.width) * 100));
+                                    const v = Math.max(0, Math.min(100, (1 - (cy - rect.top) / rect.height) * 100));
+                                    applyHsv(pickerHue, Math.round(s), Math.round(v));
+                                  };
+                                  pick(e.clientX, e.clientY);
+                                  const onMove = (ev: MouseEvent) => { ev.preventDefault(); pick(ev.clientX, ev.clientY); };
+                                  const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+                                  document.addEventListener('mousemove', onMove);
+                                  document.addEventListener('mouseup', onUp);
+                                }}
+                              >
+                                {/* White overlay left→right */}
+                                <div className="absolute inset-0" style={{ background: 'linear-gradient(to right, #ffffff, transparent)' }} />
+                                {/* Black overlay top→bottom */}
+                                <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, transparent, #000000)' }} />
+                                {/* Cursor */}
+                                <div className="absolute pointer-events-none"
+                                  style={{
+                                    left: `calc(${pickerSat}% - 7px)`,
+                                    top: `calc(${100 - pickerVal}% - 7px)`,
+                                    width: '14px', height: '14px',
+                                    borderRadius: '50%',
+                                    border: '2px solid white',
+                                    boxShadow: '0 0 0 1px rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.3)'
+                                  }} />
+                              </div>
+
+                              {/* Hue Bar */}
+                              <div className="relative w-full h-4 rounded-full cursor-pointer select-none"
+                                style={{ background: 'linear-gradient(to right, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%)' }}
+                                onMouseDown={(e) => {
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  const pickH = (cx: number) => {
+                                    const h = Math.max(0, Math.min(360, ((cx - rect.left) / rect.width) * 360));
+                                    applyHsv(Math.round(h), pickerSat, pickerVal);
+                                  };
+                                  pickH(e.clientX);
+                                  const onMove = (ev: MouseEvent) => { ev.preventDefault(); pickH(ev.clientX); };
+                                  const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+                                  document.addEventListener('mousemove', onMove);
+                                  document.addEventListener('mouseup', onUp);
+                                }}
+                              >
+                                <div className="absolute top-1/2 -translate-y-1/2 pointer-events-none"
+                                  style={{
+                                    left: `calc(${(pickerHue / 360) * 100}% - 7px)`,
+                                    width: '14px', height: '14px',
+                                    borderRadius: '50%',
+                                    border: '2px solid white',
+                                    boxShadow: '0 0 0 1px rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.3)',
+                                    backgroundColor: `hsl(${pickerHue}, 100%, 50%)`
+                                  }} />
+                              </div>
+                            </div>
+
+                            {/* CMYK Fine-tune Sliders */}
+                            <div className="px-3 pb-2 pt-1 space-y-1.5">
+                              <div className="text-[9px] font-medium text-gray-400 uppercase tracking-wide">Fine-tune CMYK</div>
+                              {(['C','M','Y','K'] as const).map((ch, idx) => {
+                                const val = materialCmyk[idx];
+                                const trackColors: Record<string, string> = { C: '#00BCD4', M: '#E91E63', Y: '#FDD835', K: '#424242' };
+                                return (
+                                  <div key={ch} className="flex items-center gap-2">
+                                    <span className="w-4 text-[10px] font-bold" style={{ color: trackColors[ch] }}>{ch}</span>
+                                    <input type="range" min={0} max={100} value={val}
+                                      className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer"
+                                      style={{
+                                        background: `linear-gradient(to right, ${trackColors[ch]} 0%, ${trackColors[ch]} ${val}%, #e5e7eb ${val}%, #e5e7eb 100%)`,
+                                        accentColor: trackColors[ch]
+                                      }}
+                                      onChange={(e) => {
+                                        const newCmyk: [number,number,number,number] = [...materialCmyk] as [number,number,number,number];
+                                        newCmyk[idx] = Number(e.target.value);
+                                        setMaterialCmyk(newCmyk);
+                                        setMaterialColor(iccCmykToHex(newCmyk[0], newCmyk[1], newCmyk[2], newCmyk[3]));
+                                      }} />
+                                    <input type="number" min={0} max={100} value={val}
+                                      className="w-11 text-center text-[10px] font-mono border border-gray-200 rounded px-1 py-0.5"
+                                      onChange={(e) => {
+                                        const v = Math.min(100, Math.max(0, Number(e.target.value)));
+                                        const newCmyk: [number,number,number,number] = [...materialCmyk] as [number,number,number,number];
+                                        newCmyk[idx] = v;
+                                        setMaterialCmyk(newCmyk);
+                                        setMaterialColor(iccCmykToHex(newCmyk[0], newCmyk[1], newCmyk[2], newCmyk[3]));
+                                      }} />
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Preview footer */}
+                            <div className="px-3 pb-3 flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-lg border border-gray-200 shadow-inner" style={{ backgroundColor: materialColor }} />
+                              <div className="text-[10px]">
+                                <div className="font-mono font-semibold text-gray-700">C:{materialCmyk[0]} M:{materialCmyk[1]} Y:{materialCmyk[2]} K:{materialCmyk[3]}</div>
+                                <div className="font-mono text-gray-400">{materialColor.toUpperCase()}</div>
+                                <div className="text-gray-300 text-[8px]">FOGRA39 ICC</div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* === Summary Bar === */}
+                      <div className="bg-gray-50 rounded-xl px-4 py-3">
+                        <div className="flex items-center justify-between text-xs text-gray-500">
+                          <span>{dimLength} × {dimWidth} × {dimHeight} mm</span>
+                          <span className="text-gray-300">|</span>
+                          <span>{isEcma ? `Board ${thickness}mm` : `${fluteType} flute · ${thickness}mm`}</span>
+                          <span className="text-gray-300">|</span>
+                          <div className="flex items-center gap-1">
+                            <div className="w-3 h-3 rounded-full border border-gray-300" style={{ backgroundColor: materialColor }} />
+                            <span className="font-mono">C:{materialCmyk[0]} M:{materialCmyk[1]} Y:{materialCmyk[2]} K:{materialCmyk[3]}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Footer buttons */}
+                    <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+                      <button onClick={() => setShowDimModal(false)}
+                        className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-500 hover:bg-gray-50 transition">
+                        Cancel
+                      </button>
+                      <button
+                        onClick={async () => {
+                          try {
+                            const result = generateDieline(selectedBoxCode, { length: dimLength, width: dimWidth, height: dimHeight });
+                            if (!result) { alert('This box type is not yet supported for parametric generation.\nAPI integration coming soon!'); return; }
+                            const c = fabricCanvasRef.current; if (!c) return;
+                            const existing = c.getObjects().filter((o: any) => o._isDieline);
+                            existing.forEach((o: any) => c.remove(o));
+                            const { objects: objs, options: opts } = await (window as any).fabric.loadSVGFromString(result.svg);
+                            if (objs.length === 0) { alert('Failed to generate dieline'); return; }
+                            const group = new (window as any).fabric.Group(objs, { originX: 'center', originY: 'center' });
+                            (group as any)._isDieline = true;
+                            const origW = group.width ?? result.viewBoxW;
+                            const origH = group.height ?? result.viewBoxH;
+                            const cW = c.getWidth(); const cH = c.getHeight();
+                            const fitScale = Math.min(cW * 0.85 / origW, cH * 0.85 / origH);
+                            group.set({ scaleX: fitScale, scaleY: fitScale, left: cW / 2, top: cH / 2, selectable: false, evented: false });
+                            c.add(group);
+                            c.requestRenderAll();
+                            setShowDimModal(false);
+                          } catch(err) { console.error('Generate error:', err); alert('Failed to generate dieline'); }
+                        }}
+                        className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition shadow-md shadow-blue-200">
+                        Generate Dieline
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
