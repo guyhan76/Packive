@@ -2,6 +2,7 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { detectPanels } from '@/lib/panel-map';
+import { DIELINE_TEMPLATES, BOX_CATEGORIES, getTemplatesByCategory, getCategoriesWithTemplates } from '@/lib/dieline-templates';
 import { useI18n } from "@/components/i18n-context";
 import { PACKIVE_SPOT_COLORS } from "@/data/packive-spot-colors";
 import Ruler, { RulerCorner, RULER_THICK } from "@/components/editor/ruler";
@@ -259,6 +260,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [showBarcodePanel, setShowBarcodePanel] = useState(false);
   const [showTablePanel, setShowTablePanel] = useState(false);
   const [showMarkPanel, setShowMarkPanel] = useState(false);
+  const [showDielinePanel, setShowDielinePanel] = useState(false);
+  const [boxCategoryFilter, setBoxCategoryFilter] = useState('all');
   const [barcodeType, setBarcodeType] = useState<'qrcode'|'ean13'|'upca'|'code128'|'code39'|'itf14'>('qrcode');
   const [barcodeValue, setBarcodeValue] = useState("");
   const [tableRows, setTableRows] = useState(4);
@@ -1799,6 +1802,7 @@ allObjs.forEach((o: any, i: number) => {
             { icon: "⊞", label: "Table", action: () => setShowTablePanel(p => !p) },
             { icon: "▮▯", label: "Barcode", action: () => setShowBarcodePanel(p => !p) },
             { icon: "◎", label: "Marks", action: () => setShowMarkPanel(p => !p) },
+            { icon: "📦", label: "Box", action: () => setShowDielinePanel(p => !p) },
           ].map(btn => (
             <button key={btn.label} onClick={btn.action} title={btn.label}
               className="w-11 h-11 flex flex-col items-center justify-center rounded-lg text-xs transition-all hover:bg-white hover:shadow-sm text-gray-500 hover:text-gray-800">
@@ -2074,6 +2078,138 @@ allObjs.forEach((o: any, i: number) => {
               </div>
             </div>
           )}
+
+              {showDielinePanel && (
+                <div className="absolute left-16 top-0 w-[400px] bg-white border border-gray-200 rounded-xl shadow-2xl z-50 max-h-[90vh] flex flex-col">
+                  {/* Header */}
+                  <div className="px-5 pt-4 pb-3 border-b border-gray-100">
+                    <div className="flex justify-between items-center mb-3">
+                      <div>
+                        <h3 className="text-base font-bold text-gray-900 tracking-tight">Box Structure</h3>
+                        <p className="text-xs text-gray-400 mt-0.5">Choose a box type, then enter dimensions</p>
+                      </div>
+                      <button onClick={() => setShowDielinePanel(false)} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 1l12 12M13 1L1 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                      </button>
+                    </div>
+                    {/* Clean dropdown */}
+                    <select
+                      value={boxCategoryFilter}
+                      onChange={(e) => setBoxCategoryFilter(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer appearance-none"
+                      style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' stroke='%236B7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}>
+                      <option value="all">All Types</option>
+                      <optgroup label="FEFCO">
+                        {BOX_CATEGORIES.filter(c => c.standard === 'FEFCO').map(cat => (
+                          <option key={cat.id} value={cat.id}>{cat.label} · {cat.description}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="ECMA">
+                        {BOX_CATEGORIES.filter(c => c.standard === 'ECMA').map(cat => (
+                          <option key={cat.id} value={cat.id}>{cat.label} · {cat.description}</option>
+                        ))}
+                      </optgroup>
+                    </select>
+                  </div>
+
+                  {/* Template grid */}
+                  <div className="p-4 overflow-y-auto flex-1">
+                    {(() => {
+                      const templates = getTemplatesByCategory(boxCategoryFilter);
+                      if (templates.length === 0) {
+                        return (
+                          <div className="text-center py-16 text-gray-400">
+                            <div className="text-4xl mb-3 opacity-30">📦</div>
+                            <p className="text-sm font-medium">No templates yet</p>
+                            <p className="text-xs mt-1 text-gray-300">Coming soon</p>
+                          </div>
+                        );
+                      }
+                      const fefcoItems = templates.filter(t => { const cat = BOX_CATEGORIES.find(c => c.id === t.category); return cat && cat.standard === 'FEFCO'; });
+                      const ecmaItems = templates.filter(t => { const cat = BOX_CATEGORIES.find(c => c.id === t.category); return cat && cat.standard === 'ECMA'; });
+
+                      const renderCard = (t: typeof templates[0]) => (
+                        <button key={t.id} onClick={async () => {
+                          const c = fcRef.current; const F = fabricModRef.current;
+                          if (!c || !F) return;
+                          try {
+                            const resp = await fetch(t.svgPath);
+                            const svgStr = await resp.text();
+                            c.getObjects().filter((o: any) => o._isDieLine || o.name === '__dieline_upload__').forEach((o: any) => c.remove(o));
+                            const result = await F.loadSVGFromString(svgStr);
+                            const objs = result.objects.filter(Boolean);
+                            if (objs.length === 0) { alert('Failed to parse SVG'); return; }
+                            const group = new F.Group(objs);
+                            const origW = group.width || 800;
+                            const origH = group.height || 600;
+                            const cW = c.width || 1074;
+                            const cH = c.height || 576;
+                            const fitScale = Math.min(cW * 0.85 / origW, cH * 0.85 / origH);
+                            group.set({
+                              scaleX: fitScale, scaleY: fitScale,
+                              originX: 'center', originY: 'center',
+                              left: cW / 2, top: cH / 2,
+                              _isDieLine: true, _isGuideLayer: true,
+                              selectable: false, evented: false,
+                              name: '__dieline_upload__',
+                            });
+                            c.add(group);
+                            c.requestRenderAll();
+                            setShowDielinePanel(false);
+                            setDielineFileName(t.code);
+                          } catch(err) { console.error('Template load error:', err); alert('Failed to load template'); }
+                        }}
+                        className="group flex flex-col items-center p-3 rounded-xl border border-gray-100 hover:border-blue-400 hover:shadow-lg transition-all duration-200 bg-white hover:bg-gradient-to-b hover:from-blue-50/40 hover:to-white cursor-pointer">
+                          {/* SVG preview */}
+                          <div className="w-full aspect-[5/3] flex items-center justify-center mb-2 rounded-lg bg-gray-50/80 group-hover:bg-blue-50/60 transition-colors overflow-hidden">
+                            <img src={t.svgPath} alt={t.code} className="w-[85%] h-[85%] object-contain opacity-60 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                          <div className="w-full text-center">
+                            <div className="text-xs font-bold text-gray-800 group-hover:text-blue-700 leading-tight">{t.code}</div>
+                            <div className="text-[10px] text-gray-400 mt-0.5">{t.name}</div>
+                          </div>
+                        </button>
+                      );
+
+                      return (
+                        <div className="space-y-4">
+                          {fefcoItems.length > 0 && (
+                            <div>
+                              {boxCategoryFilter === 'all' && ecmaItems.length > 0 && (
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="h-px flex-1 bg-gradient-to-r from-transparent via-blue-200 to-transparent"></div>
+                                  <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">FEFCO</span>
+                                  <div className="h-px flex-1 bg-gradient-to-r from-transparent via-blue-200 to-transparent"></div>
+                                </div>
+                              )}
+                              <div className="grid grid-cols-2 gap-3">{fefcoItems.map(renderCard)}</div>
+                            </div>
+                          )}
+                          {ecmaItems.length > 0 && (
+                            <div>
+                              {boxCategoryFilter === 'all' && fefcoItems.length > 0 && (
+                                <div className="flex items-center gap-2 mb-3 mt-1">
+                                  <div className="h-px flex-1 bg-gradient-to-r from-transparent via-pink-200 to-transparent"></div>
+                                  <span className="text-[10px] font-bold text-pink-400 uppercase tracking-widest">ECMA</span>
+                                  <div className="h-px flex-1 bg-gradient-to-r from-transparent via-pink-200 to-transparent"></div>
+                                </div>
+                              )}
+                              <div className="grid grid-cols-2 gap-3">{ecmaItems.map(renderCard)}</div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Footer */}
+                  <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/50 rounded-b-xl">
+                    <p className="text-[10px] text-gray-400 text-center">
+                      Custom dieline? Use <strong className="text-gray-500">Upload Dieline</strong> to import EPS / SVG
+                    </p>
+                  </div>
+                </div>
+              )}
 
 
 
