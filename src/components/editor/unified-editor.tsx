@@ -1037,7 +1037,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); undo(); }
       else if ((e.ctrlKey || e.metaKey) && e.key === "y") { e.preventDefault(); redo(); }
       else if ((e.ctrlKey||e.metaKey) && e.key==="s") { e.preventDefault(); fileSave(); }
-      else if ((e.ctrlKey||e.metaKey) && e.key==="c") {
+      else if ((e.ctrlKey||e.metaKey) && e.key==="c") { console.log("[KEY] Ctrl+C → copy, canvas:", !!fcRef.current, "active:", fcRef.current?.getActiveObject()?.type);
         e.preventDefault();
         const cv=fcRef.current; if(!cv) return;
         const o=cv.getActiveObject(); if(!o) return;
@@ -2532,7 +2532,7 @@ allObjs.forEach((o: any, i: number) => {
                 <button onClick={async () => {
                   const cv = fcRef.current; if (!cv) return;
                   if (showBleedGuides) { removeBleedGuides(cv); setShowBleedGuides(false); }
-                  else { await addBleedGuides(cv, { scale: scaleRef.current, canvasWidth: cv.getWidth(), canvasHeight: cv.getHeight() }); setShowBleedGuides(true); }
+                    else { alert("Bleed guide will be available after Panel Map (Phase 4).\n\nPhase 4 features:\n- Bleed per panel (3mm)\n- Glue tab offset (5mm)\n- Panel-specific bleed paths"); }
                 }} className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${showBleedGuides ? "bg-red-100 text-red-700" : "text-gray-400 hover:text-gray-600"}`}>
                   {showBleedGuides ? "Bleed ON" : "Bleed OFF"}
                 </button>
@@ -3931,46 +3931,91 @@ allObjs.forEach((o: any, i: number) => {
         </div>
       )}
 
-      {/* ═══ Pre-flight Modal ═══ */}
-      {showPreflight && preflightResult && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowPreflight(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-96 max-h-[70vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-gray-800 mb-1">Pre-flight Check</h3>
-            <div className="flex gap-3 mb-4 text-xs">
-              <span className={`px-2 py-0.5 rounded ${preflightResult.summary.errors > 0 ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
-                {preflightResult.summary.errors > 0 ? `${preflightResult.summary.errors} Errors` : "No Errors"}
-              </span>
-              <span className="px-2 py-0.5 rounded bg-yellow-100 text-yellow-700">{preflightResult.summary.warnings} Warnings</span>
-              <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700">{preflightResult.summary.info} Info</span>
-            </div>
-            {preflightResult.issues.length === 0 ? (
-              <div className="text-center py-8 text-green-600">
-                <div className="text-3xl mb-2">✓</div>
-                <div className="text-sm font-medium">All checks passed!</div>
-                <div className="text-xs text-gray-400 mt-1">Your design is print-ready</div>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {preflightResult.issues.map((issue, idx) => (
-                  <div key={idx} className={`p-3 rounded-lg text-xs ${
-                    issue.severity === "error" ? "bg-red-50 border border-red-200" :
-                    issue.severity === "warning" ? "bg-yellow-50 border border-yellow-200" :
-                    "bg-blue-50 border border-blue-200"
-                  }`}>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm">{issue.severity === "error" ? "🔴" : issue.severity === "warning" ? "🟡" : "🔵"}</span>
-                      <span className="font-medium text-gray-700">{issue.code}</span>
-                    </div>
-                    <div className="text-gray-600 ml-6">{issue.message}</div>
-                    {issue.details && <div className="text-gray-400 ml-6 mt-0.5">{issue.details}</div>}
-                  </div>
-                ))}
-              </div>
-            )}
-            <button onClick={() => setShowPreflight(false)} className="mt-4 w-full py-2 text-sm text-gray-500 hover:text-gray-700">Close</button>
-          </div>
-        </div>
-      )}
+   {/* ═══ Pre-flight Modal ═══ */}
+   {showPreflight && preflightResult && (
+   <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200" onClick={() => setShowPreflight(false)}>
+     <div className="bg-white rounded-2xl shadow-2xl w-[420px] max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+       
+       {/* Header */}
+       <div className="px-6 pt-6 pb-4">
+         <div className="flex items-center justify-between">
+           <div className="flex items-center gap-3">
+             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${preflightResult.summary.errors > 0 ? 'bg-red-50' : 'bg-emerald-50'}`}>
+               <span className="text-lg">{preflightResult.summary.errors > 0 ? '⚠' : '✓'}</span>
+             </div>
+             <div>
+               <h3 className="text-[15px] font-semibold text-gray-900">Pre-flight Check</h3>
+               <p className="text-xs text-gray-400 mt-0.5">{preflightResult.issues.length === 0 ? 'Ready to print' : `${preflightResult.issues.length} item${preflightResult.issues.length > 1 ? 's' : ''} found`}</p>
+             </div>
+           </div>
+           <button onClick={() => setShowPreflight(false)} className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center transition-colors">
+             <span className="text-gray-400 text-sm">✕</span>
+           </button>
+         </div>
+
+         {/* Status pills */}
+         <div className="flex gap-2 mt-4">
+           <div className={`px-2.5 py-1 rounded-md text-[11px] font-medium ${preflightResult.summary.errors > 0 ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'}`}>
+             {preflightResult.summary.errors > 0 ? `${preflightResult.summary.errors} Error${preflightResult.summary.errors > 1 ? 's' : ''}` : 'Passed'}
+           </div>
+           {preflightResult.summary.warnings > 0 && (
+             <div className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-gray-100 text-gray-500">
+               {preflightResult.summary.warnings} Warning{preflightResult.summary.warnings > 1 ? 's' : ''}
+             </div>
+           )}
+           {preflightResult.summary.info > 0 && (
+             <div className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-gray-100 text-gray-500">
+               {preflightResult.summary.info} Note{preflightResult.summary.info > 1 ? 's' : ''}
+             </div>
+           )}
+         </div>
+       </div>
+
+       {/* Divider */}
+       <div className="h-px bg-gray-100 mx-6" />
+
+       {/* Issues list */}
+       <div className="px-6 py-4 max-h-[360px] overflow-y-auto">
+         {preflightResult.issues.length === 0 ? (
+           <div className="text-center py-8">
+             <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-3">
+               <span className="text-2xl">✓</span>
+             </div>
+             <p className="text-sm font-medium text-gray-800">All checks passed</p>
+             <p className="text-xs text-gray-400 mt-1">Your design is ready for print</p>
+           </div>
+         ) : (
+           <div className="space-y-2.5">
+             {preflightResult.issues.map((issue: any, idx: number) => (
+               <div key={idx} className="rounded-xl px-4 py-3 bg-white border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+                 <div className="flex items-start gap-3">
+                   <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${
+                     issue.severity === 'error' ? 'bg-red-400' :
+                     issue.severity === 'warning' ? 'bg-amber-400' :
+                     'bg-blue-400'
+                   }`} />
+                   <div className="flex-1 min-w-0">
+                     <p className="text-[11px] font-medium text-gray-400 tracking-wide uppercase">{issue.code.replace(/_/g, ' ')}</p>
+                     <p className="text-[13px] text-gray-700 mt-0.5 leading-snug">{issue.message}</p>
+                     {issue.details && <p className="text-xs text-gray-400 mt-1">{issue.details}</p>}
+                   </div>
+                 </div>
+               </div>
+             ))}
+           </div>
+         )}
+       </div>
+
+       {/* Footer */}
+       <div className="px-6 py-4 border-t border-gray-100">
+         <button onClick={() => setShowPreflight(false)} className="w-full py-2.5 rounded-xl bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 transition-colors">
+           Done
+         </button>
+       </div>
+
+     </div>
+   </div>
+   )}
 
       {/* ═══ Shortcuts Modal ═══ */}
       {showShortcuts && (

@@ -934,7 +934,7 @@ Packive = **"패키지 구조 인식 + CMYK 네이티브 + 인쇄 생산 특화 
 |---|------|------|------|
 | 6-1 | CMYK Soft Proof 미리보기 | RGB→CMYK→RGB 역변환 오버레이 | 📋 대기 |
 | 6-2 | 특수 인쇄 레이어 | 엠보싱/박/실크 레이어 분리 | 📋 대기 |
-| 6-3 | Bleed Guide (재단 여백) | 3~5mm 블리드 가이드 + AI 스마트 블리드 자동 채우기 | 📋 대기 |
+| 6-3 | Bleed Guide (Phase 4 이관) (재단 여백) | 3~5mm 블리드 가이드 + AI 스마트 블리드 자동 채우기 | 📋 대기 |
 | 6-4 | 별색 Separation PDF | 별색 분판 PDF 내보내기 | 📋 장기 |
 | 6-5 | 2순위 박스 5종 Panel Map | 디스플레이, 파우치, 필로우, 육각형, 서랍형 | 📋 대기 |
 | 6-6 | 3D 목업 미리보기 | 칼선 전개도 → 3D 접힌 상태 미리보기 | 📋 장기 |
@@ -1141,3 +1141,23 @@ EPM_USERNAME=Guyhan76 EPM_PASSWORD=<API password from easypackmaker.com/profile>
 - [ ] Does this trigger word-of-mouth? (shareable output?)
 - [ ] Can we deliver same value more simply without this feature?
 - [ ] Did we automate everything automatable?
+
+
+---
+
+## Bleed Guide 실무 규칙 (2026-03-22)
+
+### 인쇄 Bleed 표준
+- **일반 면**: 칼선(trim) 바깥 **3mm** 확장
+- **Glue 탭**: bleed 제외, glue 탭 시작점에서 **5mm** offset
+- **표시**: 초록색 실선 (Pacdora 표준, #22c55e)
+- **Safe Zone**: 표시하지 않음 (비전문가 사용자 혼란 방지)
+- **Trim Line**: 칼선 자체가 trim line이므로 별도 표시 불필요
+
+### 구현 단계
+- **Phase 0 (현재)**: 전체 칼선 bounding box 기준 3mm bleed rect
+- **Phase 4 이후**: Panel Map으로 면별 bleed path 생성, glue 탭 5mm offset 적용
+
+### 참고
+- Pacdora: 초록 실선 bleed, glue 탭 제외, safe zone 미표시
+- 실무 인쇄: bleed 영역까지 디자인 확장 → 절단 후 흰 테두리 방지
