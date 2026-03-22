@@ -872,60 +872,33 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
 
       // ── Canvas auto-resize on window/wrapper size change ──
+      let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+      let skipResize = false;
       const resizeObserver = new ResizeObserver(() => {
-        if (!fcRef.current || !wrapperRef.current) return;
-        const c = fcRef.current;
-        const wrapper = wrapperRef.current;
-        const rPad = showRuler ? RULER_THICK : 0;
-        const newAvailW = wrapper.clientWidth - rPad - 8;
-        const newAvailH = wrapper.clientHeight - rPad - 8;
-        
-        if (newAvailW < 100 || newAvailH < 100) return;
-        
-        // 칼선이 없는 빈 캔버스
-        const hasDieline = c.getObjects().some((o: any) => o._isDieLine || o._isDieline);
-        if (!hasDieline) {
-          const newW = Math.max(newAvailW - 12, 400);
-          const newH = Math.max(newAvailH - 12, 300);
-          if (Math.abs(c.getWidth() - newW) > 5 || Math.abs(c.getHeight() - newH) > 5) {
-            c.setDimensions({ width: newW, height: newH });
-            c.requestRenderAll();
-          }
-        } else {
-          // 칼선이 있는 경우 - 비율 유지하며 리사이즈
-          const dieObj = c.getObjects().find((o: any) => o._isDieLine || o._isDieline) as any;
-          if (!dieObj) return;
-          const group = dieObj;
-          const mmW = (group.width || 100) * 0.264583;
-          const mmH = (group.height || 100) * 0.264583;
-          const PAD_MM = 20;
-          const netW = mmW + PAD_MM * 2;
-          const netH = mmH + PAD_MM * 2;
-          const newPxPerMm = Math.max(Math.min(newAvailW / netW, newAvailH / netH), 2.0);
-          const newCanvasW = Math.min(Math.round(netW * newPxPerMm), newAvailW);
-          const newCanvasH = Math.min(Math.round(netH * newPxPerMm), newAvailH);
-          
-          if (Math.abs(c.getWidth() - newCanvasW) > 5 || Math.abs(c.getHeight() - newCanvasH) > 5) {
-            c.setDimensions({ width: newCanvasW, height: newCanvasH });
-            // 칼선 위치 재조정
-            const sx = newPxPerMm / scaleRef.current;
-            if (Math.abs(sx - 1) > 0.01) {
-              c.getObjects().forEach((obj: any) => {
-                obj.set({
-                  left: (obj.left || 0) * sx,
-                  top: (obj.top || 0) * sx,
-                  scaleX: (obj.scaleX || 1) * sx,
-                  scaleY: (obj.scaleY || 1) * sx,
-                });
-                obj.setCoords();
-              });
-              scaleRef.current = newPxPerMm;
-              scaleXRef.current = newPxPerMm;
-              scaleYRef.current = newPxPerMm;
+        if (skipResize || !fcRef.current || !wrapperRef.current) return;
+        if (resizeTimer) clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+          if (!fcRef.current || !wrapperRef.current) return;
+          const c = fcRef.current;
+          const wrapper = wrapperRef.current;
+          const rPad = showRuler ? RULER_THICK : 0;
+          const newAvailW = wrapper.clientWidth - rPad - 8;
+          const newAvailH = wrapper.clientHeight - rPad - 8;
+          if (newAvailW < 100 || newAvailH < 100) return;
+
+          const hasDieline = c.getObjects().some((o: any) => o._isDieLine || o._isDieline);
+          if (!hasDieline) {
+            const newW = Math.max(newAvailW - 12, 400);
+            const newH = Math.max(newAvailH - 12, 300);
+            if (Math.abs(c.getWidth() - newW) > 5 || Math.abs(c.getHeight() - newH) > 5) {
+              skipResize = true;
+              c.setDimensions({ width: newW, height: newH });
+              c.requestRenderAll();
+              setTimeout(() => { skipResize = false; }, 100);
             }
-            c.requestRenderAll();
           }
-        }
+          // dieline exists: do NOT resize here (already sized during dieline creation)
+        }, 150);
       });
       resizeObserver.observe(wrapperRef.current!);
 
@@ -1077,7 +1050,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     boot();
 
     return () => {
-      disposed = true; try { resizeObserver.disconnect(); } catch(e) {}
+      disposed = true; try { if (resizeTimer) clearTimeout(resizeTimer); resizeObserver.disconnect(); } catch(e) {}
       if (fcRef.current) {
         try { fcRef.current.dispose(); } catch {}
       setCanvasReady(false);
@@ -1799,8 +1772,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             // ── Resize canvas to fit dieline ──
             const wrapper = wrapperRef.current;
             const rulerPadD = showRuler ? RULER_THICK : 0;
-            const dieAvailW = wrapper ? wrapper.clientWidth - rulerPadD - 20 : 1200;
-            const dieAvailH = wrapper ? wrapper.clientHeight - rulerPadD - 40 : 800;
+            const dieAvailW = wrapper ? wrapper.clientWidth - rulerPadD - 8 : 1200;
+            const dieAvailH = wrapper ? wrapper.clientHeight - rulerPadD - 8 : 800;
 
             // Use a fixed high-quality px/mm (at least 2.0), canvas = full available area
             const PAD_MM = 15;

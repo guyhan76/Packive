@@ -1,4 +1,4 @@
-﻿// src/lib/pdf-cmyk-export.ts
+// src/lib/pdf-cmyk-export.ts
 // CMYK Vector PDF Export - SVG-based approach
 // Uses Fabric.js toSVG() + svg2pdf.js for accurate vector rendering
 // Then post-processes colors to CMYK
@@ -177,11 +177,20 @@ function replacePdfColorsInString(pdf: string, colorMap: Map<string, CMYKColor>)
       return c + " " + m + " " + y + " " + k + " " + cmykOp;
     }
     // colorMap에 없는 색상도 CMYK로 변환 (RGB 잔류 방지)
-    const fallbackCmyk = rgbToCmyk(ri, gi, bi);
-    const fc = (fallbackCmyk.c / 100).toFixed(4);
-    const fm = (fallbackCmyk.m / 100).toFixed(4);
-    const fy = (fallbackCmyk.y / 100).toFixed(4);
-    const fk = (fallbackCmyk.k / 100).toFixed(4);
+    // 먼저 ±6 범위 내 가장 가까운 colorMap 항목 검색 (반올림 오차 보정)
+    let bestCmyk: CMYKColor | null = null;
+    let bestDist = Infinity;
+    colorMap.forEach((cmykVal, mapHex) => {
+      const mapRgb = hexToRgb(mapHex);
+      if (!mapRgb) return;
+      const dist = Math.abs(mapRgb.r - ri) + Math.abs(mapRgb.g - gi) + Math.abs(mapRgb.b - bi);
+      if (dist < bestDist && dist <= 6) { bestDist = dist; bestCmyk = cmykVal; }
+    });
+    const useCmyk = bestCmyk || rgbToCmyk(ri, gi, bi);
+    const fc = (useCmyk.c / 100).toFixed(4);
+    const fm = (useCmyk.m / 100).toFixed(4);
+    const fy = (useCmyk.y / 100).toFixed(4);
+    const fk = (useCmyk.k / 100).toFixed(4);
     const fOp = op === "rg" ? "k" : "K";
     replaced++;
     return fc + " " + fm + " " + fy + " " + fk + " " + fOp;
@@ -298,7 +307,61 @@ export async function exportCmykPdf(
   const savedBgColor = canvas.backgroundColor;
   canvas.backgroundColor = "";
   canvas.renderAll();
-  let svgString = canvas.toSVG({ width: canvasW, height: canvasH });
+  // Pre-process: composite transparent images onto white background for PDF
+    const imgObjects = canvas.getObjects().filter((o: any) => o.type === "image" && o.visible !== false);
+    const origSrcs: Map<any, string> = new Map();
+    for (const imgObj of imgObjects) {
+      try {
+        const el = (imgObj as any)._element || (imgObj as any).getElement?.();
+        if (!el || !(el instanceof HTMLImageElement || el instanceof HTMLCanvasElement)) continue;
+        const tempCanvas = document.createElement("canvas");
+        const natW = (el as HTMLImageElement).naturalWidth || el.width || 200;
+        const natH = (el as HTMLImageElement).naturalHeight || el.height || 200;
+        tempCanvas.width = natW;
+        tempCanvas.height = natH;
+        const ctx = tempCanvas.getContext("2d");
+        if (!ctx) continue;
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, natW, natH);
+        ctx.drawImage(el as HTMLImageElement, 0, 0);
+        origSrcs.set(imgObj, el.src || "");
+        const dataUrl = tempCanvas.toDataURL("image/png");
+        await new Promise<void>((resolve) => {
+          const newImg = new Image();
+          newImg.crossOrigin = "anonymous";
+          newImg.onload = () => {
+            (imgObj as any)._element = newImg;
+            (imgObj as any)._originalElement = newImg;
+            imgObj.dirty = true;
+            resolve();
+          };
+          newImg.onerror = () => resolve();
+          newImg.src = dataUrl;
+        });
+      } catch (e) { console.warn("[PDF] Image pre-process failed:", e); }
+    }
+    canvas.renderAll();
+    let svgString = canvas.toSVG({ width: canvasW, height: canvasH });
+    // Restore original image sources
+    for (const [imgObj, origSrc] of origSrcs) {
+      if (origSrc) {
+        try {
+          await new Promise<void>((resolve) => {
+            const restoreImg = new Image();
+            restoreImg.crossOrigin = "anonymous";
+            restoreImg.onload = () => {
+              (imgObj as any)._element = restoreImg;
+              (imgObj as any)._originalElement = restoreImg;
+              imgObj.dirty = true;
+              resolve();
+            };
+            restoreImg.onerror = () => resolve();
+            restoreImg.src = origSrc;
+          });
+        } catch { /* ignore */ }
+      }
+    }
+    canvas.renderAll();
   console.log("[PDF] Step 3: SVG generated, length:", svgString.length);
 
   // dielineOnly: forcefully remove all <text> and <tspan> elements from SVG
@@ -354,7 +417,7 @@ export async function exportCmykPdf(
     "times new roman": "Times New Roman",
     "courier new": "Courier New",
     "helvetica": "helvetica",
-    "inter": "NotoSansKR-Regular",
+    "inter": "Inter",
     "noto sans kr": "NotoSansKR",
     "malgun gothic": "Malgun Gothic",
     "맑은 고딕": "Malgun Gothic",
