@@ -1094,3 +1094,50 @@ Browser (box selection + dimensions) -> POST /api/dieline (Next.js API route) ->
 
 ### Environment Variables Required
 EPM_USERNAME=Guyhan76 EPM_PASSWORD=<API password from easypackmaker.com/profile>
+
+---
+
+## Gamma Article Insight - Product Growth Principles (2026-03-22)
+
+> Source: Lenny Podcast - Inside the rise of Gamma
+
+### Principle 1: First 30 Seconds Magic
+- Gamma rebuilt entire product for 3-4 months focusing on new user first experience
+- Packive: Box select -> dimensions -> dieline instant -> AI design, must create WOW in 30sec
+- Ask before every feature: Does this improve the first 30 second experience?
+
+### Principle 2: Vanity vs Core Growth Metrics
+- Vanity: total signups, press coverage, SNS likes
+- Core: revisit rate, organic referral ratio, word-of-mouth new users
+- Packive Core Metrics: dieline-to-design completion rate, PDF export rate, 7-day revisit rate
+- Key question: Do users come back, and do they bring others?
+
+### Principle 3: Real PMF Signal
+- Real PMF: product grows by itself without any marketing
+- Fake growth: spending ad budget to cover real problems
+- If product does not spread by itself, rebuild the product, not increase marketing
+- Packive: confirm organic growth signal before any paid ads
+
+### Principle 4: Micro-Community Strategy
+- 1 big influencer < dozens of trusted small communities
+- Validate by engagement rate (3-5%) not follower count
+- Users must tell product story in their own voice
+- Packive target: small brand owners, Amazon/Coupang sellers, small packaging manufacturers, startup founders
+- Goal: organic word-of-mouth - Finished box design in 5 min with Packive
+
+### Principle 5: Small Team Big Impact
+- Gamma: 50 employees, ARR 100M USD
+- Efficient operation with AI and automation over aggressive hiring
+- Packive: EasyPackMaker API for 654 templates (no manual dev), AI design generation, automate everything possible
+
+### Principle 6: Find Direction from Criticism
+- Worst idea ever feedback became starting point for realistic differentiation
+- Acknowledge competitors (Adobe AI, Esko ArtiosCAD) but focus on differentiation
+- Packive differentiator: print-ready package design in 5 min without professional knowledge
+
+### Dev Checklist (check before every feature)
+- [ ] Does this improve the first 30 second experience?
+- [ ] Does this increase revisit rate?
+- [ ] Does this trigger word-of-mouth? (shareable output?)
+- [ ] Can we deliver same value more simply without this feature?
+- [ ] Did we automate everything automatable?
