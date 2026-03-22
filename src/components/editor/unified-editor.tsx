@@ -266,9 +266,9 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [showDimModal, setShowDimModal] = useState(false);
   const [selectedBoxCode, setSelectedBoxCode] = useState('');
   const [selectedBoxName, setSelectedBoxName] = useState('');
-  const [dimLength, setDimLength] = useState(300);
-  const [dimWidth, setDimWidth] = useState(200);
-  const [dimHeight, setDimHeight] = useState(250);
+  const [dimLength, setDimLength] = useState(0);
+  const [dimWidth, setDimWidth] = useState(0);
+  const [dimHeight, setDimHeight] = useState(0);
   const [fluteType, setFluteType] = useState('C');
   const [thickness, setThickness] = useState(4.0);
   const [isEcma, setIsEcma] = useState(false);
@@ -834,10 +834,10 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       const isBlank = (L === 0 && W === 0 && D === 0);
       let canvasW: number, canvasH: number, availW: number, availH: number;
       const rulerPad = showRuler ? RULER_THICK : 0;
-      availW = cw - rulerPad - 20; availH = ch - rulerPad - 40;
+      availW = cw - rulerPad - 8; availH = ch - rulerPad - 8;
       if (isBlank) {
-        canvasW = Math.max(availW - 40, 400);
-        canvasH = Math.max(availH - 40, 300);
+        canvasW = Math.max(availW - 12, 400);
+        canvasH = Math.max(availH - 12, 300);
         scaleRef.current = 1; scaleXRef.current = 1; scaleYRef.current = 1;
       } else {
         const netW = totalW + PAD * 2;
@@ -869,6 +869,65 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       setCanvasReady(true);
       canvas.fireRightClick = true;
       canvas.stopContextMenu = true;
+
+
+      // ── Canvas auto-resize on window/wrapper size change ──
+      const resizeObserver = new ResizeObserver(() => {
+        if (!fcRef.current || !wrapperRef.current) return;
+        const c = fcRef.current;
+        const wrapper = wrapperRef.current;
+        const rPad = showRuler ? RULER_THICK : 0;
+        const newAvailW = wrapper.clientWidth - rPad - 8;
+        const newAvailH = wrapper.clientHeight - rPad - 8;
+        
+        if (newAvailW < 100 || newAvailH < 100) return;
+        
+        // 칼선이 없는 빈 캔버스
+        const hasDieline = c.getObjects().some((o: any) => o._isDieLine || o._isDieline);
+        if (!hasDieline) {
+          const newW = Math.max(newAvailW - 12, 400);
+          const newH = Math.max(newAvailH - 12, 300);
+          if (Math.abs(c.getWidth() - newW) > 5 || Math.abs(c.getHeight() - newH) > 5) {
+            c.setDimensions({ width: newW, height: newH });
+            c.requestRenderAll();
+          }
+        } else {
+          // 칼선이 있는 경우 - 비율 유지하며 리사이즈
+          const dieObj = c.getObjects().find((o: any) => o._isDieLine || o._isDieline) as any;
+          if (!dieObj) return;
+          const group = dieObj;
+          const mmW = (group.width || 100) * 0.264583;
+          const mmH = (group.height || 100) * 0.264583;
+          const PAD_MM = 20;
+          const netW = mmW + PAD_MM * 2;
+          const netH = mmH + PAD_MM * 2;
+          const newPxPerMm = Math.max(Math.min(newAvailW / netW, newAvailH / netH), 2.0);
+          const newCanvasW = Math.min(Math.round(netW * newPxPerMm), newAvailW);
+          const newCanvasH = Math.min(Math.round(netH * newPxPerMm), newAvailH);
+          
+          if (Math.abs(c.getWidth() - newCanvasW) > 5 || Math.abs(c.getHeight() - newCanvasH) > 5) {
+            c.setDimensions({ width: newCanvasW, height: newCanvasH });
+            // 칼선 위치 재조정
+            const sx = newPxPerMm / scaleRef.current;
+            if (Math.abs(sx - 1) > 0.01) {
+              c.getObjects().forEach((obj: any) => {
+                obj.set({
+                  left: (obj.left || 0) * sx,
+                  top: (obj.top || 0) * sx,
+                  scaleX: (obj.scaleX || 1) * sx,
+                  scaleY: (obj.scaleY || 1) * sx,
+                });
+                obj.setCoords();
+              });
+              scaleRef.current = newPxPerMm;
+              scaleXRef.current = newPxPerMm;
+              scaleYRef.current = newPxPerMm;
+            }
+            c.requestRenderAll();
+          }
+        }
+      });
+      resizeObserver.observe(wrapperRef.current!);
 
       // Draw guide layer only for normal mode
       if (!isBlank) {
@@ -1018,7 +1077,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     boot();
 
     return () => {
-      disposed = true;
+      disposed = true; try { resizeObserver.disconnect(); } catch(e) {}
       if (fcRef.current) {
         try { fcRef.current.dispose(); } catch {}
       setCanvasReady(false);
@@ -2461,7 +2520,7 @@ allObjs.forEach((o: any, i: number) => {
 
 
           {/* ═══ CANVAS AREA ═══ */}
-          <div ref={wrapperRef} onScroll={(e) => { const t=e.target as HTMLDivElement; setRulerScroll({left:t.scrollLeft,top:t.scrollTop}); }} onMouseMove={(e) => { const r=e.currentTarget.getBoundingClientRect(); setMousePos({x:e.clientX-r.left-RULER_THICK+(rulerScroll?.left||0),y:e.clientY-r.top-RULER_THICK+(rulerScroll?.top||0)}); }} onMouseLeave={() => setMousePos({x:-100,y:-100})} className="flex-1 overflow-auto bg-gray-100 relative pb-8"
+          <div ref={wrapperRef} onScroll={(e) => { const t=e.target as HTMLDivElement; setRulerScroll({left:t.scrollLeft,top:t.scrollTop}); }} onMouseMove={(e) => { const r=e.currentTarget.getBoundingClientRect(); setMousePos({x:e.clientX-r.left-RULER_THICK+(rulerScroll?.left||0),y:e.clientY-r.top-RULER_THICK+(rulerScroll?.top||0)}); }} onMouseLeave={() => setMousePos({x:-100,y:-100})} className="flex-1 overflow-auto bg-gray-100 relative pb-1"
             style={{ paddingLeft: showRuler ? RULER_THICK : 0, paddingTop: showRuler ? RULER_THICK : 0, cursor: measureMode ? "crosshair" : drawMode ? "crosshair" : "default" }}>
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
               {/* Rulers - conditional */}
@@ -3735,10 +3794,10 @@ allObjs.forEach((o: any, i: number) => {
                             className="flex-1 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-medium">
                             Add to Canvas
                           </button>
-                          <a href={aiResult.svgUrl} download="recraft-vector.svg" target="_blank" rel="noreferrer"
-                            className="py-2 px-3 rounded bg-neutral-700 hover:bg-neutral-600 text-white text-[11px]">
-                            Download
-                          </a>
+                        <button onClick={async()=>{ try { const r=await fetch(aiResult.svgUrl); const b=await r.blob(); const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u; a.download="recraft-vector.svg"; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(u); } catch(e){ console.error("[Download]",e); } }}
+                          className="py-2 px-3 rounded bg-neutral-700 hover:bg-neutral-600 text-white text-[11px] font-medium cursor-pointer">
+                          Download
+                        </button>
                         </div>
                         <div className="text-neutral-500 text-[10px]">
                           Used: {aiResult.creditsUsed} units (${(aiResult.creditsUsed/1000).toFixed(3)})
@@ -3752,13 +3811,22 @@ allObjs.forEach((o: any, i: number) => {
                 {aiTab === "vectorize" && (
                   <div className="space-y-3">
                     <p className="text-neutral-400 text-[10px]">Upload a PNG/JPG image to convert to SVG vector (10 units)</p>
-                    <label className={`block w-full py-6 rounded border-2 border-dashed text-center cursor-pointer transition-colors ${
-                      aiVecLoading ? "border-neutral-700 text-neutral-600" : "border-neutral-600 hover:border-blue-500 text-neutral-400 hover:text-blue-400"
-                    }`}>
+                    <label
+                      className={`block w-full py-6 rounded-lg border-2 border-dashed text-center cursor-pointer transition-all duration-200 ${
+                        aiVecLoading ? "border-neutral-700 text-neutral-600 cursor-wait" : "border-neutral-600 hover:border-blue-500 text-neutral-400 hover:text-blue-400"
+                      }`}
+                      onDragOver={e=>{ e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add("border-blue-500","bg-blue-500/10","text-blue-400"); }}
+                      onDragLeave={e=>{ e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove("border-blue-500","bg-blue-500/10","text-blue-400"); }}
+                      onDrop={e=>{ e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove("border-blue-500","bg-blue-500/10","text-blue-400"); const f=e.dataTransfer.files?.[0]; if(f && /^image\/(png|jpeg|webp)$/.test(f.type) && !aiVecLoading) handleAiVectorize(f); }}
+                    >
                       <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
                         disabled={aiVecLoading}
                         onChange={e=>{ const f=e.target.files?.[0]; if(f) handleAiVectorize(f); e.target.value=""; }} />
-                      {aiVecLoading ? "Vectorizing..." : "Click to upload image"}
+                      <div className="flex flex-col items-center gap-1.5">
+                        <svg className="w-6 h-6 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13" /></svg>
+                        <span className="text-[11px] font-medium">{aiVecLoading ? "Vectorizing..." : "Drop image here or click to upload"}</span>
+                        <span className="text-[9px] opacity-50">PNG, JPG, WebP</span>
+                      </div>
                     </label>
                     {aiVecResult && (
                       <div className="space-y-2">
@@ -3770,10 +3838,10 @@ allObjs.forEach((o: any, i: number) => {
                             className="flex-1 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-medium">
                             Add to Canvas
                           </button>
-                          <a href={aiVecResult.svgUrl} download="vectorized.svg" target="_blank" rel="noreferrer"
-                            className="py-2 px-3 rounded bg-neutral-700 hover:bg-neutral-600 text-white text-[11px]">
-                            Download
-                          </a>
+                        <button onClick={async()=>{ try { const r=await fetch(aiVecResult.svgUrl); const b=await r.blob(); const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u; a.download="vectorized.svg"; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(u); } catch(e){ console.error("[Download]",e); } }}
+                          className="py-2 px-3 rounded bg-neutral-700 hover:bg-neutral-600 text-white text-[11px] font-medium cursor-pointer">
+                          Download
+                        </button>
                         </div>
                       </div>
                     )}
@@ -3784,18 +3852,27 @@ allObjs.forEach((o: any, i: number) => {
                 {aiTab === "removebg" && (
                   <div className="space-y-3">
                     <p className="text-neutral-400 text-[10px]">Upload a PNG/JPG to remove background (10 units)</p>
-                    <label className={`block w-full py-6 rounded border-2 border-dashed text-center cursor-pointer transition-colors ${
-                      aiBgLoading ? "border-neutral-700 text-neutral-600" : "border-neutral-600 hover:border-blue-500 text-neutral-400 hover:text-blue-400"
-                    }`}>
+                    <label
+                      className={`block w-full py-6 rounded-lg border-2 border-dashed text-center cursor-pointer transition-all duration-200 ${
+                        aiBgLoading ? "border-neutral-700 text-neutral-600 cursor-wait" : "border-neutral-600 hover:border-blue-500 text-neutral-400 hover:text-blue-400"
+                      }`}
+                      onDragOver={e=>{ e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add("border-blue-500","bg-blue-500/10","text-blue-400"); }}
+                      onDragLeave={e=>{ e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove("border-blue-500","bg-blue-500/10","text-blue-400"); }}
+                      onDrop={e=>{ e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove("border-blue-500","bg-blue-500/10","text-blue-400"); const f=e.dataTransfer.files?.[0]; if(f && /^image\/(png|jpeg|webp)$/.test(f.type) && !aiBgLoading) handleAiRemoveBg(f); }}
+                    >
                       <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
                         disabled={aiBgLoading}
                         onChange={e=>{ const f=e.target.files?.[0]; if(f) handleAiRemoveBg(f); e.target.value=""; }} />
-                      {aiBgLoading ? "Removing background..." : "Click to upload image"}
+                      <div className="flex flex-col items-center gap-1.5">
+                        <svg className="w-6 h-6 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13" /></svg>
+                        <span className="text-[11px] font-medium">{aiBgLoading ? "Removing background..." : "Drop image here or click to upload"}</span>
+                        <span className="text-[9px] opacity-50">PNG, JPG, WebP</span>
+                      </div>
                     </label>
                     {aiBgResult && (
                       <div className="space-y-2">
                         <div className="bg-neutral-800 rounded p-2 border border-neutral-600">
-                          <div className="bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAADFJREFUOE9jfPbs2X8GPEBYWBifNAPjqAHDIwwYR8OAcTQMGEfDgHE0DBhHw4BxNAwA9XMkEGfHzEoAAAAASUVORK5CYII=')] rounded p-2 flex items-center justify-center" style={{minHeight:120}}>
+                          <div className="rounded p-2 flex items-center justify-center" style={{minHeight:120,backgroundImage:"repeating-conic-gradient(#f0f0f0 0% 25%, #ffffff 0% 50%)",backgroundSize:"12px 12px"}}>
                             <img src={aiBgResult} alt="Background removed" style={{maxWidth:"100%",maxHeight:150}} />
                           </div>
                         </div>
@@ -3811,10 +3888,10 @@ allObjs.forEach((o: any, i: number) => {
                           }} className="flex-1 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-medium">
                             Add to Canvas
                           </button>
-                          <a href={aiBgResult} download="bg-removed.png" target="_blank" rel="noreferrer"
-                            className="py-2 px-3 rounded bg-neutral-700 hover:bg-neutral-600 text-white text-[11px]">
-                            Download
-                          </a>
+                        <button onClick={async()=>{ try { const r=await fetch(aiBgResult); const b=await r.blob(); const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u; a.download="bg-removed.png"; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(u); } catch(e){ console.error("[Download]",e); } }}
+                          className="py-2 px-3 rounded bg-neutral-700 hover:bg-neutral-600 text-white text-[11px] font-medium cursor-pointer">
+                          Download
+                        </button>
                         </div>
                       </div>
                     )}
