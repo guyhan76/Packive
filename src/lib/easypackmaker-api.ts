@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+﻿import crypto from 'crypto';
 
 export interface EpmApiConfig {
   username: string;
@@ -32,6 +32,7 @@ export interface EpmResponse {
   Model?: string;       // base64 PDF
   Preview?: string;      // base64 PNG preview
   ModelsCatalog?: any[];
+  Sizes?: any;          // Flat dimensions from API
 }
 
 /**

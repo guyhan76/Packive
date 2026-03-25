@@ -1,189 +1,372 @@
-﻿// --- Panel Map Engine v4 ---
-// 칼선 오브젝트에서 패널(면)을 자동 인식하고 라벨링한다.
+﻿// src/lib/panel-map.ts
+// Phase 4: Panel Map System - 박스 타입별 패널 자동 감지
 
 export interface Panel {
-  label: string;
-  role: 'body' | 'flap-top' | 'flap-bottom' | 'glue';
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-  mmWidth: number;
-  mmHeight: number;
+  id: string;
+  name: string;
+  nameKo: string;
+  x: number;      // mm (칼선 내 좌표)
+  y: number;      // mm
+  width: number;   // mm
+  height: number;  // mm
+  role: "front" | "back" | "left" | "right" | "top" | "bottom" | "flap" | "glue";
 }
 
-export interface PanelMapResult {
-  panels: Panel[];
+export interface PanelMap {
   boxType: string;
-  dimensions: { L: number; W: number; H: number; flapDepth: number };
+  panels: Panel[];
+  totalWidth: number;   // mm
+  totalHeight: number;  // mm
+  L: number;
+  W: number;
+  D: number;
 }
 
-function getPathX(o: any): number {
-  if (o.path && o.path[0] && o.path[0].length >= 2) return o.path[0][1];
-  return 0;
+/**
+ * FEFCO-0201: 일반 슬롯형 박스 (Regular Slotted Container)
+ * 전개도 구조: [Glue] [W-left] [L-front] [W-right] [L-back]
+ *              상단/하단 플랩 포함
+ * 
+ * SVG 분석 결과:
+ * - 패널 순서: L → W → L → W (왼→오)
+ * - 상단 Y ≈ 105mm (마진), 높이 ≈ D
+ * - 마진: 약 38mm (좌), 약 5mm (상하 차이)
+ */
+export function generateFEFCO0201(L: number, W: number, D: number, svgMmW?: number, svgMmH?: number): PanelMap {
+  // Margins: derive from actual SVG dimensions if available, otherwise use sensible defaults
+  const contentW = 20 + W + L + W + L;  // glue + 4 panels
+  const flapH0 = Math.min(W / 2, D);
+  const contentH = flapH0 + D + flapH0;
+  const MARGIN_LEFT = svgMmW ? Math.max(0, (svgMmW - contentW) / 2) : 14;
+  const MARGIN_TOP = svgMmH ? Math.max(0, (svgMmH - contentH) / 2) : 11;
+  
+  // 접착날개 폭 (일반적으로 15~25mm)
+  const GLUE_WIDTH = 20;
+  
+  // 패널 X 시작점 계산
+  const glueX = MARGIN_LEFT;
+  const panel1X = glueX + GLUE_WIDTH;        // W (left side)
+  const panel2X = panel1X + W;                // L (front)
+  const panel3X = panel2X + L;                // W (right side)
+  const panel4X = panel3X + W;                // L (back)
+  
+  // 상단/하단 플랩 높이 (보통 W/2 또는 지정값)
+  const flapHeight = flapH0;
+  
+  // 메인 패널 Y
+  const mainY = MARGIN_TOP + flapHeight;
+  
+  const panels: Panel[] = [
+    // 접착날개
+    {
+      id: "glue",
+      name: "Glue Flap",
+      nameKo: "접착날개",
+      x: glueX,
+      y: mainY,
+      width: GLUE_WIDTH,
+      height: D,
+      role: "glue"
+    },
+    {
+      id: "front",
+      name: "Front (L)",
+      nameKo: "정면",
+      x: panel2X,
+      y: mainY,
+      width: L,
+      height: D,
+      role: "front"
+    },
+    {
+      id: "left",
+      name: "Left Side (W)",
+      nameKo: "좌측면",
+      x: panel1X,
+      y: mainY,
+      width: W,
+      height: D,
+      role: "left"
+    },
+    {
+      id: "back",
+      name: "Back (L)",
+      nameKo: "배면",
+      x: panel4X,
+      y: mainY,
+      width: L,
+      height: D,
+      role: "back"
+    },
+    {
+      id: "right",
+      name: "Right Side (W)",
+      nameKo: "우측면",
+      x: panel3X,
+      y: mainY,
+      width: W,
+      height: D,
+      role: "right"
+    },
+    {
+      id: "top-flap-front",
+      name: "Top Flap Front",
+      nameKo: "상단플랩 정면",
+      x: panel2X,
+      y: MARGIN_TOP,
+      width: L,
+      height: flapHeight,
+      role: "flap"
+    },
+    {
+      id: "top-flap-left",
+      name: "Top Flap Left",
+      nameKo: "상단플랩 좌",
+      x: panel1X,
+      y: MARGIN_TOP,
+      width: W,
+      height: flapHeight,
+      role: "flap"
+    },
+    {
+      id: "top-flap-back",
+      name: "Top Flap Back",
+      nameKo: "상단플랩 배면",
+      x: panel4X,
+      y: MARGIN_TOP,
+      width: L,
+      height: flapHeight,
+      role: "flap"
+    },
+    {
+      id: "top-flap-right",
+      name: "Top Flap Right",
+      nameKo: "상단플랩 우",
+      x: panel3X,
+      y: MARGIN_TOP,
+      width: W,
+      height: flapHeight,
+      role: "flap"
+    },
+    {
+      id: "bottom-flap-front",
+      name: "Bottom Flap Front",
+      nameKo: "하단플랩 정면",
+      x: panel2X,
+      y: mainY + D,
+      width: L,
+      height: flapHeight,
+      role: "flap"
+    },
+    {
+      id: "bottom-flap-left",
+      name: "Bottom Flap Left",
+      nameKo: "하단플랩 좌",
+      x: panel1X,
+      y: mainY + D,
+      width: W,
+      height: flapHeight,
+      role: "flap"
+    },
+    {
+      id: "bottom-flap-back",
+      name: "Bottom Flap Back",
+      nameKo: "하단플랩 배면",
+      x: panel4X,
+      y: mainY + D,
+      width: L,
+      height: flapHeight,
+      role: "flap"
+    },
+    {
+      id: "bottom-flap-right",
+      name: "Bottom Flap Right",
+      nameKo: "하단플랩 우",
+      x: panel3X,
+      y: mainY + D,
+      width: W,
+      height: flapHeight,
+      role: "flap"
+    },
+  ];
+
+  const totalWidth = GLUE_WIDTH + W + L + W + L + MARGIN_LEFT * 2;
+  const totalHeight = flapHeight + D + flapHeight + MARGIN_TOP * 2;
+
+  return { boxType: "FEFCO-0201", panels, totalWidth, totalHeight, L, W, D };
 }
 
-function round2(v: number): number {
-  return Math.round(v * 100) / 100;
+/**
+ * 박스 타입에 따라 패널 맵 생성
+ */
+export function generatePanelMap(boxType: string, L: number, W: number, D: number, svgMmW?: number, svgMmH?: number): PanelMap | null {
+  switch (boxType) {
+    case "FEFCO-0201":
+      return generateFEFCO0201(L, W, D, svgMmW, svgMmH);
+    // 추후 추가:
+    // case "FEFCO-0215": return generateFEFCO0215(L, W, D);
+    // case "ECMA-A20": return generateECMA_A20(L, W, D);
+    default:
+      console.warn(`[PanelMap] Unknown box type: ${boxType}`);
+      return null;
+  }
 }
 
-export function detectPanels(dielineObjects: any[], pxPerMm: number = 1): PanelMapResult {
-  const GREEN = 'rgba(0,166,80,1)';
-  const RED = 'rgba(237,28,36,1)';
+/**
+ * mm 좌표를 캔버스 px 좌표로 변환
+ */
+export function panelToCanvas(panel: Panel, pxPerMm: number, offsetX: number = 0, offsetY: number = 0) {
+  return {
+    left: panel.x * pxPerMm + offsetX,
+    top: panel.y * pxPerMm + offsetY,
+    width: panel.width * pxPerMm,
+    height: panel.height * pxPerMm,
+  };
+}
 
-  const foldLines = dielineObjects.filter((o: any) => o.stroke === GREEN);
-  const cutLines = dielineObjects.filter((o: any) => o.stroke === RED);
 
-  // Step 1: 수직 접는선 & 수직 칼선
-  const verticalFolds = foldLines.filter((o: any) => (o.width || 0) < 5 && (o.height || 0) > 100);
-  const verticalCuts = cutLines.filter((o: any) => (o.path?.length || 0) === 2 && (o.width || 0) < 5 && (o.height || 0) > 500);
+/**
+ * SVG 칼선에서 수직/수평 경계선을 추출하여 패널 영역 감지
+ * EasyPackMaker API가 생성하는 SVG 구조 기반:
+ * - transform: matrix(1.333, 0, 0, -1.333, 0, height)
+ * - stroke: #000000 (칼선), #444444 (접선)
+ * - 명령어: M, V, H, L, C (대문자=절대, 소문자=상대)
+ */
+export function detectPanelsFromSVG(
+  svgString: string,
+  boxType: string,
+  L: number,
+  W: number,
+  D: number
+): PanelMap | null {
+  // 1. viewBox에서 전체 크기 추출
+  const vbMatch = svgString.match(/viewBox="([^"]*)"/);
+  const widthMatch = svgString.match(/width="([\d.]+)"/);
+  const heightMatch = svgString.match(/height="([\d.]+)"/);
+  if (!vbMatch) return generatePanelMap(boxType, L, W, D); // fallback
 
-  // Step 2: 수평 접는선
-  const horizontalFolds = foldLines
-    .filter((o: any) => (o.height || 0) < 5 && (o.width || 0) > 100)
-    .sort((a: any, b: any) => (a.top || 0) - (b.top || 0));
+  const vbParts = vbMatch[1].split(/\s+/).map(Number);
+  const svgWidth = widthMatch ? parseFloat(widthMatch[1]) : vbParts[2];
+  const svgHeight = heightMatch ? parseFloat(heightMatch[1]) : vbParts[3];
 
-  // Step 3: 모든 수직 경계선 합치기
-  const allVerticals = [...verticalFolds, ...verticalCuts]
-    .sort((a: any, b: any) => getPathX(a) - getPathX(b));
-  const vSvgX = allVerticals.map((o: any) => getPathX(o));
-  const vCanvasLeft = allVerticals.map((o: any) => o.left as number);
-
-  // Step 4: 수평 접는선 top 그룹화
-  const hTops = horizontalFolds.map((o: any) => o.top as number);
-  const uniqueHTops = [...new Set(hTops.map((t: number) => Math.round(t)))].sort((a, b) => a - b);
-  const topBoundary = uniqueHTops.length > 0 ? uniqueHTops[0] : 0;
-  const bottomBoundary = uniqueHTops.length > 1 ? uniqueHTops[uniqueHTops.length - 1] : 9999;
-  const midY = (topBoundary + bottomBoundary) / 2;
-
-  // 수평 접는선을 상단/하단 그룹으로 분리
-  const topHFolds = horizontalFolds.filter((h: any) => (h.top || 0) < midY);
-  const botHFolds = horizontalFolds.filter((h: any) => (h.top || 0) > midY);
-
-  // Step 5: 본체 면 생성
-  const bodyPanels: Panel[] = [];
-  const bodyLabels = ['Front', 'Right', 'Back', 'Left'];
-
-  for (let i = 0; i < vSvgX.length - 1; i++) {
-    const svgWidth = vSvgX[i + 1] - vSvgX[i];
-    if (svgWidth < 20) continue;
-    const canvasLeft = vCanvasLeft[i];
-    const canvasRight = vCanvasLeft[i + 1];
-    const canvasWidth = canvasRight - canvasLeft;
-    const mmW = round2(canvasWidth / pxPerMm);
-
-    // 이 면의 너비와 가장 비슷한 수평 접는선 찾기
-    const findBestMatch = (folds: any[]): any => {
-      let best = folds[0];
-      let bestDiff = Infinity;
-      for (const f of folds) {
-        const fw = (f.width || 0) * (f.scaleX || 1);
-        const diff = Math.abs(fw - canvasWidth);
-        if (diff < bestDiff) { bestDiff = diff; best = f; }
-      }
-      return best;
-    };
-
-    const myTopFold = topHFolds.length > 0 ? findBestMatch(topHFolds) : null;
-    const myBotFold = botHFolds.length > 0 ? findBestMatch(botHFolds) : null;
-
-    let canvasTop: number;
-    let canvasHeight: number;
-    if (myTopFold && myBotFold) {
-      canvasTop = myTopFold.top || 0;
-      canvasHeight = (myBotFold.top || 0) - canvasTop;
-    } else {
-      const refFold = verticalFolds[0];
-      canvasTop = refFold ? (refFold.top || 0) : 0;
-      canvasHeight = refFold ? (refFold.height || 0) * (refFold.scaleY || 1) : 0;
+  // 2. transform 추출
+  const txMatch = svgString.match(/transform="matrix\(([^)]+)\)"/);
+  let sx = 1, sy = 1, tx = 0, tyd = 0;
+  if (txMatch) {
+    const parts = txMatch[1].split(",").map(s => parseFloat(s.trim()));
+    if (parts.length >= 6) {
+      sx = parts[0]; sy = parts[3]; tx = parts[4]; tyd = parts[5];
     }
-    const mmH = round2(canvasHeight / pxPerMm);
-
-
-    bodyPanels.push({
-      label: bodyLabels[bodyPanels.length % 4] || 'Body-' + bodyPanels.length,
-      role: 'body',
-      left: canvasLeft,
-      top: canvasTop,
-      width: canvasWidth,
-      height: canvasHeight,
-      mmWidth: mmW,
-      mmHeight: mmH,
-    });
   }
 
-  // Step 6: 닫힌 사각형 플랩 (빨간, pathLen >= 4, w > 50, h > 50)
-  const closedRects = cutLines
-    .filter((o: any) => (o.path?.length || 0) >= 4 && (o.width || 0) > 50 && (o.height || 0) > 50)
-    .filter((o: any) => !((o.width || 0) < 200 && (o.height || 0) > 500));
+  // SVG 단위 → mm 변환 (viewBox 단위 기준)
+  // Inkscape PDF→SVG: 1pt = 1/72 inch, 1mm = 72/25.4 pt ≈ 2.8346 pt
+  const ptPerMm = 72 / 25.4; // ≈ 2.8346
 
-  // Step 7: 플랩 분류
-  const topFlaps = closedRects
-    .filter((o: any) => (o.top || 0) < topBoundary)
-    .sort((a: any, b: any) => (a.left || 0) - (b.left || 0));
+  // 3. 모든 path의 d 속성과 stroke 색상 추출
+  const pathRegex = /d="([^"]*)"/g;
+  const styleRegex = /style="([^"]*)"/g;
 
-  const bottomFlaps = closedRects
-    .filter((o: any) => (o.top || 0) > bottomBoundary)
-    .sort((a: any, b: any) => (a.left || 0) - (b.left || 0));
-
-  // Step 8: 풀칠 탭
-  const glueFlap = cutLines.find((o: any) =>
-    (o.path?.length || 0) >= 4 && (o.width || 0) < 200 && (o.height || 0) > 500
-  );
-
-  // Step 9: 패널 리스트 조합
-  const flapPanels: Panel[] = [];
-
-  if (glueFlap) {
-    flapPanels.push({
-      label: 'Glue Flap',
-      role: 'glue',
-      left: glueFlap.left || 0,
-      top: glueFlap.top || 0,
-      width: (glueFlap.width || 0) * (glueFlap.scaleX || 1),
-      height: (glueFlap.height || 0) * (glueFlap.scaleY || 1),
-      mmWidth: round2((glueFlap.width || 0) * (glueFlap.scaleX || 1) / pxPerMm),
-      mmHeight: round2((glueFlap.height || 0) * (glueFlap.scaleY || 1) / pxPerMm),
-    });
+  // path 블록 단위로 추출 (간단 방식: d와 가장 가까운 style 매칭)
+  const dValues: string[] = [];
+  const strokeColors: string[] = [];
+  
+  const lines = svgString.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const dMatch = lines[i].match(/d="([^"]*)"/);
+    if (dMatch) {
+      dValues.push(dMatch[1]);
+      // 근처 줄에서 style 찾기
+      let color = "#000000";
+      for (let j = Math.max(0, i - 4); j <= Math.min(lines.length - 1, i + 4); j++) {
+        const sMatch = lines[j].match(/stroke:#([0-9a-fA-F]+)/);
+        if (sMatch) { color = "#" + sMatch[1]; break; }
+      }
+      strokeColors.push(color);
+    }
   }
 
-  topFlaps.forEach((o: any, i: number) => {
-    flapPanels.push({
-      label: 'Top-' + (i + 1),
-      role: 'flap-top',
-      left: o.left || 0,
-      top: o.top || 0,
-      width: (o.width || 0) * (o.scaleX || 1),
-      height: (o.height || 0) * (o.scaleY || 1),
-      mmWidth: round2((o.width || 0) * (o.scaleX || 1) / pxPerMm),
-      mmHeight: round2((o.height || 0) * (o.scaleY || 1) / pxPerMm),
+  // 4. 수직선 X좌표, 수평선 Y좌표 추출 (칼선만 = #000000)
+  const verticalXs: number[] = [];
+  const horizontalYs: number[] = [];
+
+  for (let i = 0; i < dValues.length; i++) {
+    if (strokeColors[i] !== "#000000") continue; // 접선 제외
+    
+    const d = dValues[i].trim();
+    
+    // M x,y V y2 패턴 (수직선)
+    const mvMatch = d.match(/^M\s*([\d.-]+),([\d.-]+)\s+V\s*([\d.-]+)$/);
+    if (mvMatch) {
+      const rawX = parseFloat(mvMatch[1]);
+      const rawY1 = parseFloat(mvMatch[2]);
+      const rawY2 = parseFloat(mvMatch[3]);
+      const len = Math.abs(rawY2 - rawY1) / ptPerMm;
+      if (len > 50) { // 50mm 이상만 패널 경계
+        const mmX = (rawX * sx + tx) / (svgWidth / (svgWidth / sx / ptPerMm));
+        verticalXs.push(rawX / ptPerMm);
+      }
+    }
+
+    // M x,y H x2 패턴 (수평선 - 절대)
+    const mhMatch = d.match(/^M\s*([\d.-]+),([\d.-]+)\s+H\s*([\d.-]+)$/);
+    if (mhMatch) {
+      const rawY = parseFloat(mhMatch[2]);
+      const rawX1 = parseFloat(mhMatch[1]);
+      const rawX2 = parseFloat(mhMatch[3]);
+      const len = Math.abs(rawX2 - rawX1) / ptPerMm;
+      if (len > 50) {
+        horizontalYs.push(rawY / ptPerMm);
+      }
+    }
+  }
+
+  // 5. 고유값 추출 및 정렬
+  const uniqueX = [...new Set(verticalXs.map(x => Math.round(x)))].sort((a, b) => a - b);
+  const uniqueY = [...new Set(horizontalYs.map(y => Math.round(y)))].sort((a, b) => a - b);
+
+  console.log("[PanelMap] Detected vertical boundaries (mm):", uniqueX);
+  console.log("[PanelMap] Detected horizontal boundaries (mm):", uniqueY);
+  console.log("[PanelMap] Expected: L=", L, "W=", W, "D=", D);
+
+  // 6. 감지 실패 시 수학적 계산 fallback
+  if (uniqueX.length < 4) {
+    console.warn("[PanelMap] Not enough vertical lines detected, using calculated positions");
+    return generatePanelMap(boxType, L, W, D);
+  }
+
+  // 7. 감지된 경계로 패널 생성
+  // FEFCO-0201: 5개 수직선 = 4개 메인 패널 (L, W, L, W)
+  // transform 적용된 mm 좌표 사용
+  const panels: Panel[] = [];
+  const topY = uniqueY.length > 0 ? Math.min(...uniqueY) : 105;
+  const panelRoles: Array<{role: Panel["role"], name: string, nameKo: string}> = [
+    { role: "front", name: "Front (L)", nameKo: "정면" },
+    { role: "left", name: "Left (W)", nameKo: "좌측면" },
+    { role: "back", name: "Back (L)", nameKo: "배면" },
+    { role: "right", name: "Right (W)", nameKo: "우측면" },
+  ];
+
+  for (let i = 0; i < Math.min(uniqueX.length - 1, 4); i++) {
+    const pw = uniqueX[i + 1] - uniqueX[i];
+    const info = panelRoles[i] || { role: "front" as const, name: `Panel ${i}`, nameKo: `패널${i}` };
+    panels.push({
+      id: info.role,
+      name: info.name,
+      nameKo: info.nameKo,
+      x: uniqueX[i],
+      y: topY,
+      width: pw,
+      height: D,
+      role: info.role,
     });
-  });
-
-  bottomFlaps.forEach((o: any, i: number) => {
-    flapPanels.push({
-      label: 'Bottom-' + (i + 1),
-      role: 'flap-bottom',
-      left: o.left || 0,
-      top: o.top || 0,
-      width: (o.width || 0) * (o.scaleX || 1),
-      height: (o.height || 0) * (o.scaleY || 1),
-      mmWidth: round2((o.width || 0) * (o.scaleX || 1) / pxPerMm),
-      mmHeight: round2((o.height || 0) * (o.scaleY || 1) / pxPerMm),
-    });
-  });
-
-  const allPanels = [...flapPanels.slice(0, 1), ...bodyPanels, ...flapPanels.slice(1)];
-
-  // Step 10: 박스 치수 계산
-  const L = bodyPanels.length > 0 ? bodyPanels[0].mmWidth : 0;
-  const W = bodyPanels.length > 1 ? bodyPanels[1].mmWidth : 0;
-  const H = bodyPanels.length > 0 ? bodyPanels[0].mmHeight : 0;
-  const flapDepth = topFlaps.length > 0 ? round2((topFlaps[0].height || 0) * (topFlaps[0].scaleY || 1) / pxPerMm) : 0;
+  }
 
   return {
-    panels: allPanels,
-    boxType: 'FEFCO-0201',
-    dimensions: { L, W, H, flapDepth },
+    boxType,
+    panels,
+    totalWidth: uniqueX[uniqueX.length - 1] - uniqueX[0],
+    totalHeight: D,
+    L, W, D
   };
 }

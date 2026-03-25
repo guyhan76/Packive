@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 import React, { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { detectPanels } from '@/lib/panel-map';
+import { generatePanelMap, detectPanelsFromSVG, type PanelMap, type Panel, panelToCanvas } from '@/lib/panel-map';
 import { DIELINE_TEMPLATES, BOX_CATEGORIES, getTemplatesByCategory, getCategoriesWithTemplates } from '@/lib/dieline-templates';
 import { generateDieline, BoxDimensions } from '@/lib/dieline-generator';
 import { useI18n } from "@/components/i18n-context";
@@ -14,6 +14,7 @@ import { alignObjects, distributeObjects } from "@/lib/align-utils";
 import { addBleedGuides, removeBleedGuides, toggleBleedGuides } from "@/lib/bleed-guide";
 import { runPreflight, type PreflightResult } from "@/lib/preflight";
 import { RECRAFT_STYLES, PACKAGING_PRESETS } from "@/lib/recraft";
+import { DESIGN_CATEGORIES, DESIGN_TEMPLATES, getDesignTemplatesByCategory, placeTemplateOnCanvas, generateTemplatePreviewSVG, type DesignTemplate } from "@/lib/design-templates";
 
 // ─── Types ───
 interface UnifiedEditorProps {
@@ -88,49 +89,7 @@ function hsvToHex(h:number,s:number,v:number): string {
 export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: UnifiedEditorProps) {
   const { t, locale } = useI18n();
   
-  // ─── Geometry calculations ───
-  const T = getThickness(material);
-  const tuckH = getTuckH(material);
-  const dustH = getDustH(W);
-  const glueW = getGlueW(material);
-  const bottomH = getBottomH(W, material);
-  const bottomDustH = dustH;
 
-  const frontX = glueW + T;
-  const leftX = frontX + L + T;
-  const backX = leftX + W + T;
-  const rightX = backX + L + T;
-  const totalW = rightX + W;
-  const tuckY = 0;
-  const topLidY = tuckH + T;
-  const bodyY = topLidY + W;
-  const bottomY = bodyY + D + T;
-  const totalH = bottomY + Math.max(bottomH, bottomDustH);
-
-  const tuckInset = Math.min(tuckH * 0.35, L * 0.12);
-  const tuckNotch = tuckH * 0.18;
-  const dustTaper = Math.min(dustH * 0.4, 6);
-  const dustRad = Math.min(dustH * 0.35, 5);
-  const glueTaper = Math.min(glueW * 0.3, D * 0.12);
-  const bottomTaper = Math.min(bottomH * 0.25, 5);
-  const bottomDustTaper = Math.min(bottomDustH * 0.4, 6);
-  const geo = { tuckInset, tuckNotch, dustTaper, dustRad, glueTaper, bottomTaper, bottomDustTaper };
-
-  const pos: Record<string, {x:number;y:number;w:number;h:number}> = {
-    topTuck: { x: frontX, y: tuckY, w: L, h: tuckH },
-    topLid: { x: frontX, y: topLidY, w: L, h: W },
-    topDustL: { x: leftX, y: bodyY - dustH, w: W, h: dustH },
-    topDustR: { x: rightX, y: bodyY - dustH, w: W, h: dustH },
-    glueFlap: { x: 0, y: bodyY, w: glueW, h: D },
-    front: { x: frontX, y: bodyY, w: L, h: D },
-    left: { x: leftX, y: bodyY, w: W, h: D },
-    back: { x: backX, y: bodyY, w: L, h: D },
-    right: { x: rightX, y: bodyY, w: W, h: D },
-    bottomFlapFront: { x: frontX, y: bottomY, w: L, h: bottomH },
-    bottomDustL: { x: leftX, y: bottomY, w: W, h: bottomDustH },
-    bottomFlapBack: { x: backX, y: bottomY, w: L, h: bottomH },
-    bottomDustR: { x: rightX, y: bottomY, w: W, h: bottomDustH },
-  };
 
   // ─── Canvas refs & state ───
   const canvasElRef = useRef<HTMLCanvasElement>(null);
@@ -144,9 +103,12 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const scaleRef = useRef(1); // px per mm
   const scaleXRef = useRef(1); // px per mm (X axis, may differ from Y due to Fabric SVG distortion)
   const scaleYRef = useRef(1); // px per mm (Y axis)
+  const svgMmWRef = useRef(0);
+  const svgMmHRef = useRef(0);
 
   // ─── UI state ───
   const [rightTab, setRightTab] = useState<RightTab>("properties");
+  const [panelMapData, setPanelMapData] = useState<any>(null);
   const [spotTarget, setSpotTarget] = useState<"fill" | "stroke">("fill");
   const [accOpen, setAccOpen] = useState<Record<string, boolean>>({ position: true, typography: true, color: false, spot: false });
   const toggleAcc = (key: string) => setAccOpen(prev => ({ ...prev, [key]: !prev[key] }));
@@ -228,6 +190,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [guides, setGuides] = useState<Array<{ id: string; pos: number; dir: "h" | "v" }>>([]);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [showBleedGuides, setShowBleedGuides] = useState(false);
+  const [dielineInfoVisible, setDielineInfoVisible] = useState(true);
   const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null);
   const [showPreflight, setShowPreflight] = useState(false);
   // ─── AI Panel State ───
@@ -248,6 +211,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [measureMode, setMeasureMode] = useState(false);
   const [measurePts, setMeasurePts] = useState<{x:number;y:number}[]>([]);
   const [measureResult, setMeasureResult] = useState("");
+  const [measureMouseMm, setMeasureMouseMm] = useState<{x:number;y:number}|null>(null);
+  const measurePtsRef = useRef<{x:number;y:number}[]>([]);
   const [showRuler, setShowRuler] = useState(true);
   const zoomRef = useRef(100);
   const [drawMode, setDrawMode] = useState(false);
@@ -261,6 +226,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [showBarcodePanel, setShowBarcodePanel] = useState(false);
   const [showTablePanel, setShowTablePanel] = useState(false);
   const [showMarkPanel, setShowMarkPanel] = useState(false);
+  const [showTemplatePanel, setShowTemplatePanel] = useState(false);
+  const [templateCategory, setTemplateCategory] = useState<string>("all");
   const [showDielinePanel, setShowDielinePanel] = useState(false);
   const [boxCategoryFilter, setBoxCategoryFilter] = useState('all');
   const [showDimModal, setShowDimModal] = useState(false);
@@ -269,6 +236,55 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [dimLength, setDimLength] = useState(0);
   const [dimWidth, setDimWidth] = useState(0);
   const [dimHeight, setDimHeight] = useState(0);
+
+  // ─── Effective dimensions (props or modal input) ───
+  const eL = L > 0 ? L : dimLength;
+  const eW = W > 0 ? W : dimWidth;
+  const eD = D > 0 ? D : dimHeight;
+
+  // ─── Geometry calculations ───
+  const T = getThickness(material);
+  const tuckH = getTuckH(material);
+  const dustH = getDustH(eW);
+  const glueW = getGlueW(material);
+  const bottomH = getBottomH(eW, material);
+  const bottomDustH = dustH;
+
+  const frontX = glueW + T;
+  const leftX = frontX + eL + T;
+  const backX = leftX + eW + T;
+  const rightX = backX + eL + T;
+  const totalW = rightX + eW;
+  const tuckY = 0;
+  const topLidY = tuckH + T;
+  const bodyY = topLidY + eW;
+  const bottomY = bodyY + eD + T;
+  const totalH = bottomY + Math.max(bottomH, bottomDustH);
+
+  const tuckInset = Math.min(tuckH * 0.35, eL * 0.12);
+  const tuckNotch = tuckH * 0.18;
+  const dustTaper = Math.min(dustH * 0.4, 6);
+  const dustRad = Math.min(dustH * 0.35, 5);
+  const glueTaper = Math.min(glueW * 0.3, eD * 0.12);
+  const bottomTaper = Math.min(bottomH * 0.25, 5);
+  const bottomDustTaper = Math.min(bottomDustH * 0.4, 6);
+  const geo = { tuckInset, tuckNotch, dustTaper, dustRad, glueTaper, bottomTaper, bottomDustTaper };
+
+  const pos: Record<string, {x:number;y:number;w:number;h:number}> = {
+    topTuck: { x: frontX, y: tuckY, w: eL, h: tuckH },
+    topLid: { x: frontX, y: topLidY, w: eL, h: eW },
+    topDustL: { x: leftX, y: bodyY - dustH, w: eW, h: dustH },
+    topDustR: { x: rightX, y: bodyY - dustH, w: eW, h: dustH },
+    glueFlap: { x: 0, y: bodyY, w: glueW, h: eD },
+    front: { x: frontX, y: bodyY, w: eL, h: eD },
+    left: { x: leftX, y: bodyY, w: eW, h: eD },
+    back: { x: backX, y: bodyY, w: eL, h: eD },
+    right: { x: rightX, y: bodyY, w: eW, h: eD },
+    bottomFlapFront: { x: frontX, y: bottomY, w: eL, h: bottomH },
+    bottomDustL: { x: leftX, y: bottomY, w: eW, h: bottomDustH },
+    bottomFlapBack: { x: backX, y: bottomY, w: eL, h: bottomH },
+    bottomDustR: { x: rightX, y: bottomY, w: eW, h: bottomDustH },
+  };
   const [fluteType, setFluteType] = useState('C');
   const [thickness, setThickness] = useState(4.0);
   const [isEcma, setIsEcma] = useState(false);
@@ -341,6 +357,10 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [customHex, setCustomHex] = useState("#FF0000");
   const [customPantoneRef, setCustomPantoneRef] = useState("");
   const [showUploadGuide, setShowUploadGuide] = useState(false);
+  const [showSizeConfirm, setShowSizeConfirm] = useState(false);
+  const [uploadSizeW, setUploadSizeW] = useState(0);
+  const [uploadSizeH, setUploadSizeH] = useState(0);
+  const pendingDielineRef = useRef<{group:any; origMmW:number; origMmH:number; svgOrigW:number; svgOrigH:number} | null>(null);
   const [dielineVisible, setDielineVisible] = useState(true);
   const [dielineLocked, setDielineLocked] = useState(true);
   const [dielineUngrouped, setDielineUngrouped] = useState(false);
@@ -384,7 +404,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   // ─── History ───
   const pushHistory = useCallback(() => {
     const c = fcRef.current; if (!c || loadingRef.current) return;
-    const jsonObj = c.toJSON(["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isTable","_tableConfig","_tableRole","_tableRow","_tableCol","_tableId"]);
+    const jsonObj = c.toJSON(["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","_isPanelOverlay","_panelId","_panelRole","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isTable","_tableConfig","_tableRole","_tableRow","_tableCol","_tableId"]);
     // Fabric toJSON may drop custom props on Image - inject manually
     const objs = c.getObjects();
     if (jsonObj.objects) {
@@ -464,7 +484,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   }, []);
   const SAVE_KEY = "packive-temp-design";
   const SAVE_META_KEY = "packive-temp-meta";
-  const JSON_PROPS = ["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isTable","_tableConfig","_tableRole","_tableRow","_tableCol","_tableId"];
+  const JSON_PROPS = ["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","_isPanelOverlay","_panelId","_panelRole","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isTable","_tableConfig","_tableRole","_tableRow","_tableCol","_tableId"];
 
   const [saveStatus, setSaveStatus] = useState<string|null>(null);
 
@@ -709,19 +729,27 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     const mmX = +(px / sX - 15).toFixed(2);
     const mmY = +(py / sY - 15).toFixed(2);
     setMeasurePts(prev => {
-      const next = prev.length >= 2 ? [{x:mmX,y:mmY}] : [...prev, {x:mmX,y:mmY}];
+      let snapX = mmX, snapY = mmY;
+      if (prev.length === 1 && opt.e?.shiftKey) {
+        const adx = Math.abs(mmX - prev[0].x), ady = Math.abs(mmY - prev[0].y);
+        if (adx > ady * 2) { snapY = prev[0].y; }
+        else if (ady > adx * 2) { snapX = prev[0].x; }
+        else { const avg = (adx + ady) / 2; snapX = prev[0].x + avg * Math.sign(mmX - prev[0].x); snapY = prev[0].y + avg * Math.sign(mmY - prev[0].y); }
+      }
+      const next = prev.length >= 2 ? [{x:snapX,y:snapY}] : [...prev, {x:snapX,y:snapY}];
       if (next.length === 2) {
         const dx = next[1].x - next[0].x, dy = next[1].y - next[0].y;
         const dist = Math.sqrt(dx*dx + dy*dy);
-        setMeasureResult(dist.toFixed(2) + " mm (dx:" + dx.toFixed(1) + " dy:" + dy.toFixed(1) + ")");
+        setMeasureResult(dist.toFixed(4) + " mm (dx:" + dx.toFixed(2) + " dy:" + dy.toFixed(2) + ")");
       } else { setMeasureResult("Click second point..."); }
+      measurePtsRef.current = next;
       return next;
     });
   }, [measureMode]);
 
   useEffect(() => {
     const cv = fcRef.current; if (!cv) return;
-    cv.getObjects().filter((o:any) => o._isMeasure).forEach((o:any) => cv.remove(o));
+    cv.getObjects().filter((o:any) => o._isMeasure || o._isMeasureLive).forEach((o:any) => cv.remove(o));
     if (!measureMode || measurePts.length === 0) { cv.renderAll(); return; }
     const sX2 = scaleXRef.current; const sY2 = scaleYRef.current;
     const F = (window as any).__fabric; if (!F) return;
@@ -734,66 +762,85 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       const mx=(pts[0].x+pts[1].x)/2, my=(pts[0].y+pts[1].y)/2;
       const dx=measurePts[1].x-measurePts[0].x, dy=measurePts[1].y-measurePts[0].y;
       const dist=Math.sqrt(dx*dx+dy*dy);
-      cv.add(new F.Text(dist.toFixed(2)+" mm", {left:mx+8,top:my-10,fontSize:12,fill:"#4fc3f7",fontFamily:"Inter",fontWeight:"bold",backgroundColor:"rgba(0,0,0,0.7)",padding:3,selectable:false,evented:false,_isMeasure:true}));
+      cv.add(new F.Text(dist.toFixed(4)+" mm", {left:mx+8,top:my-10,fontSize:12,fill:"#4fc3f7",fontFamily:"Inter",fontWeight:"bold",backgroundColor:"rgba(0,0,0,0.7)",padding:3,selectable:false,evented:false,_isMeasure:true}));
     }
     cv.renderAll();
   }, [measureMode, measurePts]);
 
   useEffect(() => {
     const cv = fcRef.current; if (!cv) return;
-    if (measureMode) { cv.on("mouse:down", handleMeasureClick); }
-    return () => { cv.off("mouse:down", handleMeasureClick); };
+    if (measureMode) {
+      const onMoveM = (opt: any) => {
+        const pt = opt.scenePoint || opt.viewportPoint || {x:0,y:0};
+        const F2 = fabricModRef.current; if (!F2) return;
+
+
+        const sX2 = scaleXRef.current, sY2 = scaleYRef.current;
+        // Remove old live line
+        cv.getObjects().filter((o:any) => o._isMeasureLive).forEach((o:any) => cv.remove(o));
+        // Draw live line from first point to cursor
+        const curPts = measurePtsRef.current;
+        if (curPts && curPts.length === 1) {
+          const p0x = (curPts[0].x + 15) * sX2, p0y = (curPts[0].y + 15) * sY2;
+          const liveX = pt.x, liveY = pt.y;
+          cv.add(new F2.Line([p0x, p0y, liveX, liveY], {stroke:"#333333", strokeWidth:0.8, selectable:false, evented:false, _isMeasure:true, _isMeasureLive:true}));
+          const mmX = +(pt.x / sX2 - 15).toFixed(2), mmY = +(pt.y / sY2 - 15).toFixed(2);
+          const ldx = mmX - curPts[0].x, ldy = mmY - curPts[0].y;
+          const ldist = Math.sqrt(ldx*ldx + ldy*ldy);
+          cv.add(new F2.Text(ldist.toFixed(4)+" mm", {left:(p0x+liveX)/2+8, top:(p0y+liveY)/2-12, fontSize:11, fill:"#333333", fontFamily:"Inter", fontWeight:"600", selectable:false, evented:false, _isMeasure:true, _isMeasureLive:true}));
+          cv.requestRenderAll();
+        }
+      };
+      cv.on("mouse:move", onMoveM);
+      const cleanup0 = () => cv.off("mouse:move", onMoveM);
+      // original click handler below - merge cleanup
+      cv.on("mouse:down", handleMeasureClick);
+      return () => { cleanup0(); cv.off("mouse:down", handleMeasureClick); };
+    }
   }, [measureMode, handleMeasureClick]);
 
   // ─── Draw dieline guide layer on Fabric canvas ───
   const drawGuideLayer = useCallback(async (canvas: any, scale: number) => {
     const F = fabricModRef.current; if (!F) return;
-    if (L === 0 && W === 0 && D === 0) return; // blank canvas mode - no guide layer
+    if (eL === 0 && eW === 0 && eD === 0) return; // blank canvas mode - no guide layer
 
-    // Die-cut outline paths for each panel
-    Object.entries(pos).forEach(([pid, p]) => {
-      if (p.w <= 0 || p.h <= 0) return;
-      const sp = { x: (p.x + PAD) * scale, y: (p.y + PAD) * scale, w: p.w * scale, h: p.h * scale };
-      const pathStr = panelPath(pid, sp, {
-        tuckInset: tuckInset * scale, tuckNotch: tuckNotch * scale,
-        dustTaper: dustTaper * scale, dustRad: dustRad * scale,
-        glueTaper: glueTaper * scale, bottomTaper: bottomTaper * scale,
-        bottomDustTaper: bottomDustTaper * scale,
-      });
-      const path = new F.Path(pathStr, {
-        fill: "transparent", stroke: "#FF0000", strokeWidth: 0.8,
-        selectable: false, evented: false, _isDieLine: true, _isGuideLayer: true,
-      });
-      canvas.add(path);
-    });
+    // Check if API-generated dieline exists on canvas
+    const hasApiDieline = canvas.getObjects().some((o: any) => o._isDieline || o.name === "__dieline_upload__");
 
-    // Fold lines
-    foldLines.forEach(([x1, y1, x2, y2]) => {
-      const line = new F.Line([
-        (x1 + PAD) * scale, (y1 + PAD) * scale,
-        (x2 + PAD) * scale, (y2 + PAD) * scale
-      ], {
-        stroke: "#00AA00", strokeWidth: 0.6, strokeDashArray: [4, 2],
-        selectable: false, evented: false, _isFoldLine: true, _isGuideLayer: true,
+    // Die-cut outline paths - only if NO API dieline
+    if (!hasApiDieline) {
+      Object.entries(pos).forEach(([pid, p]) => {
+        if (p.w <= 0 || p.h <= 0) return;
+        const sp = { x: (p.x + PAD) * scale, y: (p.y + PAD) * scale, w: p.w * scale, h: p.h * scale };
+        const pathStr = panelPath(pid, sp, {
+          tuckInset: tuckInset * scale, tuckNotch: tuckNotch * scale,
+          dustTaper: dustTaper * scale, dustRad: dustRad * scale,
+          glueTaper: glueTaper * scale, bottomTaper: bottomTaper * scale,
+          bottomDustTaper: bottomDustTaper * scale,
+        });
+        const path = new F.Path(pathStr, {
+          fill: "transparent", stroke: "#FF0000", strokeWidth: 0.8,
+          selectable: false, evented: false, _isDieLine: true, _isGuideLayer: true,
+        });
+        canvas.add(path);
       });
-      canvas.add(line);
-    });
 
-    // Panel labels
-    const labelSize = Math.max(8, Math.min(14, L * scale * 0.08));
-    Object.entries(pos).forEach(([pid, p]) => {
-      if (p.w <= 0 || p.h <= 0) return;
-      const cx = (p.x + PAD + p.w / 2) * scale;
-      const cy = (p.y + PAD + p.h / 2) * scale;
-      const label = new F.FabricText(pid.replace(/([A-Z])/g, " $1").trim(), {
-        left: cx, top: cy, originX: "center", originY: "center",
-        fontSize: labelSize, fill: "rgba(0,0,0,0.12)",
-        fontFamily: "Arial, sans-serif", selectable: false, evented: false,
-        _isPanelLabel: true, _isGuideLayer: true,
+      // Fold lines - only if NO API dieline
+      foldLines.forEach(([x1, y1, x2, y2]) => {
+        const line = new F.Line([
+          (x1 + PAD) * scale, (y1 + PAD) * scale,
+          (x2 + PAD) * scale, (y2 + PAD) * scale
+        ], {
+          stroke: "#00AA00", strokeWidth: 0.6, strokeDashArray: [4, 2],
+          selectable: false, evented: false, _isFoldLine: true, _isGuideLayer: true,
+        });
+        canvas.add(line);
       });
-      canvas.add(label);
-    });
-  }, [pos, foldLines, PAD, tuckInset, tuckNotch, dustTaper, dustRad, glueTaper, bottomTaper, bottomDustTaper, L]);
+    }
+
+  }, [pos, foldLines, PAD, tuckInset, tuckNotch, dustTaper, dustRad, glueTaper, bottomTaper, bottomDustTaper, eL]);
+
+
 
   // ─── Load FOGRA39 ICC LUT ───
   useEffect(() => {
@@ -950,6 +997,176 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             subTarget.selectAll();
             console.log("[TABLE] Editing cell text:", (subTarget as any)._tableRow, (subTarget as any)._tableCol);
           }
+        }
+      }
+    });
+
+    // ─── Polygon/Path point editing on double-click ───
+    // Supports: polygon (star, pentagon, etc.), path (bezier curves),
+    // and rect/triangle/ellipse (auto-converted to path first)
+    canvas.on('mouse:dblclick', (e: any) => {
+      const target = e.target;
+      if (!target) return;
+      if (target._isGuideLayer || target._isDieLine) return;
+
+      const F = fabricModRef.current;
+      if (!F) return;
+
+      // ── Helper: Convert any shape to editable Path ──
+      const convertToPath = (obj: any): any => {
+        let pathData = '';
+        const w = obj.width || 0;
+        const h = obj.height || 0;
+
+        if (obj.type === 'rect') {
+          // Rect → Path (4 corners)
+          const rx = Math.min(obj.rx || 0, w / 2);
+          const ry = Math.min(obj.ry || 0, h / 2);
+          if (rx > 0 || ry > 0) {
+            pathData = `M ${-w/2 + rx} ${-h/2} L ${w/2 - rx} ${-h/2} Q ${w/2} ${-h/2} ${w/2} ${-h/2 + ry} L ${w/2} ${h/2 - ry} Q ${w/2} ${h/2} ${w/2 - rx} ${h/2} L ${-w/2 + rx} ${h/2} Q ${-w/2} ${h/2} ${-w/2} ${h/2 - ry} L ${-w/2} ${-h/2 + ry} Q ${-w/2} ${-h/2} ${-w/2 + rx} ${-h/2} Z`;
+          } else {
+            pathData = `M ${-w/2} ${-h/2} L ${w/2} ${-h/2} L ${w/2} ${h/2} L ${-w/2} ${h/2} Z`;
+          }
+        } else if (obj.type === 'triangle') {
+          pathData = `M ${0} ${-h/2} L ${w/2} ${h/2} L ${-w/2} ${h/2} Z`;
+        } else if (obj.type === 'ellipse' || obj.type === 'circle') {
+          const rx2 = obj.rx || obj.radius || w / 2;
+          const ry2 = obj.ry || obj.radius || h / 2;
+          pathData = `M ${-rx2} 0 A ${rx2} ${ry2} 0 1 1 ${rx2} 0 A ${rx2} ${ry2} 0 1 1 ${-rx2} 0 Z`;
+        } else {
+          return null; // Cannot convert
+        }
+
+        const newPath = new F.Path(pathData, {
+          left: obj.left,
+          top: obj.top,
+          fill: obj.fill || 'transparent',
+          stroke: obj.stroke || '#000000',
+          strokeWidth: obj.strokeWidth || 1,
+          scaleX: obj.scaleX || 1,
+          scaleY: obj.scaleY || 1,
+          angle: obj.angle || 0,
+          opacity: obj.opacity || 1,
+          originX: obj.originX || 'center',
+          originY: obj.originY || 'center',
+          objectCaching: false,
+        });
+
+        // Copy custom properties
+        if (obj._cmykFill) (newPath as any)._cmykFill = obj._cmykFill;
+        if (obj._cmykStroke) (newPath as any)._cmykStroke = obj._cmykStroke;
+
+        canvas.remove(obj);
+        canvas.add(newPath);
+        canvas.setActiveObject(newPath);
+        canvas.requestRenderAll();
+        console.log('[ShapeEdit] Converted', obj.type, '→ Path');
+        return newPath;
+      };
+
+      // ── Determine action based on type ──
+      const editableTypes = ['polygon', 'path'];
+      const convertibleTypes = ['rect', 'triangle', 'ellipse', 'circle'];
+      let editTarget = target;
+
+      // Auto-convert basic shapes to path on double-click
+      if (convertibleTypes.includes(target.type)) {
+        const converted = convertToPath(target);
+        if (!converted) return;
+        editTarget = converted;
+      }
+
+      // ── Polygon editing (star, pentagon, hex, etc.) ──
+      if (editTarget.type === 'polygon' && editTarget.points) {
+        const poly = editTarget;
+        poly.edit = !poly.edit;
+
+        if (poly.edit) {
+          poly.__savedControls = { ...poly.controls };
+          poly.cornerStyle = 'circle';
+          poly.cornerColor = 'rgba(33,150,243,0.8)';
+          poly.transparentCorners = false;
+          poly.cornerSize = 12;
+          poly.hasBorders = false;
+          poly.objectCaching = false;
+
+          if (F.controlsUtils?.createPolyControls) {
+            poly.controls = F.controlsUtils.createPolyControls(poly, {
+              cursorStyle: 'move',
+            });
+            console.log('[PolyEdit] Editing', poly.points.length, 'polygon points');
+          }
+          poly.dirty = true;
+          poly.setCoords();
+          canvas.requestRenderAll();
+
+        } else {
+          if (poly.__savedControls) {
+            poly.controls = poly.__savedControls;
+            delete poly.__savedControls;
+          } else if (F.controlsUtils?.createObjectDefaultControls) {
+            poly.controls = F.controlsUtils.createObjectDefaultControls();
+          }
+          poly.cornerStyle = 'rect';
+          poly.cornerColor = 'blue';
+          poly.hasBorders = true;
+          poly.objectCaching = true;
+          poly.dirty = true;
+          poly.setCoords();
+          canvas.requestRenderAll();
+          console.log('[PolyEdit] Exited polygon edit mode');
+        }
+        return;
+      }
+
+      // ── Path editing (bezier curves, arcs, lines) ──
+      if (editTarget.type === 'path' && editTarget.path) {
+        const pathObj = editTarget;
+        pathObj.edit = !pathObj.edit;
+
+        if (pathObj.edit) {
+          pathObj.__savedControls = { ...pathObj.controls };
+          pathObj.cornerStyle = 'circle';
+          pathObj.cornerColor = 'rgba(33,150,243,0.8)';
+          pathObj.transparentCorners = false;
+          pathObj.cornerSize = 10;
+          pathObj.hasBorders = false;
+          pathObj.objectCaching = false;
+
+          if (F.controlsUtils?.createPathControls) {
+            pathObj.controls = F.controlsUtils.createPathControls(pathObj, {
+              cursorStyle: 'move',
+              controlPointStyle: {
+                controlFill: 'rgba(255,255,255,0.9)',
+                controlStroke: 'rgba(33,150,243,0.8)',
+                connectionDashArray: [3, 3],
+              },
+              pointStyle: {
+                controlFill: 'rgba(33,150,243,0.9)',
+                controlStroke: 'rgba(33,150,243,1)',
+              },
+            });
+            console.log('[PathEdit] Editing path with', pathObj.path.length, 'commands');
+          }
+          pathObj.dirty = true;
+          pathObj.setCoords();
+          canvas.requestRenderAll();
+
+        } else {
+          if (pathObj.__savedControls) {
+            pathObj.controls = pathObj.__savedControls;
+            delete pathObj.__savedControls;
+          } else if (F.controlsUtils?.createObjectDefaultControls) {
+            pathObj.controls = F.controlsUtils.createObjectDefaultControls();
+          }
+          pathObj.cornerStyle = 'rect';
+          pathObj.cornerColor = 'blue';
+          pathObj.hasBorders = true;
+          pathObj.objectCaching = true;
+          pathObj.dirty = true;
+          pathObj.setCoords();
+          canvas.requestRenderAll();
+          console.log('[PathEdit] Exited path edit mode');
         }
       }
     });
@@ -1192,6 +1409,92 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
 
   // ─── Add Text ───
+  // ─── Confirm Dieline Size (Upload) ───
+  const confirmDielineSize = useCallback(() => {
+    const p = pendingDielineRef.current; if (!p) return;
+    const c = fcRef.current; if (!c) return;
+    const origMmW = uploadSizeW;
+    const origMmH = uploadSizeH;
+    const group = p.group;
+    svgMmWRef.current = origMmW; svgMmHRef.current = origMmH;
+    console.log("[Dieline] User confirmed size:", origMmW, "x", origMmH, "mm");
+
+    console.log("[Dieline] group.width:", group.width, "group.height:", group.height, "scX:", (origMmW * scaleRef.current / (group.width || 1)).toFixed(6), "scY:", (origMmH * scaleRef.current / (group.height || 1)).toFixed(6));
+    console.log("[Dieline] Canvas scale:", scaleRef.current, "px/mm");
+
+    // ── Accurate mm scaling (compensate Fabric viewBox distortion) ──
+    // Fabric.js may apply partial viewBox transforms during SVG parsing,
+    // resulting in group.width != svgOrigW (e.g. 2849 vs 3125).
+    // We MUST use per-axis scaling to compensate this distortion.
+    // This is NOT stretching the SVG - it is UNDOING Fabric's distortion.
+    const s = scaleRef.current; // px per mm
+
+    // Per-axis scale: origMm * px/mm / fabricGroupSize = correct scale
+    const scX = (origMmW * s) / (group.width || 1);
+    const scY = (origMmH * s) / (group.height || 1);
+
+    // Verify: the ratio between scX and scY should match
+    // the inverse of Fabric's distortion ratio
+    const fabricDistortion = scX / scY;
+    console.log("[Dieline] Fabric distortion factor:", fabricDistortion.toFixed(4),
+    fabricDistortion > 1.01 || fabricDistortion < 0.99 ? "(compensating)" : "(minimal)");
+
+    // Final rendered size in mm (should match origMm exactly)
+    const finalMmW = ((group.width || 1) * scX) / s;
+    const finalMmH = ((group.height || 1) * scY) / s;
+    console.log("[Dieline] Expected:", origMmW.toFixed(2), "x", origMmH.toFixed(2), "mm");
+    console.log("[Dieline] Final:   ", finalMmW.toFixed(2), "x", finalMmH.toFixed(2), "mm");
+    console.log("[Dieline] Error: W=", (finalMmW - origMmW).toFixed(4), "mm, H=", (finalMmH - origMmH).toFixed(4), "mm");
+
+    // ── Resize canvas to fit dieline ──
+    const wrapper = wrapperRef.current;
+    const rulerPadD = showRuler ? RULER_THICK : 0;
+    const dieAvailW = wrapper ? wrapper.clientWidth - rulerPadD - 8 : 1200;
+    const dieAvailH = wrapper ? wrapper.clientHeight - rulerPadD - 8 : 800;
+
+    // Use a fixed high-quality px/mm (at least 2.0), canvas = full available area
+    const PAD_MM = 15;
+    const totalMmW = origMmW + PAD_MM * 2;
+    const totalMmH = origMmH + PAD_MM * 2;
+
+    // Canvas uses full available space
+    const newCanvasW = dieAvailW;
+    const newCanvasH = dieAvailH;
+    c.setDimensions({ width: newCanvasW, height: newCanvasH });
+
+    // Calculate px/mm so dieline fits in canvas, then apply as zoom
+    const fitPxPerMmW = (newCanvasW - PAD_MM * 2) / origMmW;
+    const fitPxPerMmH = (newCanvasH - PAD_MM * 2) / origMmH;
+    const newPxPerMm = Math.min(fitPxPerMmW, fitPxPerMmH);
+    scaleRef.current = newPxPerMm;
+    c.backgroundColor = '#FFFFFF';
+    c.requestRenderAll();
+    console.log("[Dieline Resize] wrapper:", wrapper?.clientWidth, "x", wrapper?.clientHeight, "| canvas:", newCanvasW, "x", newCanvasH, "| pxPerMm:", newPxPerMm.toFixed(3));
+
+    // Recalculate scale with new px/mm
+    const finalScX = (origMmW * newPxPerMm) / (group.width || 1);
+    const finalScY = (origMmH * newPxPerMm) / (group.height || 1);
+
+    // Position: center with padding
+    const leftPos = PAD_MM * newPxPerMm + (origMmW * newPxPerMm) / 2;
+    const topPos = PAD_MM * newPxPerMm + (origMmH * newPxPerMm) / 2;
+    group.set({ scaleX: finalScX, scaleY: finalScY, left: leftPos, top: topPos, originX: "center", originY: "center" });
+
+    // Verify accuracy
+    const verifyW = ((group.width || 1) * finalScX) / newPxPerMm;
+    const verifyH = ((group.height || 1) * finalScY) / newPxPerMm;
+    console.log("[Dieline] Expected:", origMmW.toFixed(2), "x", origMmH.toFixed(2), "mm");
+    console.log("[Dieline] Verify: ", verifyW.toFixed(4), "x", verifyH.toFixed(4), "mm");
+    console.log("[Dieline] Scale: scX=", finalScX.toFixed(6), "scY=", finalScY.toFixed(6), "px/mm=", newPxPerMm.toFixed(4));
+    // Store per-axis px/mm for Measure tool
+    scaleXRef.current = newPxPerMm * (finalScX / finalScY); // X has different density due to Fabric distortion
+    scaleYRef.current = newPxPerMm; // Y axis is reference (least distorted)
+    console.log("[Dieline] Measure scale: X=", scaleXRef.current.toFixed(4), "Y=", scaleYRef.current.toFixed(4), "px/mm");
+    c.add(group); c.sendObjectToBack(group); c.requestRenderAll();
+    setShowSizeConfirm(false);
+    pendingDielineRef.current = null;
+  }, [uploadSizeW, uploadSizeH]);
+
   const addText = useCallback(async () => {
     const c = fcRef.current; if (!c) return;
     const F = fabricModRef.current; if (!F) return;
@@ -1490,6 +1793,10 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       height: Math.round((obj.height || 0) * (obj.scaleY || 1)),
       angle: Math.round(obj.angle || 0),
       opacity: Math.round((obj.opacity || 1) * 100),
+      _spotFillName: (obj as any)._spotFillName || '',
+      _spotStrokeName: (obj as any)._spotStrokeName || '',
+      _spotFillPantone: (obj as any)._spotFillPantone || '',
+      _spotStrokePantone: (obj as any)._spotStrokePantone || '',
       fontSize: obj.type === "i-text" || obj.type === "textbox" ? Math.max(24, Math.round(((obj as any).fontSize || 24) * ((obj as any).scaleX || 1) / scaleRef.current)) : undefined,
       fontFamily: (obj as any).fontFamily || "Inter",
       fontWeight: (obj as any).fontWeight || "normal",
@@ -1704,8 +2011,30 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
               });
             };
             if (ext !== "svg") forceBlack(result.objects);
-            const group = F.util.groupSVGElements(result.objects, result.options);
+
+            const allObjs = result.objects || [];
+
+
+            const group = F.util.groupSVGElements(allObjs, result.options);
+
+
+
             group.set({ _isDieLine: true, _isGuideLayer: true, selectable: !dielineLocked, evented: !dielineLocked, name: "__dieline_upload__" });
+
+            // Tag info children for uploaded dieline
+            if (group._objects) {
+              group._objects.forEach((child: any) => {
+                const ct = (child.type || "").toLowerCase();
+                const isText = (ct === "text" || ct === "i-text" || ct === "textbox");
+                const isThinPath = (ct === "path" || ct === "line" || ct === "polyline") && (child.strokeWidth || 1) < 1.5;
+                const isSmallPoly = (ct === "polygon") && ((child.width || 0) < 15 && (child.height || 0) < 15);
+                if (isText || isThinPath || isSmallPoly) {
+                  child._isDielineInfo = true;
+                }
+              });
+              const infoCount = group._objects.filter((ch: any) => ch._isDielineInfo).length;
+              console.log("[Dieline-Upload] Tagged " + infoCount + " info children inside group");
+            }
 
             // ─── Accurate mm scaling ───
             // SVG/EPS coordinates are in pt (1pt = 0.3528mm = 1/72 inch)
@@ -1742,99 +2071,45 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             }
 
             console.log("[Dieline] SVG original:", svgOrigW, "x", svgOrigH, "units, =", origMmW.toFixed(2), "x", origMmH.toFixed(2), "mm");
-            console.log("[Dieline] group.width:", group.width, "group.height:", group.height, "scX:", (origMmW * scaleRef.current / (group.width || 1)).toFixed(6), "scY:", (origMmH * scaleRef.current / (group.height || 1)).toFixed(6));
-            console.log("[Dieline] Canvas scale:", scaleRef.current, "px/mm");
-
-            // ── Accurate mm scaling (compensate Fabric viewBox distortion) ──
-            // Fabric.js may apply partial viewBox transforms during SVG parsing,
-            // resulting in group.width != svgOrigW (e.g. 2849 vs 3125).
-            // We MUST use per-axis scaling to compensate this distortion.
-            // This is NOT stretching the SVG - it is UNDOING Fabric's distortion.
-            const s = scaleRef.current; // px per mm
-
-            // Per-axis scale: origMm * px/mm / fabricGroupSize = correct scale
-            const scX = (origMmW * s) / (group.width || 1);
-            const scY = (origMmH * s) / (group.height || 1);
-
-            // Verify: the ratio between scX and scY should match
-            // the inverse of Fabric's distortion ratio
-            const fabricDistortion = scX / scY;
-            console.log("[Dieline] Fabric distortion factor:", fabricDistortion.toFixed(4),
-              fabricDistortion > 1.01 || fabricDistortion < 0.99 ? "(compensating)" : "(minimal)");
-
-            // Final rendered size in mm (should match origMm exactly)
-            const finalMmW = ((group.width || 1) * scX) / s;
-            const finalMmH = ((group.height || 1) * scY) / s;
-            console.log("[Dieline] Expected:", origMmW.toFixed(2), "x", origMmH.toFixed(2), "mm");
-            console.log("[Dieline] Final:   ", finalMmW.toFixed(2), "x", finalMmH.toFixed(2), "mm");
-            console.log("[Dieline] Error: W=", (finalMmW - origMmW).toFixed(4), "mm, H=", (finalMmH - origMmH).toFixed(4), "mm");
-
-            // ── Resize canvas to fit dieline ──
-            const wrapper = wrapperRef.current;
-            const rulerPadD = showRuler ? RULER_THICK : 0;
-            const dieAvailW = wrapper ? wrapper.clientWidth - rulerPadD - 8 : 1200;
-            const dieAvailH = wrapper ? wrapper.clientHeight - rulerPadD - 8 : 800;
-
-            // Use a fixed high-quality px/mm (at least 2.0), canvas = full available area
-            const PAD_MM = 15;
-            const totalMmW = origMmW + PAD_MM * 2;
-            const totalMmH = origMmH + PAD_MM * 2;
-
-            // Canvas uses full available space
-            const newCanvasW = dieAvailW;
-            const newCanvasH = dieAvailH;
-            c.setDimensions({ width: newCanvasW, height: newCanvasH });
-
-            // Calculate px/mm so dieline fits in canvas, then apply as zoom
-            const fitPxPerMmW = (newCanvasW - PAD_MM * 2) / origMmW;
-            const fitPxPerMmH = (newCanvasH - PAD_MM * 2) / origMmH;
-            const newPxPerMm = Math.min(fitPxPerMmW, fitPxPerMmH);
-            scaleRef.current = newPxPerMm;
-            c.backgroundColor = '#FFFFFF';
-            c.requestRenderAll();
-            console.log("[Dieline Resize] wrapper:", wrapper?.clientWidth, "x", wrapper?.clientHeight, "| canvas:", newCanvasW, "x", newCanvasH, "| pxPerMm:", newPxPerMm.toFixed(3));
-
-            // Recalculate scale with new px/mm
-            const finalScX = (origMmW * newPxPerMm) / (group.width || 1);
-            const finalScY = (origMmH * newPxPerMm) / (group.height || 1);
-
-            // Position: center with padding
-            const leftPos = PAD_MM * newPxPerMm + (origMmW * newPxPerMm) / 2;
-            const topPos = PAD_MM * newPxPerMm + (origMmH * newPxPerMm) / 2;
-            group.set({ scaleX: finalScX, scaleY: finalScY, left: leftPos, top: topPos, originX: "center", originY: "center" });
-
-            // Verify accuracy
-            const verifyW = ((group.width || 1) * finalScX) / newPxPerMm;
-            const verifyH = ((group.height || 1) * finalScY) / newPxPerMm;
-            console.log("[Dieline] Expected:", origMmW.toFixed(2), "x", origMmH.toFixed(2), "mm");
-            console.log("[Dieline] Verify: ", verifyW.toFixed(4), "x", verifyH.toFixed(4), "mm");
-            console.log("[Dieline] Scale: scX=", finalScX.toFixed(6), "scY=", finalScY.toFixed(6), "px/mm=", newPxPerMm.toFixed(4));
-            // Store per-axis px/mm for Measure tool
-            scaleXRef.current = newPxPerMm * (finalScX / finalScY); // X has different density due to Fabric distortion
-            scaleYRef.current = newPxPerMm; // Y axis is reference (least distorted)
-            console.log("[Dieline] Measure scale: X=", scaleXRef.current.toFixed(4), "Y=", scaleYRef.current.toFixed(4), "px/mm");
-            c.add(group); c.sendObjectToBack(group); c.requestRenderAll();
+            svgMmWRef.current = origMmW; svgMmHRef.current = origMmH;
+            pendingDielineRef.current = { group, origMmW, origMmH, svgOrigW, svgOrigH, infoObjs };
+            setUploadSizeW(parseFloat(origMmW.toFixed(2)));
+            setUploadSizeH(parseFloat(origMmH.toFixed(2)));
+            setShowSizeConfirm(true);
+            return;
           } catch (err: any) { alert("Failed to load dieline: " + err.message); }
           e.target.value = "";
         }} />
-        <button onClick={() => { if (!window.confirm("Start a completely new blank canvas?\nAll current work including dielines will be permanently removed.")) return; const c = fcRef.current; if (!c) return; c.clear(); c.backgroundColor = "#ffffff"; c.requestRenderAll(); setDielineFileName(""); setDielineUngrouped(false); pushHistory(); refreshLayers(); }} className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors" title="Start a completely new blank canvas">New</button>
-        <button onClick={() => dielineFileRef.current?.click()} className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-blue-600 hover:bg-blue-50 hover:border-blue-400 transition-colors">Upload Dieline</button>
-        <button onClick={() => { const c = fcRef.current; if (!c) return; const nv = !dielineVisible; setDielineVisible(nv); c.getObjects().forEach((o: any) => { if (o._isGuideLayer || o._isDieLine || o._isFoldLine || o._isPanelLabel) o.set({ visible: nv }); }); c.requestRenderAll(); }} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${dielineVisible ? "bg-gray-200 border-gray-300 text-gray-600 hover:bg-gray-300" : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"}`}>{dielineVisible ? "Hide Lines" : "Show Lines"}</button>
-        <button onClick={() => { const c = fcRef.current; if (!c) return; const nl = !dielineLocked; setDielineLocked(nl); c.getObjects().forEach((o: any) => { if (o._isGuideLayer || o._isDieLine || o._isFoldLine || o._isPanelLabel) o.set({ selectable: !nl, evented: !nl }); }); c.requestRenderAll(); }} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1 ${dielineLocked ? "bg-orange-50 border-orange-300 text-orange-700" : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"}`}>{dielineLocked ? "\uD83D\uDD12 Locked" : "\uD83D\uDD13 Unlocked"}</button>
-        <button onClick={async () => { const c = fcRef.current; if (!c) return; const F = fabricModRef.current; if (!F) return; const dieGroup = c.getObjects().find((o: any) => o.name === "__dieline_upload__") as any; if (!dieGroup) { alert("No dieline group found"); return; } if (!window.confirm("Ungroup dieline into individual objects?\nYou can then select and delete unnecessary elements.")) return; try { const gScX = dieGroup.scaleX || 1; const gScY = dieGroup.scaleY || 1; const gLeft = dieGroup.left || 0; const gTop = dieGroup.top || 0; const gW = (dieGroup.width || 0); const gH = (dieGroup.height || 0); const json = dieGroup.toObject(); const subObjects = json.objects || []; console.log("[Ungroup] subObjects:", subObjects.length, "group:", {gLeft, gTop, gScX, gScY, gW, gH}); c.remove(dieGroup); let count = 0; for (const objData of subObjects) { try { const obj = await F.util.enlivenObjects([objData]); const item = obj[0]; if (!item) continue; const itemLeft = objData.left || 0; const itemTop = objData.top || 0; const worldLeft = gLeft + (itemLeft * gScX); const worldTop = gTop + (itemTop * gScY); item.set({ left: worldLeft, top: worldTop, scaleX: (objData.scaleX || 1) * gScX, scaleY: (objData.scaleY || 1) * gScY, selectable: true, evented: true, hasControls: true, hasBorders: true, lockMovementX: false, lockMovementY: false, _isDieLine: true, _isGuideLayer: false, name: `__dieline_obj_${count}__` }); item.setCoords(); c.add(item); count++; } catch(e) { console.warn("[Ungroup] skip item:", e); } } console.log("[Ungroup] added:", count, "objects");
-// ── Panel Map 자동 인식 ──
-const dieObjs = c.getObjects().filter((o: any) => o._isDieLine || o._isFoldLine);
-const panelResult = detectPanels(dieObjs, scaleRef.current);
-console.log("[PanelMap] boxType:", panelResult.boxType);
-console.log("[PanelMap] dimensions:", panelResult.dimensions);
-panelResult.panels.forEach((p: any) => {
-  console.log(`[PanelMap] ${p.label} (${p.role}): ${p.mmWidth}x${p.mmHeight}mm | left:${Math.round(p.left)} top:${Math.round(p.top)} w:${Math.round(p.width)} h:${Math.round(p.height)}`);
-});
-// ── Panel Map 진단 로그 ──
-const allObjs = c.getObjects().filter((o: any) => o._isDieLine || o._isFoldLine);
-allObjs.forEach((o: any, i: number) => {
-  console.log(`[PanelMap ${i}]`, "type:", o.type, "stroke:", o.stroke, "strokeW:", (o.strokeWidth||0).toFixed(1), "fill:", o.fill, "w:", Math.round(o.width||0), "h:", Math.round(o.height||0), "left:", Math.round(o.left||0), "top:", Math.round(o.top||0), "name:", o.name, "pathLen:", o.path?.length||0, "path:", JSON.stringify(o.path?.slice(0,2)));
-}); c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHistory(); refreshLayers(); alert(`Ungrouped: ${count} objects.\nAll elements are now selectable.\nSelect unwanted elements and press Delete.`); } catch(err: any) { console.error("[Ungroup] error:", err); alert("Ungroup failed: " + err.message); } }} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${dielineUngrouped ? "bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed" : "bg-white border-orange-300 text-orange-600 hover:bg-orange-50 hover:border-orange-400"}`} disabled={dielineUngrouped}>{dielineUngrouped ? "Ungrouped" : "Ungroup"}</button>
+        <button onClick={() => { if (!window.confirm("Start a completely new blank canvas?\nAll current work including dielines will be permanently removed.")) return; const c = fcRef.current; if (!c) return; c.clear(); c.backgroundColor = "#ffffff"; c.requestRenderAll(); setDielineFileName(""); setDielineUngrouped(false); pushHistory(); refreshLayers(); }} className="px-2.5 py-1.5 rounded-md text-[11px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors" title="New canvas">New</button>
+        <button onClick={() => dielineFileRef.current?.click()} className="px-2.5 py-1.5 rounded-md text-[11px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors">Upload Dieline</button>
+        <button onClick={() => { const c = fcRef.current; if (!c) return; const nv = !dielineVisible; setDielineVisible(nv); c.getObjects().forEach((o: any) => { if (o._isGuideLayer || o._isDieLine || o._isFoldLine || o._isPanelLabel) o.set({ visible: nv }); }); c.requestRenderAll(); }} className={`px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors ${dielineVisible ? "text-gray-900 bg-gray-100" : "text-gray-500 hover:text-gray-900 hover:bg-gray-100"}`}>{dielineVisible ? "Lines On" : "Lines Off"}</button>
+              <button onClick={() => { const c = fcRef.current; if (!c) return; const nv = !dielineInfoVisible; setDielineInfoVisible(nv); let count = 0; c.getObjects().forEach((o: any) => { if (o._isDieLine || o._isDieline) { const children = o._objects || []; children.forEach((child: any) => { if (child._isDielineInfo) { child.set({ opacity: nv ? 1 : 0 }); count++; } }); o.dirty = true; o.set('dirty', true); if (o._cacheCanvas) { o._cacheCanvas = null; } } }); console.log("[Info Toggle] " + (nv ? "Show" : "Hide") + " " + count + " info objects"); c.requestRenderAll(); }} className="px-2.5 py-1.5 rounded-md text-[11px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors">{dielineInfoVisible ? "Info On" : "Info Off"}</button>
+        <button onClick={() => { const c = fcRef.current; if (!c) return; const nl = !dielineLocked; setDielineLocked(nl); c.getObjects().forEach((o: any) => { if (o._isGuideLayer || o._isDieLine || o._isFoldLine || o._isPanelLabel) o.set({ selectable: !nl, evented: !nl }); }); c.requestRenderAll(); }} className={`px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors ${dielineLocked ? "text-amber-700 bg-amber-50" : "text-gray-500 hover:text-gray-900 hover:bg-gray-100"}`}>{dielineLocked ? "Locked" : "Unlocked"}</button>
+        <button onClick={async () => { const c = fcRef.current; if (!c) return; const F = fabricModRef.current; if (!F) return; const dieGroup = c.getObjects().find((o: any) => o.name === "__dieline_upload__" || o._isDieline || o._isDieLine) as any; if (!dieGroup) { alert("No dieline group found"); return; } if (!window.confirm("Ungroup dieline into individual objects?\nYou can then select and delete unnecessary elements.")) return; try { const gScX = dieGroup.scaleX || 1; const gScY = dieGroup.scaleY || 1; const gLeft = dieGroup.left || 0; const gTop = dieGroup.top || 0; const gW = (dieGroup.width || 0); const gH = (dieGroup.height || 0); const json = dieGroup.toObject(); const subObjects = json.objects || []; console.log("[Ungroup] subObjects:", subObjects.length, "group:", {gLeft, gTop, gScX, gScY, gW, gH}); c.remove(dieGroup); let count = 0; for (const objData of subObjects) { try { const obj = await F.util.enlivenObjects([objData]); const item = obj[0]; if (!item) continue; const itemLeft = objData.left || 0; const itemTop = objData.top || 0; const worldLeft = gLeft + (itemLeft * gScX); const worldTop = gTop + (itemTop * gScY); item.set({ left: worldLeft, top: worldTop, scaleX: (objData.scaleX || 1) * gScX, scaleY: (objData.scaleY || 1) * gScY, selectable: true, evented: true, hasControls: true, hasBorders: true, lockMovementX: false, lockMovementY: false, _isDieLine: true, _isGuideLayer: false, name: `__dieline_obj_${count}__` }); // Tag text & thin elements as dieline info
+const objType = objData.type || "";
+const isTxt = (objType === "text" || objType === "i-text" || objType === "textbox");
+const isThinLine = ((objType === "line" || objType === "path" || objType === "polyline") && (objData.strokeWidth || 1) < 1.5);
+const isArrow = (objType === "polygon" || objType === "path") && ((objData.width || 0) < 15 || (objData.height || 0) < 15);
+if (isTxt || isThinLine || isArrow) {
+  item._isDielineInfo = true;
+  item.name = (item.name || "") + "_info";
+}
+item.setCoords(); c.add(item); count++; } catch(e) { console.warn("[Ungroup] skip item:", e); } } console.log("[Ungroup] added:", count, "objects");
+// -- Panel Map Data (Phase 5-1) - data only, no canvas overlay --
+let _pmBox = selectedBoxCode;
+if (_pmBox) _pmBox = _pmBox.replace(/^(FEFCO|ECMA)\s+/i, (m: string, p1: string) => p1 + String.fromCharCode(45));
+const _pmL = dimLength, _pmW = dimWidth, _pmD = dimHeight;
+if (_pmL > 0 && _pmW > 0 && _pmD > 0 && _pmBox) {
+  const pm = generatePanelMap(_pmBox, _pmL, _pmW, _pmD, svgMmWRef.current, svgMmHRef.current);
+  if (pm) {
+    setPanelMapData(pm); console.log("[PanelMap] Generated:", pm.boxType, pm.panels.length, "panels");
+  } else {
+    console.log("[PanelMap] Unknown box type:", _pmBox);
+  }
+} else {
+  console.log("[PanelMap] Skipped - dims:", _pmL, _pmW, _pmD, "box:", _pmBox);
+}
+c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHistory(); refreshLayers(); alert(`Ungrouped: ${count} objects.\nAll elements are now selectable.\nSelect unwanted elements and press Delete.`); } catch(err: any) { console.error("[Ungroup] error:", err); alert("Ungroup failed: " + err.message); } }} className={`px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors ${dielineUngrouped ? "text-gray-400 bg-gray-50 cursor-not-allowed" : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"}`} disabled={dielineUngrouped}>{dielineUngrouped ? "Ungrouped" : "Ungroup"}</button>
         <div className="w-px h-7 bg-gray-200 mx-1" />
         <button onClick={undo} title="Undo (Ctrl+Z)" className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500">&#8630;</button>
         <button onClick={redo} title="Redo (Ctrl+Y)" className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500">&#8631;</button>
@@ -1844,11 +2119,11 @@ allObjs.forEach((o: any, i: number) => {
         <button onClick={() => applyZoom(zoom + 25)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-400 text-sm">+</button>
         <button onClick={() => applyZoom(100)} className="text-[11px] text-blue-600 hover:text-blue-800 font-medium ml-1">Fit</button>
         <div className="w-px h-7 bg-gray-200 mx-1" />
-        <button onClick={fileSave} title="Save Design (Ctrl+S)" className="px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors">{saveStatus === "saved" ? "✓ Saved!" : "💾 Save"}</button>
-        <button onClick={() => fileLoadRef.current?.click()} title="Load Design File" className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-semibold rounded-lg hover:bg-gray-200 border border-gray-300 transition-colors">{saveStatus === "loaded" ? "✓ Loaded!" : "📂 Load"}</button>
+        <button onClick={fileSave} title="Save Design (Ctrl+S)" className="px-3 py-1.5 rounded-md text-[11px] font-medium bg-gray-900 text-white hover:bg-gray-800 transition-colors">{saveStatus === "saved" ? "✓ Saved" : "Save"}</button>
+        <button onClick={() => fileLoadRef.current?.click()} title="Load Design File" className="px-2.5 py-1.5 rounded-md text-[11px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors border border-gray-200">{saveStatus === "loaded" ? "✓ Loaded" : "Load"}</button>
         <input ref={fileLoadRef} type="file" accept=".json,.pkv.json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) { if (window.confirm("Loading will replace current canvas. Continue?")) { fileLoad(f); } } e.target.value = ""; }} />
         <div className="w-px h-7 bg-gray-200 mx-1" />
-        <button onClick={() => setShowExport(true)} className="px-4 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors">Export</button>
+        <button onClick={() => setShowExport(true)} className="px-4 py-1.5 rounded-md text-[11px] font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors">Export</button>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
@@ -1872,7 +2147,7 @@ allObjs.forEach((o: any, i: number) => {
           {[
             { icon: "⊞", label: "Table", action: () => setShowTablePanel(p => !p) },
             { icon: "▮▯", label: "Barcode", action: () => setShowBarcodePanel(p => !p) },
-            { icon: "◎", label: "Marks", action: () => setShowMarkPanel(p => !p) },
+            // Marks button removed — use Image upload instead
             { icon: "📦", label: "Box", action: () => setShowDielinePanel(p => !p) },
           ].map(btn => (
             <button key={btn.label} onClick={btn.action} title={btn.label}
@@ -1909,7 +2184,7 @@ allObjs.forEach((o: any, i: number) => {
           </button>
           <div className="w-8 h-px bg-gray-200 my-1" />
           <span className="text-[7px] font-bold text-gray-400 tracking-widest mb-0.5">MEASURE</span>
-          <button onClick={() => { setMeasureMode(m => { if(!m){setMeasurePts([]);setMeasureResult("Click first point...");} else {setMeasureResult("");} return !m; }); }}
+          <button onClick={() => { setMeasureMode(m => { if(!m){setMeasurePts([]);setMeasureMouseMm(null);setMeasureResult("Click first point...");} else {setMeasureResult("");} return !m; }); }}
             className={`w-11 h-11 flex flex-col items-center justify-center rounded-lg transition-all ${measureMode ? "bg-cyan-50 text-cyan-600 shadow-sm" : "text-gray-500 hover:bg-white hover:shadow-sm hover:text-gray-800"}`}>
             <span className="text-sm">📏</span>
             <span className="text-[8px] mt-0.5 font-medium">Measure</span>
@@ -1937,6 +2212,8 @@ allObjs.forEach((o: any, i: number) => {
           )}
 
           {/* Shape Popup */}
+
+
           {showShapePanel && (
             <div className="absolute left-1 top-1 z-30 bg-white rounded-xl shadow-2xl border p-3 w-72 max-h-[520px] overflow-y-auto">
               <div className="flex items-center justify-between mb-2">
@@ -2104,51 +2381,51 @@ allObjs.forEach((o: any, i: number) => {
             </div>
           )}
 
-          {/* Marks Popup - Upload Only */}
-          {showMarkPanel && (
-            <div className="absolute left-1 top-1 z-30 bg-white rounded-xl shadow-2xl border p-4 w-72">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-xs font-semibold text-gray-700">Compliance Marks</div>
-                <button onClick={() => setShowMarkPanel(false)} className="text-gray-400 hover:text-gray-600 text-sm">×</button>
-              </div>
 
-              {/* Upload Section */}
-              <div className="border-2 border-dashed border-gray-300 rounded-xl p-4 text-center hover:border-blue-400 hover:bg-blue-50/50 transition-colors cursor-pointer"
-                onClick={() => document.getElementById("mark-upload-input")?.click()}>
-                <div className="text-2xl mb-1">📁</div>
-                <div className="text-xs font-medium text-gray-700">Upload Mark Image</div>
-                <div className="text-[10px] text-gray-400 mt-1">SVG, PNG, JPG, PDF</div>
-                <input id="mark-upload-input" type="file" accept=".svg,.png,.jpg,.jpeg,.pdf" className="hidden" onChange={uploadMarkImage} />
-              </div>
 
-              {/* Common marks guide */}
-              <div className="mt-3 space-y-1.5">
-                <div className="text-[9px] font-medium text-gray-500 uppercase tracking-wider">Common Packaging Marks</div>
-                <div className="grid grid-cols-2 gap-1">
-                  {[
-                    "♻ Recycling (Mobius Loop)",
-                    "🔢 Resin ID (1-7)",
-                    "📦 Corrugated (PAP 20)",
-                    "🌿 FSC Certified",
-                    "🟢 Green Dot",
-                    "🗑 Tidy Man",
-                    "⚡ WEEE",
-                    "🇪🇺 CE Mark",
-                    "🇬🇧 UKCA",
-                    "⚠️ RoHS",
-                    "🧴 PAO (Period After Opening)",
-                    "🐰 Cruelty Free",
-                  ].map(m => (
-                    <div key={m} className="text-[8px] text-gray-400 py-0.5">{m}</div>
-                  ))}
-                </div>
-                <div className="text-[8px] text-gray-400 italic mt-1 pt-1.5 border-t border-gray-100">
-                  Download official marks from certification bodies and upload here.
-                  Using unofficial marks may cause legal issues.
-                </div>
-              </div>
-            </div>
-          )}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
               {showDielinePanel && (
                 <div className="absolute left-16 top-0 w-[400px] bg-white border border-gray-200 rounded-xl shadow-2xl z-50 max-h-[90vh] flex flex-col">
@@ -2399,6 +2676,7 @@ allObjs.forEach((o: any, i: number) => {
           });
                    
           const data = await apiRes.json();
+          if (data.sizes) { svgMmWRef.current = data.sizes.PageW || 0; svgMmHRef.current = data.sizes.PageH || 0; }
           if (btn) { btn.textContent = origText; btn.disabled = false; }
                    
           if (!apiRes.ok || !data.success) {
@@ -2412,11 +2690,43 @@ allObjs.forEach((o: any, i: number) => {
           const existing = c.getObjects().filter((o: any) => o._isDieline);
           existing.forEach((o: any) => c.remove(o));
                    
-          const { objects: objs } = await fabricModRef.current.loadSVGFromString(data.svg);
-          if (!objs || objs.length === 0) { alert('Failed to parse SVG dieline'); return; }
-                   
-          const group = new fabricModRef.current.Group(objs, { originX: 'center', originY: 'center' });
+            const { objects: objs } = await fabricModRef.current.loadSVGFromString(data.svg);
+            if (!objs || objs.length === 0) { alert('Failed to parse SVG dieline'); return; }
+
+
+
+            objs.forEach((obj: any) => {
+              const t = obj.type || "";
+              const isText = (t === "text" || t === "i-text" || t === "textbox");
+              const isThinPath = (t === "path" || t === "line" || t === "polyline") && (obj.strokeWidth || 1) < 1.0;
+              const isSmallPoly = (t === "polygon") && ((obj.width || 0) < 12 && (obj.height || 0) < 12);
+              if (isText || isThinPath || isSmallPoly) {
+
+              } else {
+
+              }
+            });
+
+            const group = fabricModRef.current.util.groupSVGElements(objs);
+
           (group as any)._isDieline = true;
+
+            // Tag info children inside the group
+            if (group._objects) {
+              group._objects.forEach((child: any) => {
+                const ct = (child.type || "").toLowerCase();
+                const isText = (ct === "text" || ct === "i-text" || ct === "textbox");
+                const isThinPath = (ct === "path" || ct === "line" || ct === "polyline") && (child.strokeWidth || 1) < 1.5;
+                const isSmallPoly = (ct === "polygon") && ((child.width || 0) < 15 && (child.height || 0) < 15);
+                if (isText || isThinPath || isSmallPoly) {
+                  child._isDielineInfo = true;
+                }
+              });
+              const infoCount = group._objects.filter((ch: any) => ch._isDielineInfo).length;
+              console.log("[Dieline-EPM] Tagged " + infoCount + " info children inside group");
+            }
+          (group as any)._isDieLine = true;
+          group.name = "__dieline_upload__";
                    
           // Inkscape converts PDF (pt) to SVG (px) at 96/72 = 1.3333 ratio
           // PDF 1pt = 1/72 inch = 25.4/72 mm = 0.352778 mm
@@ -2477,9 +2787,20 @@ allObjs.forEach((o: any, i: number) => {
 
                             
 
-                            c.add(group);
-                            c.requestRenderAll();
-                            setShowDimModal(false);
+            c.add(group);
+                        c.requestRenderAll();
+
+                        // -- Panel Map Data after Generate (Phase 5-1) --
+                        {
+                          let _gBox = selectedBoxCode;
+                          if (_gBox) _gBox = _gBox.replace(/^(FEFCO|ECMA)\s+/i, (m: string, p1: string) => p1 + String.fromCharCode(45));
+                          if (dimLength > 0 && dimWidth > 0 && dimHeight > 0 && _gBox) {
+                            const pm = generatePanelMap(_gBox, dimLength, dimWidth, dimHeight, svgMmWRef.current, svgMmHRef.current);
+                            if (pm) { setPanelMapData(pm); console.log("[PanelMap-Gen]", pm.panels.length, "panels"); }
+                          }
+                        }
+
+                        setShowDimModal(false);
                           } catch(err) { console.error('Generate error:', err); alert('Failed to generate dieline'); }
                         }}
                         className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition shadow-md shadow-blue-200">
@@ -2493,7 +2814,7 @@ allObjs.forEach((o: any, i: number) => {
 
 
           {/* ═══ CANVAS AREA ═══ */}
-          <div ref={wrapperRef} onScroll={(e) => { const t=e.target as HTMLDivElement; setRulerScroll({left:t.scrollLeft,top:t.scrollTop}); }} onMouseMove={(e) => { const r=e.currentTarget.getBoundingClientRect(); setMousePos({x:e.clientX-r.left-RULER_THICK+(rulerScroll?.left||0),y:e.clientY-r.top-RULER_THICK+(rulerScroll?.top||0)}); }} onMouseLeave={() => setMousePos({x:-100,y:-100})} className="flex-1 overflow-auto bg-gray-100 relative pb-1"
+          <div ref={wrapperRef} onScroll={(e) => { const t=e.target as HTMLDivElement; setRulerScroll({left:t.scrollLeft,top:t.scrollTop}); }} onMouseMove={(e) => { setMousePos({x:e.clientX,y:e.clientY}); }} onMouseLeave={() => setMousePos({x:-100,y:-100})} className="flex-1 overflow-auto bg-gray-100 relative pb-1"
             style={{ paddingLeft: showRuler ? RULER_THICK : 0, paddingTop: showRuler ? RULER_THICK : 0, cursor: measureMode ? "crosshair" : drawMode ? "crosshair" : "default" }}>
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
               {/* Rulers - conditional */}
@@ -2516,8 +2837,8 @@ allObjs.forEach((o: any, i: number) => {
                   visibility: measureMode && mousePos.x >= 0 ? "visible" : "hidden",
                 }}
               >
-                <div style={{ position: "absolute", left: 0, top: mousePos.y + (showRuler ? RULER_THICK : 0) + (wrapperRef.current?.getBoundingClientRect().top || 0), width: "100%", height: 0, borderTop: "0.5px dashed #4fc3f7", opacity: 0.7 }} />
-                <div style={{ position: "absolute", top: 0, left: mousePos.x + (showRuler ? RULER_THICK : 0) + (wrapperRef.current?.getBoundingClientRect().left || 0), height: "100%", width: 0, borderLeft: "0.5px dashed #4fc3f7", opacity: 0.7 }} />
+                <div style={{ position: "absolute", left: 0, top: mousePos.y, width: "100%", height: "1px", background: "rgba(0,150,255,0.5)" }} />
+                <div style={{ position: "absolute", top: 0, left: mousePos.x, width: "1px", height: "100%", background: "rgba(0,150,255,0.5)" }} />
               </div>
             <div id='canvas-centering-wrapper'>
             <div style={{position:'relative',display:'inline-block'}}>
@@ -2553,9 +2874,10 @@ allObjs.forEach((o: any, i: number) => {
             </div>
               {/* Status bar */}
               <div className="absolute bottom-0 left-0 right-0 h-7 bg-[#2c2c2c] border-t border-[#1a1a1a] flex items-center px-3 gap-3 text-[10px] text-[#888] font-mono select-none">
-                {measureMode && <span className="text-[#4fc3f7] font-medium">{measureResult || "Measure: click first point"}</span>}
+                {measureMode && <span className="text-[#4fc3f7] font-medium">{measureResult || "Click first point..."}</span>}
+                {measureMode && measurePts.length <= 1 && <span className="text-gray-400 text-[10px] ml-1">(Shift = H/V snap)</span>}
                 {measureMode && <span className="border-l border-[#444] h-3" />}
-                <span>Net: {totalW.toFixed(1)} x {totalH.toFixed(1)} mm</span>
+                <span>Net: {(svgMmWRef.current > 0 ? svgMmWRef.current : totalW).toFixed(2)} x {(svgMmHRef.current > 0 ? svgMmHRef.current : totalH).toFixed(2)} mm</span>
                 <span>Zoom: {zoom}%</span>
                 <span className="mx-1 text-gray-300">|</span>
                 <button onClick={() => { setSnapEnabled(p => { if(p) setSnapLines([]); return !p; }); }} className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${snapEnabled ? "bg-blue-100 text-blue-700" : "text-gray-400 hover:text-gray-600"}`}>
@@ -2589,6 +2911,7 @@ allObjs.forEach((o: any, i: number) => {
             {([
               { id: "properties", label: "Props", icon: "⚙" },
               { id: "ai", label: "AI", icon: "🤖" },
+
               { id: "layers", label: "Layers", icon: "☰" },
             ] as { id: RightTab; label: string; icon: string }[]).map(tab => (
               <button key={tab.id} onClick={() => { setRightTab(tab.id); }}
@@ -2632,6 +2955,14 @@ allObjs.forEach((o: any, i: number) => {
                             </label>
                             <label className="text-[10px] text-gray-500">Opacity
                               <input type="range" min={0} max={100} value={Math.round((selProps.opacity ?? 1) * 100)} onChange={e => updateProp("opacity", Number(e.target.value))} className="w-full mt-1" />
+
+                       {/* Z-Order controls */}
+                       <div className='flex gap-1 mt-2'>
+                         <button onClick={() => { const c=fcRef.current; const obj=c?.getActiveObject(); if(c&&obj){c.bringObjectToFront(obj); c.requestRenderAll(); refreshLayers();} }} className='flex-1 px-2 py-1 text-[9px] bg-gray-100 hover:bg-blue-100 rounded text-gray-600 font-medium'>Front</button>
+                         <button onClick={() => { const c=fcRef.current; const obj=c?.getActiveObject(); if(c&&obj){c.bringObjectForward(obj); c.requestRenderAll(); refreshLayers();} }} className='flex-1 px-2 py-1 text-[9px] bg-gray-100 hover:bg-blue-100 rounded text-gray-600 font-medium'>↑ Up</button>
+                         <button onClick={() => { const c=fcRef.current; const obj=c?.getActiveObject(); if(c&&obj){c.sendObjectBackwards(obj); c.requestRenderAll(); refreshLayers();} }} className='flex-1 px-2 py-1 text-[9px] bg-gray-100 hover:bg-blue-100 rounded text-gray-600 font-medium'>↓ Down</button>
+                         <button onClick={() => { const c=fcRef.current; const obj=c?.getActiveObject(); if(c&&obj){c.sendObjectToBack(obj); c.requestRenderAll(); refreshLayers();} }} className='flex-1 px-2 py-1 text-[9px] bg-gray-100 hover:bg-blue-100 rounded text-gray-600 font-medium'>Back</button>
+                       </div>
                             </label>
                           </div>
                         </div>
@@ -3093,7 +3424,7 @@ allObjs.forEach((o: any, i: number) => {
                             <button onClick={() => { const obj = fcRef.current?.getActiveObject() as any; if (!obj?._tableConfig) return; const cfg = JSON.parse(obj._tableConfig); const avg = Math.round(cfg.colWidths.reduce((a:number,b:number)=>a+b,0)/cfg.cols); cfg.colWidths = cfg.colWidths.map(()=>avg); rebuildTable(cfg); }}
                               className="text-[7px] px-1.5 py-1 bg-gray-50 hover:bg-gray-100 rounded border ml-auto">Equal</button>
                           </div>
-                          <div className="flex gap-1 flex-wrap">
+                          <div className="flex gap-0.5 overflow-x-auto">
                             <button onClick={async () => { const { addRow } = await import("@/lib/table-engine"); await rebuildTable(addRow(tc, tableEditCell ? tableEditCell.row : 0)); }}
                               className="text-[9px] px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">+Row</button>
                             <button onClick={async () => { const { addCol } = await import("@/lib/table-engine"); await rebuildTable(addCol(tc, tableEditCell ? tableEditCell.col : 0)); }}
@@ -3927,6 +4258,61 @@ allObjs.forEach((o: any, i: number) => {
                 </div>
               </div>
             )}
+            {/* --- Panels Tab (Phase 5-1b) --- */}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             {/* ─── Layers Tab ─── */}
             {rightTab === "layers" && (
               <div className="space-y-1">
@@ -3945,6 +4331,11 @@ allObjs.forEach((o: any, i: number) => {
                       className="text-gray-400 hover:text-gray-700">{layer.visible ? "👁" : "👁‍🗨"}</button>
                     <span className="flex-1 truncate text-gray-700">{layer.name}</span>
                     <span className="text-[10px] text-gray-400">{layer.type}</span>
+                    <div className='flex gap-0.5 ml-1'>
+                      <button onClick={(e) => { e.stopPropagation(); const c=fcRef.current; if(!c)return; const objs=c.getObjects().filter((o:any)=>o.selectable!==false&&!o._isGuideLayer); const idx=objs.length-1-i; if(idx<objs.length-1){const obj=objs[idx]; c.bringObjectForward(obj); c.requestRenderAll(); refreshLayers();} }} className='text-[10px] text-gray-400 hover:text-blue-600 px-0.5' title='Move up'>▲</button>
+                      <button onClick={(e) => { e.stopPropagation(); const c=fcRef.current; if(!c)return; const objs=c.getObjects().filter((o:any)=>o.selectable!==false&&!o._isGuideLayer); const idx=objs.length-1-i; if(idx>0){const obj=objs[idx]; c.sendObjectBackwards(obj); c.requestRenderAll(); refreshLayers();} }} className='text-[10px] text-gray-400 hover:text-blue-600 px-0.5' title='Move down'>▼</button>
+                      <button onClick={(e) => { e.stopPropagation(); const c=fcRef.current; if(!c)return; const objs=c.getObjects().filter((o:any)=>o.selectable!==false&&!o._isGuideLayer); const idx=objs.length-1-i; const obj=objs[idx]; if(obj){c.remove(obj); c.requestRenderAll(); pushHistory(); refreshLayers();} }} className='text-[10px] text-gray-400 hover:text-red-500 px-0.5' title='Delete'>✕</button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -3954,6 +4345,32 @@ allObjs.forEach((o: any, i: number) => {
       </div>
 
       {/* ═══ Export Modal ═══ */}
+      {showSizeConfirm && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" onClick={() => setShowSizeConfirm(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-96" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-gray-800 mb-2">Confirm Dieline Size</h3>
+            <p className="text-xs text-gray-500 mb-4">Verify the actual flat dimensions of the uploaded dieline (mm).</p>
+            <div className="flex gap-3 mb-4">
+              <div className="flex-1">
+                <label className="text-[10px] text-gray-500 mb-1 block">Width (mm)</label>
+                <input type="number" step="0.01" value={uploadSizeW} onChange={e => setUploadSizeW(Number(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+              </div>
+              <div className="flex-1">
+                <label className="text-[10px] text-gray-500 mb-1 block">Height (mm)</label>
+                <input type="number" step="0.01" value={uploadSizeH} onChange={e => setUploadSizeH(Number(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => { setShowSizeConfirm(false); pendingDielineRef.current = null; }}
+                className="flex-1 py-2.5 rounded-xl border border-gray-300 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={confirmDielineSize}
+                className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 shadow-md">Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
       {showExport && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowExport(false)}>
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-96" onClick={e => e.stopPropagation()}>
@@ -4090,3 +4507,7 @@ allObjs.forEach((o: any, i: number) => {
     </div>
   );
 }
+
+
+
+

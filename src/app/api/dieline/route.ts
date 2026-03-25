@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { generateModel, EpmModelParams, EpmModelOptions } from '@/lib/easypackmaker-api';
 import { execFile } from 'child_process';
 import { writeFile, readFile, unlink, mkdtemp } from 'fs/promises';
