@@ -1161,3 +1161,83 @@ EPM_USERNAME=Guyhan76 EPM_PASSWORD=<API password from easypackmaker.com/profile>
 ### 참고
 - Pacdora: 초록 실선 bleed, glue 탭 제외, safe zone 미표시
 - 실무 인쇄: bleed 영역까지 디자인 확장 → 절단 후 흰 테두리 방지
+---
+
+## 칼선(Dieline) 생성 및 표시 규칙 (2026-03-28)
+
+### 1. 아키텍처 개요
+- **EPM API** (EasyPackMaker): 칼선 생성 주력 API ($0.47/건)
+- **DCT API** (Die Cut Templates): 폴백 전용
+- **우선순위**: epmModel 존재 시 EPM 우선 → DCT 폴백
+- **캐싱**: `public/dielines/cache/` 에 JSON 저장, 동일 치수 재호출 시 $0
+
+### 2. EPM API 호출 옵션 (route.ts)
+baseOptions = { DimensionType: 'In', KnifeInfo: true, // 칼선 정보 포함 (sizes 데이터용) Sizes: true, // 치수 정보 포함 }
+
+- **GlueZone**: `fefco_(02|03|05|07)` 또는 `A\d` 모델만 `GlueZone: false` 추가
+- **fefco-0401~0427, B10, B20**: GlueZone 미지원 → 절대 보내지 않음
+- **H 파라미터**: fefco-0310, B10, B20만 필요 → 나머지 모델에 보내면 에러
+- **Lid 옵션**: B10(`Lid: "B10_02_00_00_A"`), B20(`Lid: "B20_02_00_00_A"`) 필수
+
+### 3. SVG 정리 (route.ts - EPM/DCT 모두 적용)
+Inkscape PDF→SVG 변환 후 반드시 아래 3가지 제거:
+// 1. 골방향 마크 제거 (회색 #7b7979) svgContent = svgContent.replace(/<path[>]*stroke:#7b7979[>]*/>/gs, '');
+
+// 2. 정보 텍스트 path 제거 (검정 #231f20) svgContent = svgContent.replace(/<path[>]*stroke:#231f20[>]*/>/gs, '');
+
+// 3. aria-label path 제거 (Inkscape 변환된 텍스트) svgContent = svgContent.replace(/<path[>]*aria-label="["]"[^>]/>/gs, '');
+
+- **이유**: Inkscape가 텍스트를 path로 변환 → 화질 저하. 골방향은 사용자가 결정.
+- **대체**: sizes 데이터를 에디터 HTML Info 패널로 자체 렌더링 (고화질)
+
+### 4. SVG 색상 규칙
+- **빨강 `#ed1c24`**: 칼선 (cut line) → 유지
+- **초록 `#00a650`**: 접힘선 (crease line) → 유지
+- **검정 `#231f20`**: 치수선/정보 텍스트 → 제거
+- **회색 `#7b7979`**: 골방향 마크 → 제거
+- **`fill:none` + `aria-label`**: 변환된 텍스트 → 제거
+
+### 5. 카드 미리보기 SVG (박스 선택 UI)
+- **위치**: `public/dielines/previews/<id>.svg`
+- **생성 옵션**: `KnifeInfo: false`, `Sizes: false` (깨끗한 칼선만)
+- **정리**: `<g id="dimensions">`, `<text>`, `aria-label` path 모두 제거
+- **색상 통일**: 빨강(칼선) + 초록(접힘선)만 표시
+- **참조**: `src/lib/dieline-templates.ts`의 `svgPath` 필드
+
+### 6. Info 패널 (에디터 자체 렌더링)
+- **데이터 소스**: API 응답의 `sizes` 객체 (PageW, PageH, Cut, Crease, Total, Area)
+- **표시**: Canvas 좌하단 HTML 오버레이 (`dielineSizes` state)
+- **토글**: "Info On/Off" 버튼 (`dielineInfoVisible` state)
+- **SVG 내부 텍스트 사용 금지**: Inkscape path 텍스트는 화질 저하로 사용하지 않음
+
+### 7. 캐싱 구조
+- **캐시 키**: `{model}_{L}_{W}_{D}_{Th}_mm.json` (예: `fefco_0201_300_200_250_3_mm.json`)
+- **캐시 위치**: `public/dielines/cache/`
+- **동작**: 1차 호출 → API + 캐시 저장, 2차+ → 캐시 히트 ($0)
+- **주의**: route.ts 정리 로직 변경 시 캐시 전체 삭제 후 재생성 필요
+
+### 8. 신규 박스 추가 체크리스트
+1. `src/lib/dieline-templates.ts`에 템플릿 추가 (epmModel, code, nameKo 등)
+2. 해당 모델의 필수 파라미터 확인 (H, Lid 등 특수 옵션)
+3. GlueZone 지원 여부 확인 → route.ts 정규식에 포함되는지 체크
+4. **미리보기 SVG 1회 생성** (`KnifeInfo:false, Sizes:false`) → `public/dielines/previews/` 저장
+5. 미리보기 SVG 정리 (dimensions, text, aria-label 제거)
+6. **프리캐시 1회 생성** (실제 옵션 `KnifeInfo:true, Sizes:true`) → 자동 캐시
+7. 캐시된 SVG 검증: `#7b7979`, `#231f20` 없음 확인
+8. 브라우저 테스트: 카드 미리보기 + Generate + Info 패널 확인
+- **비용**: 미리보기 $0.47 + 프리캐시 $0.47 = **$0.94/박스** (최소, 1회)
+
+### 9. 절대 하지 말 것
+- ❌ `Sizes: false`로 생성 후 나중에 `true`로 재생성 (이중 비용)
+- ❌ GlueZone 미지원 모델에 GlueZone 옵션 전송 (400 에러)
+- ❌ H 파라미터 불필요 모델에 H 전송 (400 에러)
+- ❌ Inkscape `--pdf-font-strategy` 옵션 사용 (줄간격/위치 깨짐)
+- ❌ SVG 내부 path 텍스트를 Info 표시에 사용 (화질 저하)
+- ❌ 캐시 삭제 없이 route.ts 정리 로직 변경 (오염된 캐시 유지됨)
+
+### 10. 비용 관리
+- EPM API: $0.47/건
+- 미리보기 + 프리캐시 = $0.94/박스 (1회)
+- 동일 치수 재호출: $0 (캐시)
+- 새 치수: $0.47 (자동 캐시)
+- **목표**: 박스당 API 호출 최소화, 시행착오 0회

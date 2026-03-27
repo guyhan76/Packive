@@ -2,7 +2,7 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { generatePanelMap, detectPanelsFromSVG, type PanelMap, type Panel, panelToCanvas } from '@/lib/panel-map';
-import { DIELINE_TEMPLATES, BOX_CATEGORIES, getTemplatesByCategory, getCategoriesWithTemplates } from '@/lib/dieline-templates';
+import { DIELINE_TEMPLATES, BOX_CATEGORIES, getTemplatesByCategory, getCategoriesWithTemplates, getTemplateByCode, DielineTemplate } from '@/lib/dieline-templates';
 import { generateDieline, BoxDimensions } from '@/lib/dieline-generator';
 import { useI18n } from "@/components/i18n-context";
 import { PACKIVE_SPOT_COLORS } from "@/data/packive-spot-colors";
@@ -191,6 +191,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [showBleedGuides, setShowBleedGuides] = useState(false);
   const [dielineInfoVisible, setDielineInfoVisible] = useState(true);
+  const [dielineSizes, setDielineSizes] = useState<any>(null);
+  const [dielineModelInfo, setDielineModelInfo] = useState<string>('');
   const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null);
   const [showPreflight, setShowPreflight] = useState(false);
   // ─── AI Panel State ───
@@ -2476,7 +2478,7 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                       const fefcoItems = templates.filter(t => { const cat = BOX_CATEGORIES.find(c => c.id === t.category); return cat && cat.standard === 'FEFCO'; });
                       const ecmaItems = templates.filter(t => { const cat = BOX_CATEGORIES.find(c => c.id === t.category); return cat && cat.standard === 'ECMA'; });
 
-                      const renderCard = (t: typeof templates[0]) => (
+                      const renderCard = (t: DielineTemplate) => (
                         <button key={t.id} onClick={() => {
                           setSelectedBoxCode(t.code);
                       setSelectedBoxName(t.name);
@@ -2485,14 +2487,28 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                           setShowDimModal(true);
                           setShowDielinePanel(false);
                         }}
-                        className="group flex flex-col items-center p-3 rounded-xl border border-gray-100 hover:border-blue-400 hover:shadow-lg transition-all duration-200 bg-white hover:bg-gradient-to-b hover:from-blue-50/40 hover:to-white cursor-pointer">
+                        className="group relative flex flex-col items-center p-3 rounded-xl border border-gray-100 hover:border-blue-400 hover:shadow-lg transition-all duration-200 bg-white hover:bg-gradient-to-b hover:from-blue-50/40 hover:to-white cursor-pointer">
+                          {/* 3D Badge */}
+                          {t.supports3d && (
+                            <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 text-[9px] font-bold bg-gradient-to-r from-violet-500 to-blue-500 text-white rounded-md shadow-sm leading-none">3D</span>
+                          )}
+                          {/* Popularity indicator */}
+                          <div className="absolute top-1.5 left-1.5 flex gap-[2px]">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <div key={i} className={`w-[4px] h-[4px] rounded-full ${i < t.popularity ? 'bg-amber-400' : 'bg-gray-200'}`} />
+                            ))}
+                          </div>
                           {/* SVG preview */}
                           <div className="w-full aspect-[5/3] flex items-center justify-center mb-2 rounded-lg bg-white group-hover:bg-gray-50 transition-colors overflow-hidden">
-                            <img src={t.svgPath} alt={t.code} className="w-[85%] h-[85%] object-contain opacity-100 transition-opacity" />
+                            {t.svgPath ? (
+                              <img src={t.svgPath} alt={t.name} className="w-[90%] h-[90%] object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; const sib = (e.target as HTMLImageElement).nextElementSibling; if(sib) sib.classList.remove('hidden'); }} />
+                            ) : null}
+                            <div className={`flex items-center justify-center w-full h-full ${t.svgPath ? 'hidden' : ''}`} dangerouslySetInnerHTML={{ __html: t.iconSvg }} />
                           </div>
                           <div className="w-full text-center">
-                            <div className="text-xs font-bold text-gray-800 group-hover:text-blue-700 leading-tight">{t.code}</div>
-                            <div className="text-[10px] text-gray-400 mt-0.5">{t.name}</div>
+                            <div className="text-[11px] font-bold text-gray-800 group-hover:text-blue-700 leading-tight truncate px-1">{t.name}</div>
+                            <div className="text-[9px] text-gray-400 mt-0.5 font-mono">{t.code}</div>
+                            {t.description && <div className="text-[8px] text-gray-300 mt-0.5 truncate px-1">{t.description}</div>}
                           </div>
                         </button>
                       );
@@ -2531,7 +2547,7 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                   {/* Footer */}
                   <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/50 rounded-b-xl">
                     <p className="text-[10px] text-gray-400 text-center">
-                      Custom dieline? Use <strong className="text-gray-500">Upload Dieline</strong> to import EPS / SVG
+                      {DIELINE_TEMPLATES.length} box types available · DXF upload coming in Phase 3
                     </p>
                   </div>
                 </div>
@@ -2544,7 +2560,8 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                     {/* Header */}
                     <div className="px-6 pt-5 pb-3 border-b border-gray-100">
                       <h3 className="text-lg font-bold text-gray-900">{selectedBoxCode}</h3>
-                      <p className="text-sm text-gray-400 mt-0.5">{selectedBoxName}</p>
+                      <p className="text-sm text-gray-500 mt-0.5 font-medium">{(() => { const tpl = getTemplateByCode(selectedBoxCode); return tpl?.name || selectedBoxName; })()}</p>
+                      <p className="text-xs text-gray-300 mt-0.5">{selectedBoxName}</p>
                     </div>
 
                     <div className="px-6 py-4 space-y-5">
@@ -2650,8 +2667,9 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                    
         try {
                    
-          // Convert box code to EasyPackMaker model name
-          const modelName = selectedBoxCode
+          // Convert box code to EasyPackMaker model name (use epmModel from template if available)
+          const selectedTemplate = getTemplateByCode(selectedBoxCode);
+          const modelName = selectedTemplate?.epmModel || selectedBoxCode
             .replace(/^FEFCO\s+/i, 'fefco_')
             .replace(/^ECMA\s+/i, '')
             .replace(/\./g, '_');
@@ -2667,6 +2685,7 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               modelName,
+              epmModel: selectedTemplate?.epmModel || modelName,
               length: dimLength,
               width: dimWidth,
               depth: dimHeight,
@@ -2676,7 +2695,12 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
           });
                    
           const data = await apiRes.json();
-          if (data.sizes) { svgMmWRef.current = data.sizes.PageW || 0; svgMmHRef.current = data.sizes.PageH || 0; }
+          if (data.sizes) { 
+            svgMmWRef.current = data.sizes.PageW || 0; 
+            svgMmHRef.current = data.sizes.PageH || 0; 
+            setDielineSizes(data.sizes);
+            setDielineModelInfo(selectedTemplate?.code || selectedBoxCode || '');
+          }
           if (btn) { btn.textContent = origText; btn.disabled = false; }
                    
           if (!apiRes.ok || !data.success) {
@@ -2843,6 +2867,19 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
             <div id='canvas-centering-wrapper'>
             <div style={{position:'relative',display:'inline-block'}}>
               <canvas ref={canvasElRef} className="shadow-lg" style={{border:"1px solid #e0e0e0"}} />
+              {dielineInfoVisible && dielineSizes && (
+                <div style={{position:'absolute',bottom:8,left:8,background:'rgba(255,255,255,0.95)',border:'1px solid #ddd',borderRadius:6,padding:'10px 14px',fontSize:12,fontFamily:'monospace',lineHeight:'1.6',boxShadow:'0 2px 8px rgba(0,0,0,0.1)',zIndex:50,maxWidth:320}}>
+                  <div style={{fontWeight:700,fontSize:13,marginBottom:6,color:'#333'}}>{dielineModelInfo}</div>
+                  <div style={{color:'#555'}}>Sizes: {dielineSizes.PageW} × {dielineSizes.PageH} mm</div>
+                  <div style={{color:'#555'}}>Area: {dielineSizes.Area}</div>
+                  <div style={{marginTop:4}}>
+                    <span style={{color:'#ed1c24',fontWeight:600}}>Cut: {dielineSizes.Cut?.toFixed(0)} mm</span>
+                    {' · '}
+                    <span style={{color:'#00a650',fontWeight:600}}>Crease: {dielineSizes.Crease?.toFixed(0)} mm</span>
+                  </div>
+                  <div style={{color:'#888'}}>Total: {dielineSizes.Total?.toFixed(0)} mm</div>
+                </div>
+              )}
               {/* Snap guide lines overlay - canvas-local coords */}
               {snapEnabled && snapLines.length > 0 && fcRef.current && (
                 <svg
