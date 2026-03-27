@@ -2,7 +2,7 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { generatePanelMap, detectPanelsFromSVG, type PanelMap, type Panel, panelToCanvas } from '@/lib/panel-map';
-import { DIELINE_TEMPLATES, BOX_CATEGORIES, getTemplatesByCategory, getCategoriesWithTemplates, getTemplateByCode, DielineTemplate } from '@/lib/dieline-templates';
+import { DIELINE_TEMPLATES, BOX_CATEGORIES, getTemplatesByCategory, getCategoriesWithTemplates } from '@/lib/dieline-templates';
 import { generateDieline, BoxDimensions } from '@/lib/dieline-generator';
 import { useI18n } from "@/components/i18n-context";
 import { PACKIVE_SPOT_COLORS } from "@/data/packive-spot-colors";
@@ -191,9 +191,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [showBleedGuides, setShowBleedGuides] = useState(false);
   const [dielineInfoVisible, setDielineInfoVisible] = useState(true);
-  const [dielineSizes, setDielineSizes] = useState<any>(null);
-  const [dielineDims, setDielineDims] = useState<any>(null);
-  const [dielineModelInfo, setDielineModelInfo] = useState<string>('');
   const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null);
   const [showPreflight, setShowPreflight] = useState(false);
   // ─── AI Panel State ───
@@ -2083,7 +2080,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           } catch (err: any) { alert("Failed to load dieline: " + err.message); }
           e.target.value = "";
         }} />
-        <button onClick={() => { if (!window.confirm("Start a completely new blank canvas?\nAll current work including dielines will be permanently removed.")) return; const c = fcRef.current; if (!c) return; c.clear(); c.backgroundColor = "#ffffff"; c.requestRenderAll(); setDielineFileName(""); setDielineUngrouped(false); pushHistory(); refreshLayers(); setDielineSizes(null); setDielineModelInfo(""); setDielineDims(null); }} className="px-2.5 py-1.5 rounded-md text-[11px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors" title="New canvas">New</button>
+        <button onClick={() => { if (!window.confirm("Start a completely new blank canvas?\nAll current work including dielines will be permanently removed.")) return; const c = fcRef.current; if (!c) return; c.clear(); c.backgroundColor = "#ffffff"; c.requestRenderAll(); setDielineFileName(""); setDielineUngrouped(false); pushHistory(); refreshLayers(); }} className="px-2.5 py-1.5 rounded-md text-[11px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors" title="New canvas">New</button>
         <button onClick={() => dielineFileRef.current?.click()} className="px-2.5 py-1.5 rounded-md text-[11px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors">Upload Dieline</button>
         <button onClick={() => { const c = fcRef.current; if (!c) return; const nv = !dielineVisible; setDielineVisible(nv); c.getObjects().forEach((o: any) => { if (o._isGuideLayer || o._isDieLine || o._isFoldLine || o._isPanelLabel) o.set({ visible: nv }); }); c.requestRenderAll(); }} className={`px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors ${dielineVisible ? "text-gray-900 bg-gray-100" : "text-gray-500 hover:text-gray-900 hover:bg-gray-100"}`}>{dielineVisible ? "Lines On" : "Lines Off"}</button>
               <button onClick={() => { const c = fcRef.current; if (!c) return; const nv = !dielineInfoVisible; setDielineInfoVisible(nv); let count = 0; c.getObjects().forEach((o: any) => { if (o._isDieLine || o._isDieline) { const children = o._objects || []; children.forEach((child: any) => { if (child._isDielineInfo) { child.set({ opacity: nv ? 1 : 0 }); count++; } }); o.dirty = true; o.set('dirty', true); if (o._cacheCanvas) { o._cacheCanvas = null; } } }); console.log("[Info Toggle] " + (nv ? "Show" : "Hide") + " " + count + " info objects"); c.requestRenderAll(); }} className="px-2.5 py-1.5 rounded-md text-[11px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors">{dielineInfoVisible ? "Info On" : "Info Off"}</button>
@@ -2120,7 +2117,7 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
         <button onClick={() => applyZoom(zoom - 25)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-400 text-sm">-</button>
         <span className="text-[11px] text-gray-600 w-10 text-center">{zoom}%</span>
         <button onClick={() => applyZoom(zoom + 25)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-400 text-sm">+</button>
-        <button onClick={() => { const c = fcRef.current; if (!c) return; const objs = c.getObjects(); if (objs.length === 0) { applyZoom(100); return; } let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity; objs.forEach((o: any) => { const b = o.getBoundingRect(); if(b.left<minX) minX=b.left; if(b.top<minY) minY=b.top; if(b.left+b.width>maxX) maxX=b.left+b.width; if(b.top+b.height>maxY) maxY=b.top+b.height; }); const objW=maxX-minX; const objH=maxY-minY; const cW=c.getWidth(); const cH=c.getHeight(); const pad=40; const fitZ=Math.floor(Math.min((cW-pad*2)/objW,(cH-pad*2)/objH)*100); applyZoom(Math.max(25,Math.min(fitZ,200))); const vpt=c.viewportTransform||[1,0,0,1,0,0]; const s=fitZ/100; vpt[4]=(cW-objW*s)/2-minX*s; vpt[5]=(cH-objH*s)/2-minY*s; c.setViewportTransform(vpt); c.requestRenderAll(); }} className="text-[11px] text-blue-600 hover:text-blue-800 font-medium ml-1">Fit</button>
+        <button onClick={() => applyZoom(100)} className="text-[11px] text-blue-600 hover:text-blue-800 font-medium ml-1">Fit</button>
         <div className="w-px h-7 bg-gray-200 mx-1" />
         <button onClick={fileSave} title="Save Design (Ctrl+S)" className="px-3 py-1.5 rounded-md text-[11px] font-medium bg-gray-900 text-white hover:bg-gray-800 transition-colors">{saveStatus === "saved" ? "✓ Saved" : "Save"}</button>
         <button onClick={() => fileLoadRef.current?.click()} title="Load Design File" className="px-2.5 py-1.5 rounded-md text-[11px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors border border-gray-200">{saveStatus === "loaded" ? "✓ Loaded" : "Load"}</button>
@@ -2479,7 +2476,7 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                       const fefcoItems = templates.filter(t => { const cat = BOX_CATEGORIES.find(c => c.id === t.category); return cat && cat.standard === 'FEFCO'; });
                       const ecmaItems = templates.filter(t => { const cat = BOX_CATEGORIES.find(c => c.id === t.category); return cat && cat.standard === 'ECMA'; });
 
-                      const renderCard = (t: DielineTemplate) => (
+                      const renderCard = (t: typeof templates[0]) => (
                         <button key={t.id} onClick={() => {
                           setSelectedBoxCode(t.code);
                       setSelectedBoxName(t.name);
@@ -2488,28 +2485,14 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                           setShowDimModal(true);
                           setShowDielinePanel(false);
                         }}
-                        className="group relative flex flex-col items-center p-3 rounded-xl border border-gray-100 hover:border-blue-400 hover:shadow-lg transition-all duration-200 bg-white hover:bg-gradient-to-b hover:from-blue-50/40 hover:to-white cursor-pointer">
-                          {/* 3D Badge */}
-                          {t.supports3d && (
-                            <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 text-[9px] font-bold bg-gradient-to-r from-violet-500 to-blue-500 text-white rounded-md shadow-sm leading-none">3D</span>
-                          )}
-                          {/* Popularity indicator */}
-                          <div className="absolute top-1.5 left-1.5 flex gap-[2px]">
-                            {Array.from({ length: 5 }).map((_, i) => (
-                              <div key={i} className={`w-[4px] h-[4px] rounded-full ${i < t.popularity ? 'bg-amber-400' : 'bg-gray-200'}`} />
-                            ))}
-                          </div>
+                        className="group flex flex-col items-center p-3 rounded-xl border border-gray-100 hover:border-blue-400 hover:shadow-lg transition-all duration-200 bg-white hover:bg-gradient-to-b hover:from-blue-50/40 hover:to-white cursor-pointer">
                           {/* SVG preview */}
                           <div className="w-full aspect-[5/3] flex items-center justify-center mb-2 rounded-lg bg-white group-hover:bg-gray-50 transition-colors overflow-hidden">
-                            {t.svgPath ? (
-                              <img src={t.svgPath} alt={t.name} className="w-[90%] h-[90%] object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; const sib = (e.target as HTMLImageElement).nextElementSibling; if(sib) sib.classList.remove('hidden'); }} />
-                            ) : null}
-                            <div className={`flex items-center justify-center w-full h-full ${t.svgPath ? 'hidden' : ''}`} dangerouslySetInnerHTML={{ __html: t.iconSvg }} />
+                            <img src={t.svgPath} alt={t.code} className="w-[85%] h-[85%] object-contain opacity-100 transition-opacity" />
                           </div>
                           <div className="w-full text-center">
-                            <div className="text-[11px] font-bold text-gray-800 group-hover:text-blue-700 leading-tight truncate px-1">{t.name}</div>
-                            <div className="text-[9px] text-gray-400 mt-0.5 font-mono">{t.code}</div>
-                            {t.description && <div className="text-[8px] text-gray-300 mt-0.5 truncate px-1">{t.description}</div>}
+                            <div className="text-xs font-bold text-gray-800 group-hover:text-blue-700 leading-tight">{t.code}</div>
+                            <div className="text-[10px] text-gray-400 mt-0.5">{t.name}</div>
                           </div>
                         </button>
                       );
@@ -2548,7 +2531,7 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                   {/* Footer */}
                   <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/50 rounded-b-xl">
                     <p className="text-[10px] text-gray-400 text-center">
-                      {DIELINE_TEMPLATES.length} box types available · DXF upload coming in Phase 3
+                      Custom dieline? Use <strong className="text-gray-500">Upload Dieline</strong> to import EPS / SVG
                     </p>
                   </div>
                 </div>
@@ -2561,8 +2544,7 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                     {/* Header */}
                     <div className="px-6 pt-5 pb-3 border-b border-gray-100">
                       <h3 className="text-lg font-bold text-gray-900">{selectedBoxCode}</h3>
-                      <p className="text-sm text-gray-500 mt-0.5 font-medium">{(() => { const tpl = getTemplateByCode(selectedBoxCode); return tpl?.name || selectedBoxName; })()}</p>
-                      <p className="text-xs text-gray-300 mt-0.5">{selectedBoxName}</p>
+                      <p className="text-sm text-gray-400 mt-0.5">{selectedBoxName}</p>
                     </div>
 
                     <div className="px-6 py-4 space-y-5">
@@ -2572,7 +2554,7 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                           <div className="w-5 h-5 rounded bg-blue-100 flex items-center justify-center">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
                           </div>
-                          <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Dimensions - Internal (mm)</span>
+                          <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Dimensions (mm)</span>
                         </div>
                         <div className="grid grid-cols-3 gap-3">
                           <div>
@@ -2668,9 +2650,8 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                    
         try {
                    
-          // Convert box code to EasyPackMaker model name (use epmModel from template if available)
-          const selectedTemplate = getTemplateByCode(selectedBoxCode);
-          const modelName = selectedTemplate?.epmModel || selectedBoxCode
+          // Convert box code to EasyPackMaker model name
+          const modelName = selectedBoxCode
             .replace(/^FEFCO\s+/i, 'fefco_')
             .replace(/^ECMA\s+/i, '')
             .replace(/\./g, '_');
@@ -2686,7 +2667,6 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               modelName,
-              epmModel: selectedTemplate?.epmModel || modelName,
               length: dimLength,
               width: dimWidth,
               depth: dimHeight,
@@ -2696,23 +2676,7 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
           });
                    
           const data = await apiRes.json();
-          if (data.sizes) {
-            let sz = data.sizes;
-            if (sz["1"] && !sz.PageW) {
-              const parts = Object.keys(sz).filter(k => /^\d+$/.test(k)).map(k => sz[k]);
-              const main = parts.reduce((a:any,b:any) => (b.PageW*b.PageH > a.PageW*a.PageH ? b : a), parts[0]);
-              const totalCut = parts.reduce((s:number,p:any) => s + (p.Cut||0), 0);
-              const totalCrease = parts.reduce((s:number,p:any) => s + (p.Crease||0), 0);
-              const totalLen = parts.reduce((s:number,p:any) => s + (p.Total||0), 0);
-              const totalArea = parts.reduce((s:number,p:any) => s + parseFloat(String(p.Area||"0").replace(/ m.*/, "")), 0);
-              sz = { Units: main.Units||"mm", PageW: main.PageW, PageH: main.PageH, Cut: totalCut, Crease: totalCrease, Total: totalLen, Area: totalArea.toFixed(5)+" m\u00B2", _parts: parts, _multiPart: true };
-            }
-            svgMmWRef.current = sz.PageW || 0;
-            svgMmHRef.current = sz.PageH || 0;
-            setDielineSizes(sz);
-            setDielineModelInfo(selectedTemplate?.code || selectedBoxCode || "");
-            setDielineDims({ L: dimLength, W: dimWidth, D: dimHeight, Th: thickness });
-          }
+          if (data.sizes) { svgMmWRef.current = data.sizes.PageW || 0; svgMmHRef.current = data.sizes.PageH || 0; }
           if (btn) { btn.textContent = origText; btn.disabled = false; }
                    
           if (!apiRes.ok || !data.success) {
@@ -2801,17 +2765,17 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
           
           console.log(`[Dieline] viewBox=${viewBoxW.toFixed(1)}x${viewBoxH.toFixed(1)}, svgMm=${svgMmW.toFixed(2)}x${svgMmH.toFixed(2)}mm, scale=${exactScaleX.toFixed(6)}, sX=${sX.toFixed(3)}`);
           
-          // Auto-fit: scale down zoom if dieline is larger than canvas
-          const neededW = viewBoxW * exactScaleX + 80;
-          const neededH = viewBoxH * exactScaleY + 80;
+          // Expand canvas if dieline is larger than current canvas
+          const neededW = viewBoxW * 25.4 / 96 * sX + 80; // 80px padding
+          const neededH = viewBoxH * 25.4 / 96 * sY + 80;
           const cW = c.getWidth();
           const cH = c.getHeight();
-          let autoZoom = 100;
+          
           if (neededW > cW || neededH > cH) {
-            const fitZw = cW / neededW; const fitZh = cH / neededH;
-            autoZoom = Math.floor(Math.min(fitZw, fitZh) * 100);
-            autoZoom = Math.max(25, autoZoom);
-            console.log('[Dieline] Auto-fit zoom:', autoZoom, '%', 'needed:', neededW.toFixed(0), 'x', neededH.toFixed(0), 'canvas:', cW, 'x', cH);
+            const newW = Math.max(cW, Math.ceil(neededW));
+            const newH = Math.max(cH, Math.ceil(neededH));
+            c.setDimensions({ width: newW, height: newH });
+            console.log(`[Dieline] Canvas expanded: ${cW}x${cH} -> ${newW}x${newH}px for ${svgMmW.toFixed(0)}x${svgMmH.toFixed(0)}mm dieline`);
           }
           
           const finalCW = c.getWidth();
@@ -2821,14 +2785,6 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
           
           group.set({ scaleX: exactScaleX, scaleY: exactScaleY, left: finalCW / 2, top: finalCH / 2, selectable: false, evented: false });
 
-          if (autoZoom < 100) {
-            const vpt = c.viewportTransform || [1,0,0,1,0,0];
-            vpt[0] = autoZoom / 100; vpt[3] = autoZoom / 100;
-            vpt[4] = (cW - neededW * autoZoom / 100) / 2;
-            vpt[5] = (cH - neededH * autoZoom / 100) / 2;
-            c.setViewportTransform(vpt);
-            c.requestRenderAll();
-          }
                             
 
             c.add(group);
@@ -2887,40 +2843,6 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
             <div id='canvas-centering-wrapper'>
             <div style={{position:'relative',display:'inline-block'}}>
               <canvas ref={canvasElRef} className="shadow-lg" style={{border:"1px solid #e0e0e0"}} />
-              {dielineInfoVisible && dielineSizes && (
-                <div style={{position:"fixed",bottom:40,left:95,background:"rgba(255,255,255,0.95)",border:"1px solid #ddd",borderRadius:6,padding:"10px 14px",fontSize:12,fontFamily:"monospace",lineHeight:"1.6",boxShadow:"0 2px 8px rgba(0,0,0,0.1)",zIndex:50,maxWidth:360}}>
-                  <div style={{fontWeight:700,fontSize:14,marginBottom:8,color:"#333",borderBottom:"1px solid #eee",paddingBottom:6}}>{dielineModelInfo}{(dielineSizes as any)._multiPart ? " (Multi-part)" : ""}</div>
-                  {(dielineSizes as any)._multiPart && (dielineSizes as any)._parts ? (
-                    <>
-                      {(dielineSizes as any)._parts.map((p: any, i: number) => (
-                        <div key={i} style={{marginBottom:6,padding:"4px 0",borderBottom:i < (dielineSizes as any)._parts.length-1 ? "1px dashed #eee" : "none"}}>
-                          <div style={{fontWeight:600,color:"#444",fontSize:11}}>{p.Text || ("Part "+(i+1))}: {p.PageW} x {p.PageH} mm</div>
-                          <div style={{color:"#666",fontSize:10}}>S = {p.Area} | Cut: {p.Cut} | Crease: {p.Crease} | Total: {p.Total}</div>
-                        </div>
-                      ))}
-                      <div style={{color:"#555",marginTop:4,fontWeight:600,fontSize:11}}>Combined: S = {dielineSizes.Area}</div>
-                    </>
-                  ) : (
-                    <>
-                      <div style={{color:"#555",marginBottom:2}}>Sizes: {dielineSizes.PageW} x {dielineSizes.PageH} mm</div>
-                      <div style={{color:"#555",marginBottom:2}}>S = {dielineSizes.Area}</div>
-                      <div style={{color:"#555",marginBottom:8}}>Paper utilization: {dielineSizes.PageW && dielineSizes.PageH && dielineSizes.Area ? ((parseFloat(String(dielineSizes.Area)) / (dielineSizes.PageW * dielineSizes.PageH / 1000000) * 100).toFixed(2) + "%") : "-"}</div>
-                    </>
-                  )}
-                  {dielineDims && (
-                    <div style={{color:"#666",marginBottom:2,fontSize:11}}>{dielineModelInfo}, L={dielineDims.L}, W={dielineDims.W}, D={dielineDims.D}, Th={dielineDims.Th}</div>
-                  )}
-                  {dielineDims && (
-                    <div style={{color:"#666",marginBottom:8,fontSize:11}}>Material thickness = {dielineDims.Th?.toFixed(2)} mm</div>
-                  )}
-                  <div style={{marginTop:4}}>
-                    <span style={{color:"#ed1c24",fontWeight:600}}>Cut: {dielineSizes.Cut?.toFixed(0)} mm</span>
-                    {" \u00B7 "}
-                    <span style={{color:"#00a650",fontWeight:600}}>Crease: {dielineSizes.Crease?.toFixed(0)} mm</span>
-                  </div>
-                  <div style={{color:"#888"}}>Total: {dielineSizes.Total?.toFixed(0)} mm</div>
-                </div>
-              )}
               {/* Snap guide lines overlay - canvas-local coords */}
               {snapEnabled && snapLines.length > 0 && fcRef.current && (
                 <svg

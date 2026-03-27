@@ -23,6 +23,29 @@ function getCachePath(key: string): string {
   return path.join(CACHE_DIR, `${key}.json`);
 }
 
+
+// Clean Inkscape SVG: remove metadata, gray/black info paths
+function cleanInkscapeSvg(svg: string): string {
+  // Remove sodipodi:namedview block
+  svg = svg.replace(/<sodipodi:namedview[\s\S]*?<\/sodipodi:namedview>/g, "");
+  // Remove empty defs
+  svg = svg.replace(/<defs[^>]*\/>/g, "");
+  svg = svg.replace(/<defs[^>]*>\s*<\/defs>/g, "");
+  // Remove inkscape/sodipodi attributes
+  svg = svg.replace(/\s*(inkscape|sodipodi):[a-zA-Z-]+="[^"]*"/g, "");
+  // Remove xmlns:inkscape and xmlns:sodipodi
+  svg = svg.replace(/\s*xmlns:(inkscape|sodipodi)="[^"]*"/g, "");
+  // Remove flute direction (gray #7b7979)
+  svg = svg.replace(/<path[^>]*#7b7979[^>]*\/>/g, "");
+  svg = svg.replace(/<path[^>]*#7b7979[^/]*?\/>/g, "");
+  // Keep black dimension paths (#231f20) - they contain dimension arrows/numbers
+  // svg = svg.replace(/<path[^>]*#231f20[^>]*\/>/g, "");
+  // Remove non-numeric aria-label paths and superscript "2"
+  svg = svg.replace(/<path[^>]*aria-label="(?!\d\d)[^"]*"[^>]*\/>/g, "").replace(/<path[^>]*aria-label="2"[^>]*\/>/g, "");
+  // Remove empty groups
+  svg = svg.replace(/<g[^>]*>\s*<\/g>/g, "");
+  return svg;
+}
 function getFromCache(key: string): any | null {
   const p = getCachePath(key);
   if (fs.existsSync(p)) {
@@ -109,10 +132,10 @@ export async function POST(request: NextRequest) {
         // Download SVG content
         let svgContent = await downloadDieline(dieline);
         console.log(`[Dieline-DCT] SVG downloaded: ${svgContent.length} chars`);
-        // Remove flute direction mark and info text (same as EPM)
-        svgContent = svgContent.replace(/<path[^>]*stroke:#7b7979[^>]*\/>/gs, '');
-        svgContent = svgContent.replace(/<path[^>]*stroke:#231f20[^>]*\/>/gs, '');
-        svgContent = svgContent.replace(/<path[^>]*aria-label="[^"]*"[^>]*\/>/gs, '');
+        // Clean SVG (remove Inkscape metadata, info paths)
+        svgContent = cleanInkscapeSvg(svgContent);
+
+
         console.log('[Dieline-DCT] SVG cleaned');
 
         const dctResult = {
@@ -217,32 +240,63 @@ export async function POST(request: NextRequest) {
     const svgPath = path.join(tmpDir, 'model.svg');
 
     try {
-      const pdfBuffer = Buffer.from(result.Model, 'base64');
+      const pdfBuffer = Buffer.from(result.Model, "base64");
       await writeFile(pdfPath, pdfBuffer);
-      await execFileAsync(inkscape, [pdfPath, '--export-type=svg', '--export-filename=' + svgPath], { timeout: 30000 });
-      let svgContent = await readFile(svgPath, 'utf-8');
-      // Remove flute direction mark (gray #7b7979 paths)
-      svgContent = svgContent.replace(/<path[^>]*stroke:#7b7979[^>]*\/>/gs, '');
-      svgContent = svgContent.replace(/<path[^>]*stroke:#7b7979[^/]*?\/>/gs, '');
-      console.log('[Dieline-EPM] Removed flute direction marks');
-      // Remove info text paths (black #231f20 and aria-label paths)
-      svgContent = svgContent.replace(/<path[^>]*stroke:#231f20[^>]*\/>/gs, '');
-      svgContent = svgContent.replace(/<path[^>]*aria-label="[^"]*"[^>]*\/>/gs, '');
-      console.log('[Dieline-EPM] Removed info text paths');
+
+      const isMultiPart = result.Sizes && result.Sizes["1"] && !result.Sizes.PageW;
+      let svgContent = "";
+
+      if (isMultiPart) {
+        const partKeys = Object.keys(result.Sizes).filter((k: string) => /^\d+$/.test(k));
+        const svgParts: string[] = [];
+        for (let pi = 0; pi < partKeys.length; pi++) {
+          const pageNum = pi + 1;
+          const pageSvg = path.join(tmpDir, `page${pageNum}.svg`);
+          await execFileAsync(inkscape, [
+            pdfPath, "--pages=" + pageNum, "--export-type=svg", "--export-filename=" + pageSvg
+          ], { timeout: 30000 });
+          let ps = await readFile(pageSvg, "utf-8");
+          ps = cleanInkscapeSvg(ps);
+          svgParts.push(ps);
+          try { await unlink(pageSvg); } catch {}
+        }
+        console.log(`[Dieline-EPM] Multi-page: ${svgParts.length} pages converted`);
+        const parsed = svgParts.map(s => {
+          const vbM = s.match(/viewBox="([^"]*)"/);
+          const vb = vbM ? vbM[1].split(" ").map(Number) : [0,0,100,100];
+          const inner = s.replace(/^[\s\S]*?<svg[^>]*>/, "").replace(/<\/svg>\s*$/, "");
+          return { vb, inner };
+        });
+        const gap = 60;
+        const maxW = Math.max(...parsed.map(p => p.vb[2]));
+        let totalH = 0;
+        const groups: string[] = [];
+        for (const p of parsed) {
+          groups.push(`<g transform="translate(0,${totalH})">${p.inner}</g>`);
+          totalH += p.vb[3] + gap;
+        }
+        totalH -= gap;
+        svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${maxW} ${totalH}">${groups.join("")}</svg>`;
+      } else {
+        await execFileAsync(inkscape, [pdfPath, "--export-type=svg", "--export-filename=" + svgPath], { timeout: 30000 });
+        svgContent = await readFile(svgPath, "utf-8");
+        svgContent = cleanInkscapeSvg(svgContent);
+        console.log("[Dieline-EPM] Single page converted");
+      }
 
       const epmResult = {
         success: true,
         svg: svgContent,
         preview: result.Preview || null,
         sizes: result.Sizes || null,
-        source: 'epm',
+        source: "epm",
       };
       saveToCache(cacheKey, epmResult);
       return NextResponse.json(epmResult);
     } finally {
       try { await unlink(pdfPath); } catch {}
       try { await unlink(svgPath); } catch {}
-      try { const { rmdir } = require('fs/promises'); await rmdir(tmpDir); } catch {}
+      try { const fs2 = require("fs/promises"); const dir = await fs2.readdir(tmpDir).catch(() => []); for (const f of dir) { await fs2.unlink(path.join(tmpDir,f)).catch(() => {}); } await fs2.rmdir(tmpDir).catch(() => {}); } catch {}
     }
 
   } catch (error: any) {

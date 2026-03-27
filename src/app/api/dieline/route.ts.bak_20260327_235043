@@ -1,0 +1,178 @@
+﻿import { NextRequest, NextResponse } from 'next/server';
+import { generateDieline, downloadDieline, DctDielineVariables, DctConfig } from '@/lib/dct-api';
+import { getDctTemplateId, modelNameToBoxCode } from '@/lib/dct-templates';
+
+// Legacy EasyPackMaker import (fallback)
+let generateModelEPM: any = null;
+try {
+  const epm = require('@/lib/easypackmaker-api');
+  generateModelEPM = epm.generateModel;
+} catch {}
+
+function getDctConfig(): DctConfig {
+  return {
+    apiKey: process.env.DCT_API_KEY || '',
+    useSandbox: process.env.DCT_USE_SANDBOX === 'true',
+  };
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { modelName, length, width, depth, thickness, units, options, height } = body;
+
+    if (!modelName || !length || !width || !depth) {
+      return NextResponse.json(
+        { error: 'Missing required parameters: modelName, length, width, depth' },
+        { status: 400 }
+      );
+    }
+
+    // === Try Die Cut Templates API first ===
+    const dctConfig = getDctConfig();
+    const boxCode = modelNameToBoxCode(modelName);
+    const dctTemplateId = getDctTemplateId(boxCode);
+
+    console.log('[Dieline] modelName:', modelName, '-> boxCode:', boxCode, '-> dctTemplateId:', dctTemplateId, '| apiKey set:', !!dctConfig.apiKey);
+
+    if (dctConfig.apiKey && dctTemplateId) {
+      console.log(`[Dieline-DCT] Generating ${boxCode} (${dctTemplateId}) L=${length} W=${width} D=${depth} Th=${thickness}`);
+
+      try {
+        const variables: DctDielineVariables = {
+          unit: (units === 'in' ? 'in' : 'mm') as 'mm' | 'in',
+          material: Number(thickness) || 3.0,
+          length: Number(length),
+          width: Number(width),
+          height: Number(depth),
+          dimension_type: 'external',
+          printing_method: 'offset',
+          dimension_texts: true,
+        };
+
+        // Generate SVG dieline
+        const dieline = await generateDieline(dctConfig, dctTemplateId, 'svg', variables);
+        console.log(`[Dieline-DCT] Generated: ${dieline.id}, artwork: ${dieline.artwork_dimensions.width}x${dieline.artwork_dimensions.height}mm`);
+
+        // Download SVG content
+        const svgContent = await downloadDieline(dieline);
+        console.log(`[Dieline-DCT] SVG downloaded: ${svgContent.length} chars`);
+
+        return NextResponse.json({
+          success: true,
+          svg: svgContent,
+          preview: null,
+          sizes: {
+            PageW: parseFloat(dieline.artwork_dimensions.width),
+            PageH: parseFloat(dieline.artwork_dimensions.height),
+          },
+          dctDielineId: dieline.id,
+          dctDielineUrl: dieline.url,
+          source: 'dct',
+        });
+      } catch (dctError: any) {
+        console.error(`[Dieline-DCT] Error: ${dctError.message}. Falling back to EPM...`);
+        // Fall through to EasyPackMaker
+      }
+    }
+
+    // === Fallback: EasyPackMaker API ===
+    console.log(`[Dieline-EPM] Fallback for ${modelName}`);
+
+    const epmConfig = {
+      username: process.env.EPM_USERNAME || '',
+      password: process.env.EPM_PASSWORD || '',
+    };
+
+    if (!epmConfig.username || !epmConfig.password || !generateModelEPM) {
+      return NextResponse.json(
+        { error: `No API available for box type: ${boxCode || modelName}. DCT template not mapped, EPM not configured.` },
+        { status: 400 }
+      );
+    }
+
+    const { EpmModelParams, EpmModelOptions } = require('@/lib/easypackmaker-api');
+
+    const params = {
+      L: String(length),
+      W: String(width),
+      D: String(depth),
+      Th: String(thickness || 4),
+      Units: units || 'mm',
+    } as any;
+    if (height) params.H = String(height);
+
+    const modelOptions = {
+      DimensionType: 'In',
+      KnifeInfo: true,
+      GlueZone: false,
+      Sizes: true,
+      ...options,
+    };
+
+    console.log(`[Dieline-EPM] Generating ${modelName} L=${length} W=${width} D=${depth} Th=${thickness}`);
+    const result = await generateModelEPM(epmConfig, modelName, params, modelOptions);
+
+    if (result.Status !== 'Success') {
+      return NextResponse.json(
+        { error: `EasyPackMaker: ${result.Details || 'Unknown error'}`, code: result.ErrorCode },
+        { status: 400 }
+      );
+    }
+
+    if (!result.Model) {
+      return NextResponse.json({ error: 'No model data returned' }, { status: 500 });
+    }
+
+    // Convert PDF to SVG (requires Inkscape)
+    const { execFile } = require('child_process');
+    const { writeFile, readFile, unlink, mkdtemp } = require('fs/promises');
+    const { tmpdir } = require('os');
+    const path = require('path');
+    const { promisify } = require('util');
+    const execFileAsync = promisify(execFile);
+
+    const INKSCAPE_PATHS = [
+      'C:\\Program Files\\Inkscape\\bin\\inkscape.exe',
+      'C:\\Program Files (x86)\\Inkscape\\bin\\inkscape.exe',
+      '/usr/bin/inkscape',
+      'inkscape',
+    ];
+
+    let inkscape: string | null = null;
+    for (const p of INKSCAPE_PATHS) {
+      try { await execFileAsync(p, ['--version']); inkscape = p; break; } catch {}
+    }
+    if (!inkscape) throw new Error('Inkscape not found on server');
+
+    const tmpDir = await mkdtemp(path.join(tmpdir(), 'dieline-'));
+    const pdfPath = path.join(tmpDir, 'model.pdf');
+    const svgPath = path.join(tmpDir, 'model.svg');
+
+    try {
+      const pdfBuffer = Buffer.from(result.Model, 'base64');
+      await writeFile(pdfPath, pdfBuffer);
+      await execFileAsync(inkscape, [pdfPath, '--export-type=svg', '--export-filename=' + svgPath], { timeout: 30000 });
+      const svgContent = await readFile(svgPath, 'utf-8');
+
+      return NextResponse.json({
+        success: true,
+        svg: svgContent,
+        preview: result.Preview || null,
+        sizes: result.Sizes || null,
+        source: 'epm',
+      });
+    } finally {
+      try { await unlink(pdfPath); } catch {}
+      try { await unlink(svgPath); } catch {}
+      try { const { rmdir } = require('fs/promises'); await rmdir(tmpDir); } catch {}
+    }
+
+  } catch (error: any) {
+    console.error('[Dieline] Error:', error);
+    return NextResponse.json(
+      { error: error.message || 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}

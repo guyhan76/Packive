@@ -1,4 +1,4 @@
-
+﻿
 ---
 
 ## 2026-02-27 작업 기록
@@ -1163,81 +1163,145 @@ EPM_USERNAME=Guyhan76 EPM_PASSWORD=<API password from easypackmaker.com/profile>
 - 실무 인쇄: bleed 영역까지 디자인 확장 → 절단 후 흰 테두리 방지
 ---
 
-## 칼선(Dieline) 생성 및 표시 규칙 (2026-03-28)
 
-### 1. 아키텍처 개요
-- **EPM API** (EasyPackMaker): 칼선 생성 주력 API ($0.47/건)
-- **DCT API** (Die Cut Templates): 폴백 전용
-- **우선순위**: epmModel 존재 시 EPM 우선 → DCT 폴백
-- **캐싱**: `public/dielines/cache/` 에 JSON 저장, 동일 치수 재호출 시 $0
+## 칼선(Dieline) 생성 및 표시 규칙 (2026-03-28 최종 업데이트)
+
+### 1. API 구조
+- EPM API (EasyPackMaker): 칼선 생성 주력 API (0.47달러/건)
+- DCT API (DieCutTemplates): 일부 모델 폴백
+- 우선순위: epmModel 존재 시 EPM 우선 -> DCT 폴백
+- 캐싱: public/dielines/cache/ 에 JSON 저장, 동일 치수 재호출 시 무료
+- 비용 절감 핵심: 불필요한 API 호출 절대 금지. 캐시 확인 후 호출.
 
 ### 2. EPM API 호출 옵션 (route.ts)
-baseOptions = { DimensionType: 'In', KnifeInfo: true, // 칼선 정보 포함 (sizes 데이터용) Sizes: true, // 치수 정보 포함 }
+- DimensionType: In (내측치수. 사용자 입력값 그대로. EPM이 두께를 더해 외측치수로 변환)
+- KnifeInfo: true (칼선 정보 포함, sizes 데이터용)
+- Sizes: true (치수 정보 포함)
+- GlueZone: fefco_02/03/05/07 또는 A 모델만 적용. fefco-04xx, B10, B20 제외
+- H (height) 파라미터: fefco-0310, B10, B20만 사용. 나머지 모델에 넣으면 400 에러
+- Lid 옵션: B10, B20 전용. options: { Lid: true }
 
-- **GlueZone**: `fefco_(02|03|05|07)` 또는 `A\d` 모델만 `GlueZone: false` 추가
-- **fefco-0401~0427, B10, B20**: GlueZone 미지원 → 절대 보내지 않음
-- **H 파라미터**: fefco-0310, B10, B20만 필요 → 나머지 모델에 보내면 에러
-- **Lid 옵션**: B10(`Lid: "B10_02_00_00_A"`), B20(`Lid: "B20_02_00_00_A"`) 필수
+### 3. SVG 정리 함수: cleanInkscapeSvg() (route.ts)
+Inkscape PDF->SVG 변환 후 반드시 cleanInkscapeSvg() 함수를 통과시킴.
+EPM 경로와 DCT 경로 모두 동일하게 적용.
+처리 내용:
+  1. sodipodi:namedview 블록 제거 (Fabric.js 파싱 실패 원인)
+  2. 빈 defs 제거
+  3. inkscape/sodipodi 속성 제거
+  4. xmlns:inkscape, xmlns:sodipodi 제거
+  5. 골방향 마크 제거 (회색 #7b7979)
+  6. 비숫자 aria-label path 제거 + 제곱미터 숫자2 제거
+  7. 빈 그룹 제거
 
-### 3. SVG 정리 (route.ts - EPM/DCT 모두 적용)
-Inkscape PDF→SVG 변환 후 반드시 아래 3가지 제거:
-// 1. 골방향 마크 제거 (회색 #7b7979) svgContent = svgContent.replace(/<path[>]*stroke:#7b7979[>]*/>/gs, '');
-
-// 2. 정보 텍스트 path 제거 (검정 #231f20) svgContent = svgContent.replace(/<path[>]*stroke:#231f20[>]*/>/gs, '');
-
-// 3. aria-label path 제거 (Inkscape 변환된 텍스트) svgContent = svgContent.replace(/<path[>]*aria-label="["]"[^>]/>/gs, '');
-
-- **이유**: Inkscape가 텍스트를 path로 변환 → 화질 저하. 골방향은 사용자가 결정.
-- **대체**: sizes 데이터를 에디터 HTML Info 패널로 자체 렌더링 (고화질)
+#### 주의: #231f20 (검정 경로) 처리
+- 절대 제거하지 않음! 검정 #231f20 path에는 치수 화살표와 숫자가 포함됨.
+- 이전에 제거했다가 치수 표기가 사라지는 버그 발생.
+- cleanInkscapeSvg()에서 #231f20 관련 코드는 주석 처리됨. 절대 활성화 금지.
 
 ### 4. SVG 색상 규칙
-- **빨강 `#ed1c24`**: 칼선 (cut line) → 유지
-- **초록 `#00a650`**: 접힘선 (crease line) → 유지
-- **검정 `#231f20`**: 치수선/정보 텍스트 → 제거
-- **회색 `#7b7979`**: 골방향 마크 → 제거
-- **`fill:none` + `aria-label`**: 변환된 텍스트 → 제거
+- 빨강 #ed1c24: 칼선 (cut line) -> 유지
+- 초록 #00a650: 접힘선 (crease line) -> 유지
+- 검정 #231f20: 치수 화살표/숫자 -> 유지 (제거 금지)
+- 회색 #7b7979: 골방향 마크 -> 제거
+- aria-label path: Inkscape 변환 텍스트 -> 비숫자만 제거, 숫자(치수값)는 유지
 
-### 5. 카드 미리보기 SVG (박스 선택 UI)
-- **위치**: `public/dielines/previews/<id>.svg`
-- **생성 옵션**: `KnifeInfo: false`, `Sizes: false` (깨끗한 칼선만)
-- **정리**: `<g id="dimensions">`, `<text>`, `aria-label` path 모두 제거
-- **색상 통일**: 빨강(칼선) + 초록(접힘선)만 표시
-- **참조**: `src/lib/dieline-templates.ts`의 `svgPath` 필드
+### 5. Multi-Part (2-Piece Box) 처리
+FEFCO 03xx (0301, 0304, 0310) 등은 Body + Lid 2개 도면으로 구성됨.
 
-### 6. Info 패널 (에디터 자체 렌더링)
-- **데이터 소스**: API 응답의 `sizes` 객체 (PageW, PageH, Cut, Crease, Total, Area)
-- **표시**: Canvas 좌하단 HTML 오버레이 (`dielineSizes` state)
-- **토글**: "Info On/Off" 버튼 (`dielineInfoVisible` state)
-- **SVG 내부 텍스트 사용 금지**: Inkscape path 텍스트는 화질 저하로 사용하지 않음
+#### 5-1. PDF 변환 (route.ts)
+- Multi-part 감지: sizes에 숫자 키(1,2)가 있고 PageW가 없으면 multi-part
+- 각 페이지를 Inkscape --pages=N 옵션으로 개별 변환
+- 변환된 SVG들을 세로로 배치 (gap: 60px)
+- Inkscape 1.4.2 이상 필요 (--pages=N 옵션 지원)
+- 각 페이지 SVG에도 cleanInkscapeSvg() 적용 필수
 
-### 7. 캐싱 구조
-- **캐시 키**: `{model}_{L}_{W}_{D}_{Th}_mm.json` (예: `fefco_0201_300_200_250_3_mm.json`)
-- **캐시 위치**: `public/dielines/cache/`
-- **동작**: 1차 호출 → API + 캐시 저장, 2차+ → 캐시 히트 ($0)
-- **주의**: route.ts 정리 로직 변경 시 캐시 전체 삭제 후 재생성 필요
+#### 5-2. Info 패널 (unified-editor.tsx)
+- Multi-part sizes 정규화: {1: Body, 2: Lid} -> flat 구조
+- 가장 큰 part를 main으로, Cut/Crease/Total은 합산
+- _multiPart이면 Body/Lid 각각 + Combined 표시
+- Single-part면 기존 방식 (Sizes, S, Paper utilization 표시)
 
-### 8. 신규 박스 추가 체크리스트
-1. `src/lib/dieline-templates.ts`에 템플릿 추가 (epmModel, code, nameKo 등)
-2. 해당 모델의 필수 파라미터 확인 (H, Lid 등 특수 옵션)
-3. GlueZone 지원 여부 확인 → route.ts 정규식에 포함되는지 체크
-4. **미리보기 SVG 1회 생성** (`KnifeInfo:false, Sizes:false`) → `public/dielines/previews/` 저장
-5. 미리보기 SVG 정리 (dimensions, text, aria-label 제거)
-6. **프리캐시 1회 생성** (실제 옵션 `KnifeInfo:true, Sizes:true`) → 자동 캐시
-7. 캐시된 SVG 검증: `#7b7979`, `#231f20` 없음 확인
-8. 브라우저 테스트: 카드 미리보기 + Generate + Info 패널 확인
-- **비용**: 미리보기 $0.47 + 프리캐시 $0.47 = **$0.94/박스** (최소, 1회)
+#### 5-3. Multi-part 모델 목록
+- FEFCO 0301: Body + Lid (상하짝 분리)
+- FEFCO 0304: Body + Lid (상하짝 분리)
+- FEFCO 0310: Body + Lid (H 파라미터 필요)
+- ECMA B10: Body + Lid (Lid 옵션 필요)
+- ECMA B20: Body + Lid (Lid 옵션 필요)
 
-### 9. 절대 하지 말 것
-- ❌ `Sizes: false`로 생성 후 나중에 `true`로 재생성 (이중 비용)
-- ❌ GlueZone 미지원 모델에 GlueZone 옵션 전송 (400 에러)
-- ❌ H 파라미터 불필요 모델에 H 전송 (400 에러)
-- ❌ Inkscape `--pdf-font-strategy` 옵션 사용 (줄간격/위치 깨짐)
-- ❌ SVG 내부 path 텍스트를 Info 표시에 사용 (화질 저하)
-- ❌ 캐시 삭제 없이 route.ts 정리 로직 변경 (오염된 캐시 유지됨)
+### 6. 카드 미리보기 SVG (박스 선택 UI)
+- 위치: public/dielines/previews/<id>.svg
+- 생성 방법 2가지:
+  (A) EPM API 호출 (KnifeInfo:false, Sizes:false) -> 0.47달러 비용
+  (B) 캐시된 SVG에서 빨강+초록 path만 추출 -> 무료 (권장)
+- 방법 B 절차: 캐시 JSON에서 svg 로드 -> #ed1c24 + #00a650 path regex 추출 -> 새 SVG 조립
+- 주의: 미리보기와 실제 생성 결과의 형태가 다르면 안 됨
+- 버그 사례: fefco-0201과 fefco-0203 미리보기가 동일 파일이었음 (MD5 해시로 검출)
 
-### 10. 비용 관리
-- EPM API: $0.47/건
-- 미리보기 + 프리캐시 = $0.94/박스 (1회)
-- 동일 치수 재호출: $0 (캐시)
-- 새 치수: $0.47 (자동 캐시)
-- **목표**: 박스당 API 호출 최소화, 시행착오 0회
+### 7. Info 패널 (에디터 자체 렌더링)
+- 위치: Canvas 좌하단 (position:fixed, bottom:40, left:95)
+- 표시 데이터: sizes API 응답 (PageW, PageH, Cut, Crease, Total, Area)
+- 토글: Info On/Off 버튼 (dielineInfoVisible state)
+- SVG 내부 텍스트 사용 금지: Inkscape path 텍스트는 화질 저하
+- New 버튼 클릭 시: setDielineSizes(null), setDielineModelInfo(''), setDielineDims(null)
+
+### 8. Fit 버튼
+- 동작: 캔버스 내 모든 객체의 bounding box 계산 -> 줌+센터링
+- 기존 버그: applyZoom(100) 고정 -> 큰 도면 잘림
+- 수정: getBoundingRect() 기반 실제 fit 계산 + viewportTransform 센터링
+- Auto-zoom: 디라인 로드 시 캔버스보다 크면 자동 줌 축소
+
+### 9. 캐시 키 형식
+- 형식: {model}_{L}_{W}_{D}_{Th}_mm.json
+- 예: fefco_0201_300_200_250_3_mm.json
+- route.ts 변경 후 반드시 캐시 삭제 (Remove-Item public\dielines\cache\*.json)
+- 캐시 삭제 = 재생성 필요 = 비용 발생. 꼭 필요한 경우만 삭제.
+
+### 10. 새 박스 추가 체크리스트
+1. src/lib/dieline-templates.ts에 템플릿 추가 (epmModel, code, nameKo 등)
+2. H 파라미터 필요 여부 확인 (fefco-0310, B10, B20만)
+3. Lid 옵션 필요 여부 확인 (B10, B20만)
+4. GlueZone regex 매칭 확인
+5. 미리보기 SVG 생성 (방법 B 권장: 캐시에서 추출, 무료)
+6. 미리보기 SVG 중복 확인 (MD5 해시 비교)
+7. 테스트 생성 1회 (0.47달러) -> 캐시 저장 확인
+8. 캐시된 SVG 검증: #7b7979 없음, sodipodi/inkscape 없음, #ed1c24+#00a650+#231f20 존재
+9. 브라우저 테스트: 카드 미리보기 + Generate + Info 패널 + Fit 버튼
+10. Multi-part 여부 확인 (sizes에 1,2 키가 있으면 multi-part)
+
+### 11. 절대 금지 사항
+- #231f20 (검정 치수 경로) 제거 -> 치수 표기 사라짐
+- Inkscape --pdf-font-strategy 옵션 사용 -> 텍스트 간격 깨짐
+- SVG 내부 path 텍스트를 Info 표시에 사용 -> 화질 저하
+- 캐시 전체 삭제 후 대량 재생성 -> 불필요한 비용
+- GlueZone/H를 지원하지 않는 모델에 전송 -> 400 에러
+- 미리보기 SVG를 API로 매번 생성 -> 캐시에서 추출하면 무료
+
+### 12. 비용 요약
+- EPM API: 0.47달러/건
+- 새 박스 1종 추가: 테스트 생성 1회 = 0.47달러
+- 미리보기: 캐시 추출(B) = 무료 / API(A) = 0.47달러
+- 동일 치수 반복 호출: 무료 (캐시 히트)
+- 현재 총 투자: 약 55달러 (25개 박스 프리캐시 + 디버깅)
+
+### 13. 주요 파일 경로
+- src/app/api/dieline/route.ts: API 라우트 (EPM 호출 + Inkscape 변환 + cleanInkscapeSvg + 캐시)
+- src/components/editor/unified-editor.tsx: 에디터 (SVG 로드 + Info 패널 + Fit + New 초기화)
+- src/lib/dieline-templates.ts: 박스 템플릿 정의
+- src/lib/easypackmaker-api.ts: EPM API 클라이언트
+- public/dielines/cache/*.json: 캐시된 SVG + sizes
+- public/dielines/previews/*.svg: 박스 선택 카드 미리보기
+
+### 14. 시행착오 히스토리 (반복 금지)
+- 텍스트 화질 저하: Inkscape path 변환 -> sizes 데이터로 Info 패널 자체 렌더링
+- --pdf-font-strategy=substitute: 줄간격 깨짐 -> 옵션 제거
+- --pdf-font-strategy=keep: 여전히 미개선 -> 옵션 완전 제거
+- 치수 표기 사라짐: #231f20 전체 제거 -> 제거 비활성화 (비용 약 1달러)
+- 제곱미터 2 표시: aria-label=2 남음 -> 전용 제거 regex 추가
+- 미리보기 중복: 0201과 0203 동일 SVG -> MD5 해시로 검출, 캐시에서 재추출 (무료)
+- Multi-part 1페이지만: Inkscape 1페이지만 변환 -> --pages=N 개별 변환 (0.47달러)
+- Fabric.js 파싱 실패: sodipodi/inkscape 네임스페이스 -> cleanInkscapeSvg() 메타데이터 제거
+- Info 패널 숫자 빈칸: Multi-part sizes 미지원 -> _multiPart 정규화
+- Fit 안 됨: applyZoom(100) 고정 -> getBoundingRect 기반 실제 fit
+- New 후 Info 남음: state 초기화 누락 -> setDielineSizes(null) 추가
+- batch-precache 실패: JSON 전송 오류 -> curl + file 방식 (비용 약 2달러)
+- B10/B20 400 에러: Lid 옵션 누락 -> options: { Lid: true } (비용 약 1달러)
