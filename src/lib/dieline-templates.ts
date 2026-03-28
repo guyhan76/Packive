@@ -17,6 +17,7 @@ export interface DielineTemplate {
   popularity: number;       // 1-5, for sorting
   supports3d: boolean;      // Phase 3: 3D preview support
   svgPath: string;          // Path to dieline preview SVG in public/
+  box3dPath?: string;         // Path to 3D illustration PNG
   needsH?: boolean;          // true for fefco-0310 (telescope H param)
   needsLid?: boolean;        // true for B10, B20 (Lid option)
 }
@@ -163,6 +164,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '가장 보편적인 배송 박스. 4개 플랩이 중앙에서 만남', iconSvg: iconSlotted('rsc'),
     popularity: 5, supports3d: true,
     svgPath: '/dielines/previews/fefco-0201.svg',
+    box3dPath: '/dielines/box3d/fefco-0201.png',
   },
   {
     id: 'fefco-0203', name: 'Full Overlap RSC', nameKo: '풀오버랩 슬롯 박스',
@@ -171,6 +173,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '플랩 완전 겹침으로 최대 강도', iconSvg: iconSlotted('overlap'),
     popularity: 4, supports3d: true,
     svgPath: '/dielines/previews/fefco-0203.svg',
+    box3dPath: '/dielines/box3d/fefco-0203.png',
   },
   {
     id: 'fefco-0210', name: 'Center Meet Slotted', nameKo: '중앙 만남형',
@@ -179,6 +182,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '경제적 슬롯 박스. 플랩이 중앙에서 만남', iconSvg: iconSlotted('center'),
     popularity: 3, supports3d: true,
     svgPath: '/dielines/previews/fefco-0210.svg',
+    box3dPath: '/dielines/box3d/fefco-0210.png',
   },
   {
     id: 'fefco-0215', name: 'Full Overlap Slotted', nameKo: '풀오버랩 슬롯',
@@ -187,6 +191,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '무거운 물품 보호용 풀오버랩', iconSvg: iconSlotted('overlap'),
     popularity: 4, supports3d: true,
     svgPath: '/dielines/previews/fefco-0215.svg',
+    box3dPath: '/dielines/box3d/fefco-0215.png',
   },
   {
     id: 'fefco-0216', name: 'Half Slotted Container', nameKo: '반슬롯 박스',
@@ -195,6 +200,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '한쪽 개방형. 진열/선반용', iconSvg: iconSlotted('half'),
     popularity: 3, supports3d: true,
     svgPath: '/dielines/previews/fefco-0216.svg',
+    box3dPath: '/dielines/box3d/fefco-0216.png',
   },
   {
     id: 'fefco-0217', name: 'Overlap Half Slotted', nameKo: '오버랩 반슬롯',
@@ -203,6 +209,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '오버랩 플랩 반슬롯 박스', iconSvg: iconSlotted('overlap'),
     popularity: 2, supports3d: true,
     svgPath: '/dielines/previews/fefco-0217.svg',
+    box3dPath: '/dielines/box3d/fefco-0217.png',
   },
   {
     id: 'fefco-0225', name: 'Full Telescope RSC', nameKo: '풀 텔레스코프 슬롯',
@@ -211,6 +218,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '높은 물품용 2피스 풀오버랩 슬롯', iconSvg: iconSlotted('overlap'),
     popularity: 2, supports3d: false,
     svgPath: '/dielines/previews/fefco-0225.svg',
+    box3dPath: '/dielines/box3d/fefco-0225.png',
   },
 
   // ─── FEFCO 03: TELESCOPE TYPE ─────────────────────────
@@ -221,6 +229,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '뚜껑이 본체에 씌워지는 클래식 선물 박스', iconSvg: iconTelescope(),
     popularity: 5, supports3d: false,
     svgPath: '/dielines/previews/fefco-0301.svg',
+    box3dPath: '/dielines/box3d/fefco-0301.png',
   },
   {
     id: 'fefco-0304', name: 'Full Telescope Box', nameKo: '풀 텔레스코프',
@@ -229,6 +238,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '뚜껑이 본체 전체를 덮음. 신발 박스 스타일', iconSvg: iconTelescope(),
     popularity: 4, supports3d: false,
     svgPath: '/dielines/previews/fefco-0304.svg',
+    box3dPath: '/dielines/box3d/fefco-0304.png',
   },
   {
     id: 'fefco-0310', name: 'Telescope Design Box', needsH: true, nameKo: '디자인 텔레스코프',
@@ -237,6 +247,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '이중벽 텔레스코프 보호 강화', iconSvg: iconTelescope(),
     popularity: 3, supports3d: false,
     svgPath: '/dielines/previews/fefco-0310.svg',
+    box3dPath: '/dielines/box3d/fefco-0310.png',
   },
 
   // ─── FEFCO 04: FOLDER & TRAY TYPE ────────────────────
@@ -247,6 +258,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '제품을 감싸는 플랫 박스. 책/액자용', iconSvg: iconFolder(),
     popularity: 4, supports3d: false,
     svgPath: '/dielines/previews/fefco-0401.svg',
+    box3dPath: '/dielines/box3d/fefco-0401.png',
   },
   {
     id: 'fefco-0409', name: 'Four Corner Tray', nameKo: '4코너 트레이',
@@ -255,6 +267,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '4코너 접착 오픈 트레이', iconSvg: iconFolder(),
     popularity: 3, supports3d: false,
     svgPath: '/dielines/previews/fefco-0409.svg',
+    box3dPath: '/dielines/box3d/fefco-0409.png',
   },
   {
     id: 'fefco-0421', name: 'Roll-End Tuck-Top', nameKo: '롤엔드 턱탑',
@@ -263,6 +276,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '롤엔드 턱탑. 피자박스 스타일', iconSvg: iconFolder(),
     popularity: 4, supports3d: false,
     svgPath: '/dielines/previews/fefco-0421.svg',
+    box3dPath: '/dielines/box3d/fefco-0421.png',
   },
   {
     id: 'fefco-0427', name: 'Tuck-Top Auto-Bottom', nameKo: '턱탑 자동바닥',
@@ -271,6 +285,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '자동 잠금 바닥 + 턱탑. 빠른 조립', iconSvg: iconFolder(),
     popularity: 5, supports3d: false,
     svgPath: '/dielines/previews/fefco-0427.svg',
+    box3dPath: '/dielines/box3d/fefco-0427.png',
   },
 
   // ─── FEFCO 05: SLIDE TYPE ────────────────────────────
@@ -281,6 +296,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '내부 트레이가 외부 슬리브에 삽입. 프리미엄 선물 박스', iconSvg: iconSlide(),
     popularity: 4, supports3d: false,
     svgPath: '/dielines/previews/fefco-0501.svg',
+    box3dPath: '/dielines/box3d/fefco-0501.png',
   },
   {
     id: 'fefco-0503', name: 'Full Slide Box', nameKo: '풀 슬라이드',
@@ -289,6 +305,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '완전 밀폐형 슬라이드. 성냥갑 스타일', iconSvg: iconSlide(),
     popularity: 3, supports3d: false,
     svgPath: '/dielines/previews/fefco-0503.svg',
+    box3dPath: '/dielines/box3d/fefco-0503.png',
   },
 
   // ─── FEFCO 07: READY-GLUED ───────────────────────────
@@ -299,6 +316,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '사전 접착. 평평하게 보관, 팝업 조립', iconSvg: iconReadyGlued(),
     popularity: 4, supports3d: false,
     svgPath: '/dielines/previews/fefco-0711.svg',
+    box3dPath: '/dielines/box3d/fefco-0711.png',
   },
   {
     id: 'fefco-0713', name: 'Ready-Glued Tray', nameKo: '접착형 트레이',
@@ -307,6 +325,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '사전 접착 오픈 트레이. 빠른 조립', iconSvg: iconReadyGlued(),
     popularity: 3, supports3d: false,
     svgPath: '/dielines/previews/fefco-0713.svg',
+    box3dPath: '/dielines/box3d/fefco-0713.png',
   },
 
   // ─── ECMA A: TUCK END ────────────────────────────────
@@ -317,6 +336,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '클래식 소매 카톤. 양쪽 턱 플랩', iconSvg: iconTuckEnd('straight'),
     popularity: 5, supports3d: true,
     svgPath: '/dielines/previews/ecma-a20-straight.svg',
+    box3dPath: '/dielines/box3d/ecma-a20-straight.png',
   },
   {
     id: 'ecma-a20-reverse', name: 'Reverse Tuck End', nameKo: '리버스 턱엔드',
@@ -325,6 +345,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '턱 플랩이 반대 방향. 의약품 표준', iconSvg: iconTuckEnd('reverse'),
     popularity: 4, supports3d: true,
     svgPath: '/dielines/previews/ecma-a20-reverse.svg',
+    box3dPath: '/dielines/box3d/ecma-a20-reverse.png',
   },
   {
     id: 'ecma-a10-seal', name: 'Seal End Carton', nameKo: '실엔드 카톤',
@@ -333,6 +354,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '양쪽 끝 풀오버랩 밀봉. 식품 포장용', iconSvg: iconTuckEnd('straight'),
     popularity: 3, supports3d: false,
     svgPath: '/dielines/previews/ecma-a10-seal.svg',
+    box3dPath: '/dielines/box3d/ecma-a10-seal.png',
   },
 
   // ─── ECMA A55: SNAP LOCK (AUTO BOTTOM) ────────────────
@@ -343,6 +365,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '자동 잠금 바닥 + 턱탑. 빠른 조립 소매 박스', iconSvg: iconTuckEnd('snap'),
     popularity: 5, supports3d: false,
     svgPath: '/dielines/previews/ecma-a55-snaplock.svg',
+    box3dPath: '/dielines/box3d/ecma-a55-snaplock.png',
   },
   {
     id: 'ecma-a55-hanger', name: 'Snap Lock with Hanger', nameKo: '스냅락 행거',
@@ -351,6 +374,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '스냅락 바닥 + 유로홀 행거', iconSvg: iconTuckEnd('snap'),
     popularity: 3, supports3d: false,
     svgPath: '/dielines/previews/ecma-a55-hanger.svg',
+    box3dPath: '/dielines/box3d/ecma-a55-hanger.png',
   },
 
   // ─── ECMA B: TRAY & LID ──────────────────────────────
@@ -361,6 +385,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '별도 트레이+뚜껑. 프리미엄 프레젠테이션 박스', iconSvg: iconTrayLid(),
     popularity: 4, supports3d: false,
     svgPath: '/dielines/previews/ecma-b10-tray.svg',
+    box3dPath: '/dielines/box3d/ecma-b10-tray.png',
   },
   {
     id: 'ecma-b20-hinged', name: 'Hinged Lid Tray', needsLid: true, needsH: true, nameKo: '힌지 뚜껑 트레이',
@@ -369,6 +394,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     descriptionKo: '경첩형 뚜껑 트레이. 원피스 구조', iconSvg: iconTrayLid(),
     popularity: 3, supports3d: false,
     svgPath: '/dielines/previews/ecma-b20-hinged.svg',
+    box3dPath: '/dielines/box3d/ecma-b20-hinged.png',
   },
 ];
 
@@ -401,3 +427,4 @@ export function getCategoriesWithTemplates(): BoxCategory[] {
 export function getTemplatesSupporting3d(): DielineTemplate[] {
   return DIELINE_TEMPLATES.filter(t => t.supports3d);
 }
+

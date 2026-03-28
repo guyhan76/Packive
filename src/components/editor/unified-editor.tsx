@@ -852,6 +852,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
   // ─── Canvas initialization ───
   useEffect(() => {
+    let _onKeyDown: ((e: KeyboardEvent) => void) | null = null;
+    let _onKeyUp: ((e: KeyboardEvent) => void) | null = null;
     let disposed = false;
 
     const boot = async () => {
@@ -1237,6 +1239,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       const _spaceDown = new Set<string>();
       const onKeyDown = (e: KeyboardEvent) => { const tag = (document.activeElement?.tagName || "").toLowerCase(); if (tag === "input" || tag === "textarea" || tag === "select" || (document.activeElement as any)?.contentEditable === "true") return; if (e.code === "Space") { _spaceDown.add("Space"); e.preventDefault(); } };
       const onKeyUp = (e: KeyboardEvent) => { _spaceDown.delete(e.code); };
+      _onKeyDown = onKeyDown; _onKeyUp = onKeyUp;
       document.addEventListener("keydown", onKeyDown);
       document.addEventListener("keyup", onKeyUp);
 
@@ -1270,6 +1273,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     boot();
 
     return () => {
+        document.removeEventListener("keydown", _onKeyDown!);
+        document.removeEventListener("keyup", _onKeyUp!);
       disposed = true; try { if (resizeTimer) clearTimeout(resizeTimer); resizeObserver.disconnect(); } catch(e) {}
       if (fcRef.current) {
         try { fcRef.current.dispose(); } catch {}
@@ -2480,70 +2485,98 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                       const fefcoItems = templates.filter(t => { const cat = BOX_CATEGORIES.find(c => c.id === t.category); return cat && cat.standard === 'FEFCO'; });
                       const ecmaItems = templates.filter(t => { const cat = BOX_CATEGORIES.find(c => c.id === t.category); return cat && cat.standard === 'ECMA'; });
 
+                      const groupBySeries = (items: typeof templates, standard: string) => {
+                        const groups: Record<string, typeof templates> = {};
+                        items.forEach(t => {
+                          let series = '';
+                          if (standard === 'FEFCO') {
+                            const m = t.code.match(/FEFCO\s*(\d{2})/);
+                            series = m ? m[1] + '00' : 'Other';
+                          } else {
+                            const m = t.code.match(/ECMA\s*([A-Z])\d/);
+                            series = m ? m[1] : 'Other';
+                          }
+                          if (!groups[series]) groups[series] = [];
+                          groups[series].push(t);
+                        });
+                        return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
+                      };
+
+                      const seriesLabel: Record<string, string> = {
+                        '0200': 'Slotted-type Boxes',
+                        '0300': 'Telescope-style Boxes',
+                        '0400': 'Folder & Tray-type',
+                        '0500': 'Slide-type Boxes',
+                        '0600': 'Rigid Boxes',
+                        '0700': 'Ready-glued Boxes',
+                        'A': 'Cartons (Rectangular)',
+                        'B': 'Trays & Lids',
+                      };
+
                       const renderCard = (t: DielineTemplate) => (
                         <button key={t.id} onClick={() => {
                           setSelectedBoxCode(t.code);
-                      setSelectedBoxName(t.name);
-                      setIsEcma(t.code.startsWith('ECMA'));
-                      if (t.code.startsWith('ECMA')) { setThickness(0.4); } else { setThickness(FLUTE_MAP[fluteType]?.thickness ?? 4.0); }
+                          setSelectedBoxName(t.name);
+                          setIsEcma(t.code.startsWith('ECMA'));
+                          if (t.code.startsWith('ECMA')) { setThickness(0.4); } else { setThickness(FLUTE_MAP[fluteType]?.thickness ?? 4.0); }
                           setShowDimModal(true);
                           setShowDielinePanel(false);
                         }}
-                        className="group relative flex flex-col items-center p-3 rounded-xl border border-gray-100 hover:border-blue-400 hover:shadow-lg transition-all duration-200 bg-white hover:bg-gradient-to-b hover:from-blue-50/40 hover:to-white cursor-pointer">
-                          {/* 3D Badge */}
+                        className="group relative flex flex-col items-center p-3 rounded-xl border border-gray-100 hover:border-blue-400 hover:shadow-lg transition-all duration-200 bg-white hover:bg-gradient-to-b hover:from-blue-50/40 hover:to-white cursor-pointer"
+                        title={`${t.name} - ${t.code}`}
+                        >
                           {t.supports3d && (
                             <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 text-[9px] font-bold bg-gradient-to-r from-violet-500 to-blue-500 text-white rounded-md shadow-sm leading-none">3D</span>
                           )}
-                          {/* Popularity indicator */}
                           <div className="absolute top-1.5 left-1.5 flex gap-[2px]">
                             {Array.from({ length: 5 }).map((_, i) => (
                               <div key={i} className={`w-[4px] h-[4px] rounded-full ${i < t.popularity ? 'bg-amber-400' : 'bg-gray-200'}`} />
                             ))}
                           </div>
-                          {/* SVG preview */}
-                          <div className="w-full aspect-[5/3] flex items-center justify-center mb-2 rounded-lg bg-white group-hover:bg-gray-50 transition-colors overflow-hidden">
-                            {t.svgPath ? (
-                              <img src={t.svgPath} alt={t.name} className="w-[90%] h-[90%] object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; const sib = (e.target as HTMLImageElement).nextElementSibling; if(sib) sib.classList.remove('hidden'); }} />
+                          {/* 3D + SVG preview */}
+                          <div className="w-full aspect-[4/3] flex items-center justify-center mb-3 rounded-lg bg-gray-50/50 group-hover:bg-white transition-colors overflow-hidden">
+                            {t.box3dPath ? (
+                              <img src={t.box3dPath} alt={t.name} className="w-[92%] h-[92%] object-contain drop-shadow-sm" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; const next = (e.target as HTMLImageElement).nextElementSibling; if(next) (next as HTMLElement).style.display = 'flex'; }} />
                             ) : null}
-                            <div className={`flex items-center justify-center w-full h-full ${t.svgPath ? 'hidden' : ''}`} dangerouslySetInnerHTML={{ __html: t.iconSvg }} />
+                            {t.svgPath ? (
+                              <img src={t.svgPath} alt={t.name} style={{display: t.box3dPath ? "none" : undefined}} className="w-[90%] h-[90%] object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; const sib = (e.target as HTMLImageElement).nextElementSibling; if(sib) (sib as HTMLElement).style.display = 'flex'; }} />
+                            ) : null}
+                            <div className={`flex items-center justify-center w-full h-full ${(t.svgPath || t.box3dPath) ? 'hidden' : ''}`} dangerouslySetInnerHTML={{ __html: t.iconSvg }} />
                           </div>
-                          <div className="w-full text-center">
-                            <div className="text-[11px] font-bold text-gray-800 group-hover:text-blue-700 leading-tight truncate px-1">{t.name}</div>
-                            <div className="text-[9px] text-gray-400 mt-0.5 font-mono">{t.code}</div>
-                            {t.description && <div className="text-[8px] text-gray-300 mt-0.5 truncate px-1">{t.description}</div>}
+                          <div className="w-full text-center space-y-0.5 mt-1">
+                            <div className="text-[12px] font-bold text-gray-800 group-hover:text-blue-700 leading-snug line-clamp-2 px-0.5">{t.name}</div>
+                            <div className="text-[10px] text-gray-400 font-mono">{t.code}</div>
+                            {t.description && <div className="text-[9px] text-gray-400 leading-snug line-clamp-2 px-0.5 mt-0.5">{t.description}</div>}
                           </div>
                         </button>
                       );
 
+                      const renderGroup = (items: typeof templates, standard: string, color: string) => {
+                        const groups = groupBySeries(items, standard);
+                        return groups.map(([series, tpls]) => (
+                          <div key={series} className="mb-6">
+                            <div className="flex items-center gap-2 mb-3">
+                              <div className={`h-px flex-1 bg-gradient-to-r from-transparent ${color === 'blue' ? 'via-blue-200' : 'via-emerald-200'} to-transparent`}></div>
+                              <span className={`text-[10px] font-bold ${color === 'blue' ? 'text-blue-500' : 'text-emerald-500'} uppercase tracking-wider`}>{standard} {series}</span>
+                              <span className="text-[9px] text-gray-400 font-medium">{seriesLabel[series] || ''}</span>
+                              <div className={`h-px flex-1 bg-gradient-to-r from-transparent ${color === 'blue' ? 'via-blue-200' : 'via-emerald-200'} to-transparent`}></div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">{tpls.map(renderCard)}</div>
+                          </div>
+                        ));
+                      };
+
                       return (
-                        <div className="space-y-4">
-                          {fefcoItems.length > 0 && (
-                            <div>
-                              {boxCategoryFilter === 'all' && ecmaItems.length > 0 && (
-                                <div className="flex items-center gap-2 mb-3">
-                                  <div className="h-px flex-1 bg-gradient-to-r from-transparent via-blue-200 to-transparent"></div>
-                                  <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">FEFCO</span>
-                                  <div className="h-px flex-1 bg-gradient-to-r from-transparent via-blue-200 to-transparent"></div>
-                                </div>
-                              )}
-                              <div className="grid grid-cols-2 gap-3">{fefcoItems.map(renderCard)}</div>
-                            </div>
-                          )}
-                          {ecmaItems.length > 0 && (
-                            <div>
-                              {boxCategoryFilter === 'all' && fefcoItems.length > 0 && (
-                                <div className="flex items-center gap-2 mb-3 mt-1">
-                                  <div className="h-px flex-1 bg-gradient-to-r from-transparent via-pink-200 to-transparent"></div>
-                                  <span className="text-[10px] font-bold text-pink-400 uppercase tracking-widest">ECMA</span>
-                                  <div className="h-px flex-1 bg-gradient-to-r from-transparent via-pink-200 to-transparent"></div>
-                                </div>
-                              )}
-                              <div className="grid grid-cols-2 gap-3">{ecmaItems.map(renderCard)}</div>
-                            </div>
-                          )}
+                        <div className="space-y-2">
+                          {fefcoItems.length > 0 && renderGroup(fefcoItems, 'FEFCO', 'blue')}
+                          {ecmaItems.length > 0 && renderGroup(ecmaItems, 'ECMA', 'emerald')}
+                          <div className="text-center py-3 text-[9px] text-gray-300">
+                            {templates.length} box types available
+                          </div>
                         </div>
                       );
                     })()}
+
                   </div>
 
                   {/* Footer */}
