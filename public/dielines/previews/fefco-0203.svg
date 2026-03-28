@@ -1,151 +1,30 @@
-﻿<svg
-   xmlns="http://www.w3.org/2000/svg"
-   xml:space="preserve"
-   preserveAspectRatio="none"
-   viewBox="0 0 3949.6062 2524.7244"
-   version="1.1"
-   id="Die Cut Templates"
-  >
-    <g id="cut">
-        <path
-       id="path4"
-       d="M 2953.7008,1305.3543 V 588.18898"
-       fill="none" stroke="#FF0000" stroke-width="1"
-       transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
-        <path
-       id="path6"
-       d="M 102.04724,1305.3543 8.50394,1280.2895 V 613.25383 l 93.5433,-25.06485"
-       fill="none" stroke="#FF0000" stroke-width="1"
-       transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
-        <path
-       id="path11"
-       d="m 102.04724,1305.3543 v 579.6851 H 943.93701 V 1299.685"
-       fill="none" stroke="#FF0000" stroke-width="1"
-       transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
-        <path
-       id="path12"
-       d="m 960.94488,1299.685 v 435.1182 H 1519.3701 V 1299.685"
-       fill="none" stroke="#FF0000" stroke-width="1"
-       transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
-        <path
-       id="path13"
-       d="m 1536.378,1299.685 v 585.3544 h 841.8897 V 1299.685"
-       fill="none" stroke="#FF0000" stroke-width="1"
-       transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
-        <path
-       id="path14"
-       d="m 2395.2756,1299.685 v 435.1182 h 558.4252 v -429.4489"
-       fill="none" stroke="#FF0000" stroke-width="1"
-       transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
-        <path
-       id="path15"
-       d="m 943.93701,1299.685 h 17.00787"
-       fill="none" stroke="#FF0000" stroke-width="1"
-       transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
-        <path
-       id="path16"
-       d="m 1519.3701,1299.685 h 17.0079"
-       fill="none" stroke="#FF0000" stroke-width="1"
-       transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
-        <path
-       id="path17"
-       d="m 2378.2677,1299.685 h 17.0079"
-       fill="none" stroke="#FF0000" stroke-width="1"
-       transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
-        <path
-       id="path22"
-       d="m 102.04724,1305.3543 v 579.6851 H 943.93701 V 1299.685"
-       fill="none" stroke="#FF0000" stroke-width="1"
-       transform="scale(1.3333333)" />
-        <path
-       id="path23"
-       d="m 960.94488,1299.685 v 435.1182 H 1519.3701 V 1299.685"
-       fill="none" stroke="#FF0000" stroke-width="1"
-       transform="scale(1.3333333)" />
-        <path
-       id="path24"
-       d="m 1536.378,1299.685 v 585.3544 h 841.8897 V 1299.685"
-       fill="none" stroke="#FF0000" stroke-width="1"
-       transform="scale(1.3333333)" />
-        <path
-       id="path25"
-       d="m 2395.2756,1299.685 v 435.1182 h 558.4252 v -429.4489"
-       fill="none" stroke="#FF0000" stroke-width="1"
-       transform="scale(1.3333333)" />
-        <path
-       id="path26"
-       d="m 943.93701,1299.685 h 17.00787"
-       fill="none" stroke="#FF0000" stroke-width="1"
-       transform="scale(1.3333333)" />
-        <path
-       id="path27"
-       d="m 1519.3701,1299.685 h 17.0079"
-       fill="none" stroke="#FF0000" stroke-width="1"
-       transform="scale(1.3333333)" />
-        <path
-       id="path28"
-       d="m 2378.2677,1299.685 h 17.0079"
-       fill="none" stroke="#FF0000" stroke-width="1"
-       transform="scale(1.3333333)" />
-        <path
-       id="path1"
-       d="M 952.44094,1299.685 V 593.85827"
-       fill="none" stroke="#00FF00" stroke-width="1"
-       transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
-        <path
-       id="path2"
-       d="M 1527.874,1299.685 V 593.85827"
-       fill="none" stroke="#00FF00" stroke-width="1"
-       transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
-        <path
-       id="path3"
-       d="M 2386.7717,1299.685 V 593.85827"
-       fill="none" stroke="#00FF00" stroke-width="1"
-       transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
-        <path
-       id="path5"
-       d="M 93.54331,1303.0757 V 590.4676"
-       fill="none" stroke="#00FF00" stroke-width="1"
-       transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
-        <path
-       id="path7"
-       d="M 102.04724,1313.8583 H 943.93701"
-       fill="none" stroke="#00FF00" stroke-width="1"
-       transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
-        <path
-       id="path8"
-       d="M 960.94488,1305.3543 H 1519.3701"
-       fill="none" stroke="#00FF00" stroke-width="1"
-       transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
-        <path
-       id="path9"
-       d="m 1536.378,1322.3622 h 841.8897"
-       fill="none" stroke="#00FF00" stroke-width="1"
-       transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
-        <path
-       id="path10"
-       d="m 2395.2756,1305.3543 h 558.4252"
-       fill="none" stroke="#00FF00" stroke-width="1"
-       transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
-        <path
-       id="path18"
-       d="M 102.04724,1313.8583 H 943.93701"
-       fill="none" stroke="#00FF00" stroke-width="1"
-       transform="scale(1.3333333)" />
-        <path
-       id="path19"
-       d="M 960.94488,1305.3543 H 1519.3701"
-       fill="none" stroke="#00FF00" stroke-width="1"
-       transform="scale(1.3333333)" />
-        <path
-       id="path20"
-       d="m 1536.378,1322.3622 h 841.8897"
-       fill="none" stroke="#00FF00" stroke-width="1"
-       transform="scale(1.3333333)" />
-        <path
-       id="path21"
-       d="m 2395.2756,1305.3543 h 558.4252"
-       fill="none" stroke="#00FF00" stroke-width="1"
-       transform="scale(1.3333333)" />
-    </g>
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3949.6062 2524.7244" preserveAspectRatio="xMidYMid meet">
+  <path d="M 952.44094,1299.685 V 593.85827" fill="none" stroke="#00AA00" stroke-width="3" transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
+  <path d="M 1527.874,1299.685 V 593.85827" fill="none" stroke="#00AA00" stroke-width="3" transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
+  <path d="M 2386.7717,1299.685 V 593.85827" fill="none" stroke="#00AA00" stroke-width="3" transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
+  <path d="M 2953.7008,1305.3543 V 588.18898" fill="none" stroke="#FF0000" stroke-width="3" transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
+  <path d="M 93.54331,1303.0757 V 590.4676" fill="none" stroke="#00AA00" stroke-width="3" transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
+  <path d="M 102.04724,1305.3543 8.50394,1280.2895 V 613.25383 l 93.5433,-25.06485" fill="none" stroke="#FF0000" stroke-width="3" transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
+  <path d="M 102.04724,1313.8583 H 943.93701" fill="none" stroke="#00AA00" stroke-width="3" transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
+  <path d="M 960.94488,1305.3543 H 1519.3701" fill="none" stroke="#00AA00" stroke-width="3" transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
+  <path d="m 1536.378,1322.3622 h 841.8897" fill="none" stroke="#00AA00" stroke-width="3" transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
+  <path d="m 2395.2756,1305.3543 h 558.4252" fill="none" stroke="#00AA00" stroke-width="3" transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
+  <path d="m 102.04724,1305.3543 v 579.6851 H 943.93701 V 1299.685" fill="none" stroke="#FF0000" stroke-width="3" transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
+  <path d="m 960.94488,1299.685 v 435.1182 H 1519.3701 V 1299.685" fill="none" stroke="#FF0000" stroke-width="3" transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
+  <path d="m 1536.378,1299.685 v 585.3544 h 841.8897 V 1299.685" fill="none" stroke="#FF0000" stroke-width="3" transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
+  <path d="m 2395.2756,1299.685 v 435.1182 h 558.4252 v -429.4489" fill="none" stroke="#FF0000" stroke-width="3" transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
+  <path d="m 943.93701,1299.685 h 17.00787" fill="none" stroke="#FF0000" stroke-width="3" transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
+  <path d="m 1519.3701,1299.685 h 17.0079" fill="none" stroke="#FF0000" stroke-width="3" transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
+  <path d="m 2378.2677,1299.685 h 17.0079" fill="none" stroke="#FF0000" stroke-width="3" transform="matrix(1.3333333,0,0,-1.3333333,0,2524.7244)" />
+  <path d="M 102.04724,1313.8583 H 943.93701" fill="none" stroke="#00AA00" stroke-width="3" transform="scale(1.3333333)" />
+  <path d="M 960.94488,1305.3543 H 1519.3701" fill="none" stroke="#00AA00" stroke-width="3" transform="scale(1.3333333)" />
+  <path d="m 1536.378,1322.3622 h 841.8897" fill="none" stroke="#00AA00" stroke-width="3" transform="scale(1.3333333)" />
+  <path d="m 2395.2756,1305.3543 h 558.4252" fill="none" stroke="#00AA00" stroke-width="3" transform="scale(1.3333333)" />
+  <path d="m 102.04724,1305.3543 v 579.6851 H 943.93701 V 1299.685" fill="none" stroke="#FF0000" stroke-width="3" transform="scale(1.3333333)" />
+  <path d="m 960.94488,1299.685 v 435.1182 H 1519.3701 V 1299.685" fill="none" stroke="#FF0000" stroke-width="3" transform="scale(1.3333333)" />
+  <path d="m 1536.378,1299.685 v 585.3544 h 841.8897 V 1299.685" fill="none" stroke="#FF0000" stroke-width="3" transform="scale(1.3333333)" />
+  <path d="m 2395.2756,1299.685 v 435.1182 h 558.4252 v -429.4489" fill="none" stroke="#FF0000" stroke-width="3" transform="scale(1.3333333)" />
+  <path d="m 943.93701,1299.685 h 17.00787" fill="none" stroke="#FF0000" stroke-width="3" transform="scale(1.3333333)" />
+  <path d="m 1519.3701,1299.685 h 17.0079" fill="none" stroke="#FF0000" stroke-width="3" transform="scale(1.3333333)" />
+  <path d="m 2378.2677,1299.685 h 17.0079" fill="none" stroke="#FF0000" stroke-width="3" transform="scale(1.3333333)" />
 </svg>

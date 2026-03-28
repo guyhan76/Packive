@@ -17,6 +17,8 @@ export interface DielineTemplate {
   popularity: number;       // 1-5, for sorting
   supports3d: boolean;      // Phase 3: 3D preview support
   svgPath: string;          // Path to dieline preview SVG in public/
+  needsH?: boolean;          // true for fefco-0310 (telescope H param)
+  needsLid?: boolean;        // true for B10, B20 (Lid option)
 }
 
 export interface BoxCategory {
@@ -229,7 +231,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     svgPath: '/dielines/previews/fefco-0304.svg',
   },
   {
-    id: 'fefco-0310', name: 'Telescope Design Box', nameKo: '디자인 텔레스코프',
+    id: 'fefco-0310', name: 'Telescope Design Box', needsH: true, nameKo: '디자인 텔레스코프',
     code: 'FEFCO 0310', epmModel: 'fefco_0310', category: 'telescope',
     dimensions: 'L × W × H', description: 'Double-wall telescope for extra protection.',
     descriptionKo: '이중벽 텔레스코프 보호 강화', iconSvg: iconTelescope(),
@@ -353,7 +355,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
 
   // ─── ECMA B: TRAY & LID ──────────────────────────────
   {
-    id: 'ecma-b10-tray', name: 'Tray with Lid', nameKo: '트레이 + 뚜껑',
+    id: 'ecma-b10-tray', name: 'Tray with Lid', needsLid: true, needsH: true, nameKo: '트레이 + 뚜껑',
     code: 'ECMA B10.20.05.01', epmModel: 'B10_02_00_00_Lid', category: 'tray-lid',
     dimensions: 'L × W × D', description: 'Separate tray and lid. Premium presentation box.',
     descriptionKo: '별도 트레이+뚜껑. 프리미엄 프레젠테이션 박스', iconSvg: iconTrayLid(),
@@ -361,7 +363,7 @@ export const DIELINE_TEMPLATES: DielineTemplate[] = [
     svgPath: '/dielines/previews/ecma-b10-tray.svg',
   },
   {
-    id: 'ecma-b20-hinged', name: 'Hinged Lid Tray', nameKo: '힌지 뚜껑 트레이',
+    id: 'ecma-b20-hinged', name: 'Hinged Lid Tray', needsLid: true, needsH: true, nameKo: '힌지 뚜껑 트레이',
     code: 'ECMA B20.20.01.05', epmModel: 'B20_01_00_00_Lid', category: 'tray-lid',
     dimensions: 'L × W × D', description: 'Tray with attached hinged lid. One-piece construction.',
     descriptionKo: '경첩형 뚜껑 트레이. 원피스 구조', iconSvg: iconTrayLid(),
