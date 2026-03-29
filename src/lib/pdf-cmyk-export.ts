@@ -217,6 +217,16 @@ function replacePdfColorsInString(pdf: string, colorMap: Map<string, CMYKColor>)
   return pdf;
 }
 
+
+/**
+ * Convert RGB image XObjects in PDF raw string to CMYK
+ * Finds image streams with /DeviceRGB, converts pixel data RGB->CMYK via FOGRA39 LUT
+ */
+
+
+
+
+
 export async function exportCmykPdf(
   canvas: any,
   options: ExportOptions
@@ -324,6 +334,18 @@ export async function exportCmykPdf(
         ctx.fillStyle = "#FFFFFF";
         ctx.fillRect(0, 0, natW, natH);
         ctx.drawImage(el as HTMLImageElement, 0, 0);
+        // CMYK simulation: convert each pixel RGB->CMYK->RGB via FOGRA39
+        if (cmykEngine?.isReverseLUTReady()) {
+          const imgData = ctx.getImageData(0, 0, natW, natH);
+          const px = imgData.data;
+          for (let pi = 0; pi < px.length; pi += 4) {
+            const [c, m, y, k] = cmykEngine.srgbToCmyk(px[pi], px[pi+1], px[pi+2]);
+            const [nr, ng, nb] = cmykEngine.cmykToSrgb(c, m, y, k);
+            px[pi] = nr; px[pi+1] = ng; px[pi+2] = nb;
+          }
+          ctx.putImageData(imgData, 0, 0);
+          console.log("[PDF] Image CMYK-simulated: " + natW + "x" + natH);
+        }
         origSrcs.set(imgObj, el.src || "");
         const dataUrl = tempCanvas.toDataURL("image/png");
         await new Promise<void>((resolve) => {
@@ -557,6 +579,7 @@ export async function exportCmykPdf(
     subject: "Package Design - CMYK",
     creator: "Packive",
   });
+  
 
   const pdfArrayBuffer = doc.output("arraybuffer");
   console.log("[PDF] Step 6: PDF ArrayBuffer generated, bytes:", pdfArrayBuffer.byteLength);
@@ -572,13 +595,24 @@ export async function exportCmykPdf(
 
   rawPdf = replacePdfColorsInString(rawPdf, colorMap);
 
-  const finalPdf = rawPdf;
-  console.log("[PDF] Step 8: CMYK conversion complete, length:", finalPdf.length);
+  // Step 7b: Vector colors converted to CMYK, images remain DeviceRGB (CMYK-simulated pixels)
+  // Step 7b-2: Inject CMYK OutputIntent into PDF Catalog to suppress Illustrator dialog
+  // Find /Type /Catalog and add /OutputIntents array
+  const catIdx = rawPdf.indexOf("/Type /Catalog");
+  if (catIdx >= 0) {
+    const catEnd = rawPdf.indexOf(">>", catIdx);
+    if (catEnd > catIdx && !rawPdf.substring(catIdx, catEnd).includes("/OutputIntents")) {
+      const oiEntry = " /OutputIntents [<< /Type /OutputIntent /S /GTS_PDFX /OutputConditionIdentifier (FOGRA39) /RegistryName (http://www.color.org) /Info (FOGRA39) >>]";
+      rawPdf = rawPdf.substring(0, catEnd) + oiEntry + rawPdf.substring(catEnd);
+      console.log("[PDF] Step 7b-2: CMYK OutputIntent injected into Catalog");
+    }
+  }
+console.log("[PDF] Step 8: CMYK conversion complete, length:", rawPdf.length);
 
-  const outLen = finalPdf.length;
+  const outLen = rawPdf.length;
   const outBuf = new Uint8Array(outLen);
   for (let bi = 0; bi < outLen; bi++) {
-    outBuf[bi] = finalPdf.charCodeAt(bi) & 0xff;
+    outBuf[bi] = rawPdf.charCodeAt(bi) & 0xff;
   }
   const blob = new Blob([outBuf], { type: "application/pdf" });
   const url = URL.createObjectURL(blob);

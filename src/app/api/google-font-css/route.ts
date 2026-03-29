@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     const resp = await fetch(url, {
       headers: {
         // This UA forces Google to return TTF format
-        "User-Agent": "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1)",
+        "User-Agent": "Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_6_8; en-us) AppleWebKit/531.22.7 (KHTML, like Gecko) Version/5.0 Safari/531.22.7",
       },
     });
 

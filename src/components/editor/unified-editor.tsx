@@ -541,11 +541,35 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     const objs = c.getObjects().filter((o: any) =>
       o.selectable !== false && !o._isDieLine && !o._isFoldLine && !o._isGuideLayer && !o._isPanelLabel
     );
+    let imgCount = 1, rectCount = 1, circCount = 1, triCount = 1, ellCount = 1, polyCount = 1, lineCount = 1, pathCount = 1, grpCount = 1;
     const list = objs.map((o: any, i: number) => ({
       id: o.__id || ("obj_" + i),
       type: o.type || "object",
-      name: o.text ? (o.text.substring(0, 20) + (o.text.length > 20 ? "..." : "")) : (o.type === "image" ? "Image" : o.type || "Shape"),
+      name: (() => {
+        if (o.type === "i-text" || o.type === "text" || o.type === "textbox") {
+          const preview = (o.text || "").substring(0, 15);
+          return preview ? preview + (o.text.length > 15 ? "..." : "") : "Empty Text";
+        }
+        if (o.type === "image") {
+          const elSrc = o._element?.src || o._originalElement?.src || "";
+          if (elSrc.startsWith("data:")) return "Image " + (imgCount++);
+          const fname = elSrc.split("/").pop()?.split("?")[0] || "";
+          if (fname && fname.length > 3 && !fname.startsWith("data")) return fname.length > 18 ? fname.substring(0, 15) + "..." : fname;
+          return "Image " + (imgCount++);
+        }
+        if (o.type === "rect") return "Rectangle " + (rectCount++);
+        if (o.type === "circle") return "Circle " + (circCount++);
+        if (o.type === "triangle") return "Triangle " + (triCount++);
+        if (o.type === "ellipse") return "Ellipse " + (ellCount++);
+        if (o.type === "line") return "Line " + (lineCount++);
+        if (o.type === "polygon") return "Polygon " + (polyCount++);
+        if (o.type === "polyline") return "Polyline " + (polyCount++);
+        if (o.type === "path") return o.name || ("Path " + (pathCount++));
+        if (o.type === "group") return "Group " + (grpCount++) + " (" + (o._objects?.length || 0) + ")";
+        return o.name || o.type || "Object";
+      })(),
       locked: !!o.lockMovementX,
+      thumb: o.type === "image" ? (o._element?.src || o.toDataURL?.({multiplier: 0.1}) || "") : "",
       visible: o.visible !== false,
     })).reverse();
     setLayersList(list);
@@ -2999,7 +3023,16 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                 <button onClick={async () => {
                   const cv = fcRef.current; if (!cv) return;
                   if (showBleedGuides) { removeBleedGuides(cv); setShowBleedGuides(false); }
-                    else { alert("Bleed guide will be available after Panel Map (Phase 4).\n\nPhase 4 features:\n- Bleed per panel (3mm)\n- Glue tab offset (5mm)\n- Panel-specific bleed paths"); }
+                    else {
+                      const result = await addBleedGuides(cv, {
+                        scale: scaleRef.current,
+                        canvasWidth: cv.getWidth(),
+                        canvasHeight: cv.getHeight(),
+                        bleedMm: 3,
+                      });
+                      if (result) { setShowBleedGuides(true); }
+                      else { alert("No dieline found. Please generate a dieline first."); }
+                    }
                 }} className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${showBleedGuides ? "bg-red-100 text-red-700" : "text-gray-400 hover:text-gray-600"}`}>
                   {showBleedGuides ? "Bleed ON" : "Bleed OFF"}
                 </button>
@@ -4442,8 +4475,23 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                     }}>
                     <button onClick={(e) => { e.stopPropagation(); const c=fcRef.current; if(!c)return; const obj=c.getObjects().filter((o:any)=>o.selectable!==false&&!o._isGuideLayer).reverse()[i]; if(obj){obj.visible=!obj.visible; c.requestRenderAll(); refreshLayers();} }}
                       className="text-gray-400 hover:text-gray-700">{layer.visible ? "👁" : "👁‍🗨"}</button>
-                    <span className="flex-1 truncate text-gray-700">{layer.name}</span>
-                    <span className="text-[10px] text-gray-400">{layer.type}</span>
+                    <div className="flex-1 flex items-center gap-1.5 min-w-0">
+                      {layer.thumb && <img src={layer.thumb} className="w-6 h-6 rounded object-cover border border-gray-200 flex-shrink-0" />}
+                      <span className="truncate text-gray-700">{layer.name}</span>
+                    </div>
+                    <span className="text-[10px] px-1 py-0.5 rounded bg-gray-100 text-gray-500 shrink-0">{
+                      layer.type === "image" ? "IMG" :
+                      layer.type === "i-text" || layer.type === "text" || layer.type === "textbox" ? "TXT" :
+                      layer.type === "path" ? "PATH" :
+                      layer.type === "polygon" ? "POLY" :
+                      layer.type === "rect" ? "RECT" :
+                      layer.type === "circle" ? "CIR" :
+                      layer.type === "triangle" ? "TRI" :
+                      layer.type === "ellipse" ? "ELL" :
+                      layer.type === "group" ? "GRP" :
+                      layer.type === "line" ? "LINE" :
+                      layer.type?.toUpperCase()?.substring(0, 4) || "OBJ"
+                    }</span>
                     <div className='flex gap-0.5 ml-1'>
                       <button onClick={(e) => { e.stopPropagation(); const c=fcRef.current; if(!c)return; const objs=c.getObjects().filter((o:any)=>o.selectable!==false&&!o._isGuideLayer); const idx=objs.length-1-i; if(idx<objs.length-1){const obj=objs[idx]; c.bringObjectForward(obj); c.requestRenderAll(); refreshLayers();} }} className='text-[10px] text-gray-400 hover:text-blue-600 px-0.5' title='Move up'>▲</button>
                       <button onClick={(e) => { e.stopPropagation(); const c=fcRef.current; if(!c)return; const objs=c.getObjects().filter((o:any)=>o.selectable!==false&&!o._isGuideLayer); const idx=objs.length-1-i; if(idx>0){const obj=objs[idx]; c.sendObjectBackwards(obj); c.requestRenderAll(); refreshLayers();} }} className='text-[10px] text-gray-400 hover:text-blue-600 px-0.5' title='Move down'>▼</button>
@@ -4567,7 +4615,7 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
          ) : (
            <div className="space-y-2.5">
              {preflightResult.issues.map((issue: any, idx: number) => (
-               <div key={idx} className="rounded-xl px-4 py-3 bg-white border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+               <div key={idx} onClick={() => { if (issue.objectRef) { const cv = fcRef.current; if (cv) { cv.setActiveObject(issue.objectRef); cv.requestRenderAll(); } } }} className="rounded-xl px-4 py-3 bg-white border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:border-blue-300 hover:shadow-md transition-all cursor-pointer">
                  <div className="flex items-start gap-3">
                    <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${
                      issue.severity === 'error' ? 'bg-red-400' :
@@ -4578,6 +4626,7 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                      <p className="text-[11px] font-medium text-gray-400 tracking-wide uppercase">{issue.code.replace(/_/g, ' ')}</p>
                      <p className="text-[13px] text-gray-700 mt-0.5 leading-snug">{issue.message}</p>
                      {issue.details && <p className="text-xs text-gray-400 mt-1">{issue.details}</p>}
+                      {issue.objectRef && <p className="text-[10px] text-blue-400 mt-1.5 font-medium">Click to select object on canvas</p>}
                    </div>
                  </div>
                </div>

@@ -12,6 +12,7 @@ export interface PreflightIssue {
   message: string;
   objectName?: string;
   details?: string;
+  objectRef?: any;  // Reference to canvas object for click-to-select
 }
 
 export interface PreflightResult {
@@ -59,8 +60,33 @@ export function runPreflight(
     });
   }
 
+  let imgCounter = 0;
   for (const obj of objects) {
-    const name = obj.name || obj.type || "Unknown";
+    // Smart naming for better identification
+    let name = obj.name || "";
+    if (!name || name === "image" || name === "text") {
+      if (obj.type === "image") {
+        imgCounter++;
+        name = `Image ${imgCounter}`;
+      } else if (obj.type === "i-text" || obj.type === "text" || obj.type === "textbox") {
+        const preview = (obj.text || "").substring(0, 25);
+        name = preview ? `Text: "${preview}"` : "Text (empty)";
+      } else if (obj.type === "rect") {
+        name = "Rectangle";
+      } else if (obj.type === "circle" || obj.type === "ellipse") {
+        name = "Circle";
+      } else if (obj.type === "triangle") {
+        name = "Triangle";
+      } else if (obj.type === "polygon") {
+        name = "Shape";
+      } else if (obj.type === "path" || obj.type === "group") {
+        name = obj.type === "group" ? "Group" : "Path";
+      } else {
+        name = obj.type || "Object";
+      }
+    }
+    // Store ref for click-to-select
+    const objRef = obj;
 
     // 1. 이미지 해상도 체크
     if (obj.type === "image" && obj._element) {
@@ -81,6 +107,7 @@ export function runPreflight(
             code: "LOW_DPI",
             message: `Image "${name}" resolution is ${Math.round(dpi)} DPI (minimum: ${minDpi} DPI)`,
             objectName: name,
+            objectRef: objRef,
             details: `Original: ${naturalW}x${naturalH}px, Display: ${displayW.toFixed(0)}x${displayH.toFixed(0)}px`,
           });
         }
@@ -100,6 +127,7 @@ export function runPreflight(
           code: "SMALL_TEXT",
           message: `Text "${(obj.text || "").substring(0, 20)}..." is ${fontSizePt.toFixed(1)}pt (minimum: ${minFontSize}pt)`,
           objectName: name,
+          objectRef: objRef,
           details: `Actual size: ${fontSizeMm.toFixed(2)}mm / ${fontSizePt.toFixed(1)}pt`,
         });
       }
@@ -120,6 +148,7 @@ export function runPreflight(
           code: "OUTSIDE_BLEED",
           message: `"${name}" extends beyond the bleed area`,
           objectName: name,
+          objectRef: objRef,
         });
       }
     }
@@ -138,6 +167,7 @@ export function runPreflight(
           code: "TEXT_NEAR_EDGE",
           message: `Text "${(obj.text || "").substring(0, 20)}..." is within the safe zone (5mm from trim)`,
           objectName: name,
+          objectRef: objRef,
         });
       }
     }
@@ -149,6 +179,7 @@ export function runPreflight(
         code: "RGB_IMAGE",
         message: `Image "${name}" is RGB — will be auto-converted to CMYK on export`,
         objectName: name,
+        objectRef: objRef,
       });
     }
   }
