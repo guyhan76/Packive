@@ -119,6 +119,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [googleFonts, setGoogleFonts] = useState<string[]>(["Inter", "Noto Sans KR", "Noto Sans JP", "Roboto", "Open Sans", "Lato", "Montserrat", "Poppins"]);
   const [koFonts, setKoFonts] = useState<string[]>([]);
   const [jaFonts, setJaFonts] = useState<string[]>([]);
+  const [calliFonts, setCalliFonts] = useState<string[]>([]);
   const [fontsLoaded, setFontsLoaded] = useState<Set<string>>(new Set());
   const [fontSearch, setFontSearch] = useState("");
   const [fontDropOpen, setFontDropOpen] = useState(false);
@@ -145,6 +146,16 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     fetch("https://www.googleapis.com/webfonts/v1/webfonts?key="+key+"&subset=japanese&sort=popularity")
       .then(r => r.json()).then(d => { if(d.items) setJaFonts(d.items.map((f:any)=>f.family)); }).catch(()=>{});
 
+    // Fetch handwriting/display fonts for Calli tab
+    fetch("https://www.googleapis.com/webfonts/v1/webfonts?key="+key+"&category=handwriting&sort=popularity")
+      .then(r=>r.json()).then(d=>{
+        const hw = (d.items||[]).map((f:any)=>f.family).slice(0,80);
+        fetch("https://www.googleapis.com/webfonts/v1/webfonts?key="+key+"&category=display&sort=popularity")
+          .then(r=>r.json()).then(d2=>{
+            const disp = (d2.items||[]).map((f:any)=>f.family).slice(0,40);
+            setCalliFonts([...new Set([...hw,...disp])]);
+          }).catch(()=>{});
+      }).catch(()=>{});
   }, []);
   const loadGoogleFont = useCallback(async (family: string) => {
     if (fontsLoaded.has(family)) return;
@@ -1957,7 +1968,36 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     const obj = c.getActiveObject(); if (!obj) return;
     if (key === "opacity") obj.set({ opacity: value / 100 });
     else if (key === "fontSize") obj.set({ fontSize: Number(value) });
-    else if (key === "fontFamily") obj.set({ fontFamily: value });
+    else if (key === "fontFamily") {
+      obj.set({ fontFamily: value });
+      if (obj.type === "textbox" || obj.type === "i-text" || obj.type === "text") {
+        const tObj = obj as any;
+        const recalc = () => {
+          tObj._clearCache?.();
+          tObj.dirty = true;
+          tObj.initDimensions?.();
+          // Force width recalculation: temporarily switch to auto-width
+          const oldW = tObj.width;
+          const text = tObj.text || "";
+          // Measure actual text width with new font
+          const ctx = c.getContext();
+          if (ctx) {
+            ctx.font = (tObj.fontStyle||"normal") + " " + (tObj.fontWeight||"normal") + " " + (tObj.fontSize||40) + "px " + value;
+            const measured = ctx.measureText(text);
+            const newW = measured.width * 1.3 + 30;
+            if (newW > oldW) {
+              tObj.set({ width: newW });
+            }
+          }
+          tObj.initDimensions?.();
+          tObj.setCoords?.();
+          c.requestRenderAll();
+        };
+        recalc();
+        setTimeout(recalc, 400);
+        setTimeout(recalc, 1000);
+      }
+    }
     else if (key === "fontWeight") obj.set({ fontWeight: value === "bold" ? "bold" : "normal" });
     else if (key === "fontStyle") obj.set({ fontStyle: value === "italic" ? "italic" : "normal" });
     else if (key === "textAlign") obj.set({ textAlign: value });
@@ -3422,7 +3462,7 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                                    value={fontSearch} onChange={e => setFontSearch(e.target.value)}
                                    className="border-b px-2 py-1.5 text-[10px] shrink-0 focus:outline-none" />
                                  <div className="flex border-b shrink-0">
-                                   {(["all","en","ko","ja"] as const).map(cat => (
+                                   {(["all","en","ko","ja","calli"] as const).map(cat => (
                                      <button key={cat} onClick={() => setFontCategory(cat)}
                                        className={`flex-1 py-1 text-[9px] font-medium ${fontCategory===cat?"text-blue-600 border-b-2 border-blue-600":"text-gray-400 hover:text-gray-600"}`}>
                                        {cat==="all"?"All":cat==="en"?"English":cat==="ko"?"한국어":cat==="ja"?"日本語":cat}</button>
@@ -3433,6 +3473,7 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                                      let list = googleFonts;
                                      if (fontCategory === "ko") list = koFonts.length > 0 ? koFonts : ["Noto Sans KR","Black Han Sans","Gothic A1","Nanum Gothic","Nanum Myeongjo","Do Hyeon","Jua","Sunflower","Gaegu","Gugi","Song Myung","Gamja Flower","Nanum Brush Script","Nanum Pen Script","Poor Story","Stylish","Cute Font","Hi Melody","East Sea Dokdo","Dokdo","Kirang Haerang","Yeon Sung","Black And White Picture"];
                                      if (fontCategory === "ja") list = jaFonts.length > 0 ? jaFonts : ["Noto Sans JP","Noto Serif JP","M PLUS Rounded 1c","M PLUS 1p","Kosugi Maru","Kosugi","Sawarabi Mincho","Sawarabi Gothic","Shippori Mincho","Zen Maru Gothic","Zen Kaku Gothic New","Hina Mincho","Dela Gothic One"];
+                                      if (fontCategory === "calli") list = calliFonts.length > 0 ? calliFonts : ["Great Vibes","Dancing Script","Pacifico","Caveat","Sacramento","Satisfy","Kaushan Script","Cookie","Courgette","Lobster","Yellowtail","Tangerine","Allura","Alex Brush","Rochester","Pinyon Script","Italianno","Nanum Pen Script","Gaegu","Hi Melody","Stylish","East Sea Dokdo","Cute Font","Gamja Flower","Poor Story","Yeon Sung","Single Day","Song Myung","Do Hyeon"];
                                      if (fontCategory === "en") list = googleFonts.filter(f => !koFonts.includes(f) && !jaFonts.includes(f));
                                      const filtered = list.filter(f => !fontSearch || f.toLowerCase().includes(fontSearch.toLowerCase())).slice(0, 100);
                                      return filtered.map(f => (
@@ -3649,10 +3690,10 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                                        placeholder="Search fonts..." className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-400" />
                                    </div>
                                    <div className="flex border-b shrink-0">
-                                     {(["all","en","ko","ja"] as const).map(cat => (
+                                     {(["all","en","ko","ja","calli"] as const).map(cat => (
                                        <button key={cat} onClick={() => setFontCategory(cat)}
                                          className={"px-2 py-1 text-[10px] border-b-2 " + (fontCategory===cat?"border-blue-500 text-blue-600":"border-transparent text-gray-500")}>
-                                         {cat==="all"?"All":cat==="en"?"English":cat==="ko"?"Korean":"Japanese"}
+                                         {cat==="all"?"All":cat==="en"?"English":cat==="ko"?"Korean":cat==="ja"?"Japanese":"Calli"}
                                        </button>
                                      ))}
                                    </div>
@@ -3663,9 +3704,10 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                                        if (fontCategory === "en") pool = enPriority.filter(f => googleFonts.includes(f));
                                        else if (fontCategory === "ko") pool = koFonts.length > 0 ? koFonts : ["Noto Sans KR","Noto Serif KR","Gothic A1","Nanum Gothic","Nanum Myeongjo"];
                                        else if (fontCategory === "ja") pool = jaFonts.length > 0 ? jaFonts : ["Noto Sans JP","Noto Serif JP","M PLUS Rounded 1c","M PLUS 1p","Kosugi Maru"];
+                                        else if (fontCategory === "calli") pool = calliFonts.length > 0 ? calliFonts : ["Great Vibes","Dancing Script","Pacifico","Caveat","Sacramento","Satisfy","Kaushan Script","Cookie","Courgette","Lobster","Yellowtail","Tangerine","Allura","Alex Brush","Rochester","Pinyon Script","Italianno","Nanum Pen Script","Gaegu","Hi Melody","Stylish","East Sea Dokdo","Cute Font","Gamja Flower","Poor Story","Yeon Sung","Single Day","Song Myung","Do Hyeon"];
                                        const filtered = pool.filter(f => !fontSearch || f.toLowerCase().includes(fontSearch.toLowerCase()));
                                        return filtered.slice(0, 200).map(f => (
-                                         <button key={f} onClick={() => { loadGoogleFont(f); updateProp("fontFamily", f); setSelectedFont(f); setFontDropOpen(false); setFontSearch(""); }}
+                                         <button key={f} onClick={() => { loadGoogleFont(f).then(() => { updateProp("fontFamily", f); setTimeout(() => updateProp("fontFamily", f), 500); });  setSelectedFont(f); setFontDropOpen(false); setFontSearch(""); }}
                                            className={`w-full text-left px-3 py-2 text-xs hover:bg-blue-50 transition-colors ${selProps.fontFamily === f ? "bg-blue-100 text-blue-700 font-medium" : "text-gray-700"}`}
                                            style={{fontFamily: f}}>
                                            {f}
