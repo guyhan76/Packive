@@ -15,6 +15,7 @@ import { addBleedGuides, removeBleedGuides, toggleBleedGuides } from "@/lib/blee
 import { runPreflight, type PreflightResult } from "@/lib/preflight";
 import { RECRAFT_STYLES, PACKAGING_PRESETS } from "@/lib/recraft";
 import { DESIGN_CATEGORIES, DESIGN_TEMPLATES, getDesignTemplatesByCategory, placeTemplateOnCanvas, generateTemplatePreviewSVG, type DesignTemplate } from "@/lib/design-templates";
+import { PACKAGING_SYMBOLS, SYMBOL_CATEGORIES } from "@/lib/packaging-symbols";
 
 // ─── Types ───
 interface UnifiedEditorProps {
@@ -228,6 +229,9 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [showTextPanel, setShowTextPanel] = useState(false);
   const [showBarcodePanel, setShowBarcodePanel] = useState(false);
   const [showTablePanel, setShowTablePanel] = useState(false);
+  const [showSymbolPanel, setShowSymbolPanel] = useState(false);
+  const [symbolSearch, setSymbolSearch] = useState("");
+  const [symbolCategory, setSymbolCategory] = useState<string>("all");
   const [showMarkPanel, setShowMarkPanel] = useState(false);
   const [showTemplatePanel, setShowTemplatePanel] = useState(false);
   const [templateCategory, setTemplateCategory] = useState<string>("all");
@@ -2168,6 +2172,7 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
             { icon: "T", label: "Text", action: addText },
             { icon: "🖼", label: "Image", action: addImage },
             { icon: "◆", label: "Shapes", action: () => setShowShapePanel(p => !p) },
+            { icon: "⚠", label: "Symbols", action: () => setShowSymbolPanel(p => !p) },
           ].map(btn => (
             <button key={btn.label} onClick={btn.action} title={btn.label}
               className="w-11 h-11 flex flex-col items-center justify-center rounded-lg text-xs transition-all hover:bg-white hover:shadow-sm text-gray-500 hover:text-gray-800">
@@ -2190,26 +2195,6 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
             </button>
           ))}
           <div className="w-8 h-px bg-gray-200 my-1" />
-          <span className="text-[7px] font-bold text-gray-400 tracking-widest mb-0.5">TOOLS</span>
-          <button onClick={() => { const c = fcRef.current; if (!c) return; const nm = !eyedropperMode; setEyedropperMode(nm); if (nm) { c.isDrawingMode = false; setDrawMode(false); c.defaultCursor = "crosshair"; c.hoverCursor = "crosshair"; } else { c.defaultCursor = "default"; c.hoverCursor = "move"; } }}
-            className={`w-11 h-11 flex flex-col items-center justify-center rounded-lg text-xs transition-all ${eyedropperMode ? "bg-blue-50 text-blue-600 shadow-sm" : "text-gray-500 hover:bg-white hover:shadow-sm hover:text-gray-800"}`}>
-            <span className="text-sm leading-none">💧</span>
-            <span className="text-[8px] mt-0.5 font-medium">Picker</span>
-          </button>
-          {eyedropperResult && (
-            <div className="w-12 mt-0.5 p-1 bg-white rounded-lg border text-[7px] text-center shadow-sm">
-              <div className="w-5 h-5 mx-auto rounded border mb-0.5" style={{ backgroundColor: eyedropperResult.hex }} />
-              <div className="text-gray-500 font-mono">{eyedropperResult.hex}</div>
-              <div className="text-gray-400">C{eyedropperResult.cmyk[0]} M{eyedropperResult.cmyk[1]}</div>
-              <div className="text-gray-400">Y{eyedropperResult.cmyk[2]} K{eyedropperResult.cmyk[3]}</div>
-              {eyedropperResult.spot && <div className="text-orange-500 font-bold">{eyedropperResult.spot}</div>}
-            </div>
-          )}
-          <button onClick={() => { const c=fcRef.current; if(!c)return; const a=c.getActiveObjects(); const toRm: any[]=[]; a.forEach((o:any)=>{if(o._isGuideLayer||o._isDieLine||o._isFoldLine||o._isPanelLabel)return;toRm.push(o);}); toRm.forEach(o=>c.remove(o)); c.discardActiveObject(); c.requestRenderAll(); pushHistory(); refreshLayers(); }}
-            title="Delete" className="w-11 h-11 flex flex-col items-center justify-center rounded-lg text-xs transition-all hover:bg-red-50 text-gray-500 hover:text-red-500">
-            <span className="text-sm leading-none">🗑</span>
-            <span className="text-[8px] mt-0.5 font-medium">Delete</span>
-          </button>
           <button onClick={() => setShowShortcuts(true)} title="Shortcuts (F1)"
             className="w-11 h-11 flex flex-col items-center justify-center rounded-lg text-xs transition-all hover:bg-white hover:shadow-sm text-gray-500 hover:text-gray-800">
             <span className="text-sm leading-none">⌨</span>
@@ -2373,6 +2358,7 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
             <div className="absolute left-1 top-1 z-30 bg-white rounded-xl shadow-xl border p-3 w-56">
               <div className="text-xs font-semibold text-gray-700 mb-2">Barcode</div>
               <select value={barcodeType} onChange={e => setBarcodeType(e.target.value as any)} className="w-full border rounded px-2 py-1 text-sm mb-2">
+
                 <option value="qrcode">QR Code</option><option value="ean13">EAN-13</option><option value="upca">UPC-A</option>
                 <option value="code128">Code 128</option><option value="code39">Code 39</option><option value="itf14">ITF-14</option>
               </select>
@@ -2382,6 +2368,51 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
             </div>
           )}
 
+          {/* Packaging Symbols Popup */}
+          {showSymbolPanel && (
+            <div className="absolute left-14 top-16 z-30 bg-white rounded-xl shadow-xl border p-3 w-72 max-h-[80vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-2">
+                <div className="text-xs font-bold text-gray-700">Packaging Symbols ({PACKAGING_SYMBOLS.length})</div>
+                <button onClick={() => setShowSymbolPanel(false)} className="text-gray-400 hover:text-gray-600 text-sm">x</button>
+              </div>
+              <input value={symbolSearch} onChange={e => setSymbolSearch(e.target.value)}
+                placeholder="Search symbols..."
+                className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-[10px] mb-2 focus:border-blue-400 outline-none" />
+              <div className="flex gap-1 flex-wrap mb-2">
+                {SYMBOL_CATEGORIES.map(cat => (
+                  <button key={cat.id} onClick={() => setSymbolCategory(cat.id)}
+                    className={"px-2 py-0.5 rounded-full text-[9px] font-medium transition-all " + (symbolCategory === cat.id ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200")}>
+                    {cat.nameKo}
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {PACKAGING_SYMBOLS
+                  .filter(s => symbolCategory === "all" || s.category === symbolCategory)
+                  .filter(s => !symbolSearch || s.name.toLowerCase().includes(symbolSearch.toLowerCase()) || s.nameKo.includes(symbolSearch))
+                  .map(sym => (
+                  <button key={sym.id} onClick={() => {
+                    const c = fcRef.current; if (!c) return;
+                    fabric.loadSVGFromString(sym.svg.replace(/currentColor/g, "#000000"), (objects: any[], options: any) => {
+                      const group = fabric.util.groupSVGElements(objects, options);
+                      group.set({ left: 100, top: 100, scaleX: 1, scaleY: 1 });
+                      group.scaleToWidth(60);
+                      c.add(group);
+                      c.setActiveObject(group);
+                      c.requestRenderAll();
+                      refreshLayers();
+                    });
+                    setShowSymbolPanel(false);
+                  }}
+                    className="flex flex-col items-center gap-1 p-2 rounded-lg border border-gray-100 hover:border-blue-300 hover:bg-blue-50 transition-all group"
+                    title={sym.name + " / " + sym.nameKo}>
+                    <div className="w-10 h-10 flex items-center justify-center" dangerouslySetInnerHTML={{__html: sym.svg.replace(/currentColor/g, "#333")}} />
+                    <span className="text-[8px] text-gray-400 group-hover:text-blue-600 truncate w-full text-center">{sym.nameKo}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {/* Table Popup */}
           {showTablePanel && (
             <div className="absolute left-1 top-1 z-30 bg-white rounded-xl shadow-2xl border p-4 w-60">
@@ -2482,12 +2513,12 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                       <option value="all">All Types</option>
                       <optgroup label="FEFCO">
                         {BOX_CATEGORIES.filter(c => c.standard === 'FEFCO').map(cat => (
-                          <option key={cat.id} value={cat.id}>{cat.label} · {cat.description}</option>
+                          <option key={cat.id} value={cat.id}>{cat.nameKo} · {cat.description}</option>
                         ))}
                       </optgroup>
                       <optgroup label="ECMA">
                         {BOX_CATEGORIES.filter(c => c.standard === 'ECMA').map(cat => (
-                          <option key={cat.id} value={cat.id}>{cat.label} · {cat.description}</option>
+                          <option key={cat.id} value={cat.id}>{cat.nameKo} · {cat.description}</option>
                         ))}
                       </optgroup>
                     </select>
