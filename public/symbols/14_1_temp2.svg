@@ -1,0 +1,27 @@
+<svg id="_레이어_2" data-name="레이어 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 213.54 213.54">
+  <defs>
+    <style>
+      .s14_1_temp2_c1 {
+        stroke-linecap: round;
+        stroke-width: 8px;
+      }
+
+      .s14_1_temp2_c1, .s14_1_temp2_c2 {
+        fill: none;
+        stroke: #000;
+        stroke-miterlimit: 10;
+      }
+
+      .s14_1_temp2_c2 {
+        stroke-width: 11px;
+      }
+    </style>
+  </defs>
+  <g id="Layer_1" data-name="Layer 1">
+    <path d="M106.77,46.87c2.89,0,5.23,2.35,5.23,5.23v46.85l-10.47,7.92v-54.77c0-2.89,2.35-5.23,5.23-5.23M106.77,42.87c-5.1,0-9.23,4.13-9.23,9.23v62.81l18.47-13.97v-48.84c0-5.1-4.13-9.23-9.23-9.23h0Z"/>
+    <path d="M97.54,98.99l18.47-10.57v68.24c0,5.1-4.13,9.23-9.23,9.23h0c-5.1,0-9.23-4.13-9.23-9.23v-57.67Z"/>
+    <line class="s14_1_temp2_c1" x1="80.92" y1="107.26" x2="132.62" y2="80.67"/>
+    <circle cx="106.77" cy="152.19" r="18.48" transform="translate(-50.11 52.44) rotate(-22.5)"/>
+    <rect class="s14_1_temp2_c2" x="5.5" y="5.5" width="202.54" height="202.54"/>
+  </g>
+</svg>

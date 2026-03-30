@@ -1,0 +1,18 @@
+<svg id="_레이어_2" data-name="레이어 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 213.54 213.54">
+  <defs>
+    <style>
+      .s31_stack4_c1 {
+        fill: none;
+        stroke: #000;
+        stroke-miterlimit: 10;
+        stroke-width: 11px;
+      }
+    </style>
+  </defs>
+  <g id="Layer_1" data-name="Layer 1">
+    <rect x="42.85" y="155.29" width="127.85" height="19.22"/>
+    <polygon points="170.7 146.04 42.85 146.04 42.85 127.09 43.12 126.82 170.42 126.82 170.7 127.09 170.7 146.04"/>
+    <path d="M112.75,110.59v-17.28h-31.59v-11.24l27.65-43.04h15.67v43.96h7.9l-1.17,10.33h-6.73v17.28h-11.73ZM112.75,65.81c0-7.33-.06-12.43.29-17.11-3.97,7.65-14.65,24.65-20.28,34.28h19.99v-17.17Z"/>
+    <rect class="s31_stack4_c1" x="5.5" y="5.5" width="202.54" height="202.54"/>
+  </g>
+</svg>

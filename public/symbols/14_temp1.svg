@@ -1,0 +1,28 @@
+<svg id="_레이어_2" data-name="레이어 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 213.54 213.54">
+  <defs>
+    <style>
+      .s14_temp1_c1 {
+        stroke-width: 6px;
+      }
+
+      .s14_temp1_c1, .s14_temp1_c2 {
+        fill: none;
+        stroke: #000;
+        stroke-miterlimit: 10;
+      }
+
+      .s14_temp1_c2 {
+        stroke-width: 11px;
+      }
+    </style>
+  </defs>
+  <g id="Layer_1" data-name="Layer 1">
+    <path d="M106.47,47.87c2.33,0,4.23,1.9,4.23,4.23v46.35l-8.47,6.41v-52.76c0-2.33,1.9-4.23,4.23-4.23M106.47,42.87c-5.1,0-9.23,4.13-9.23,9.23v62.81l18.47-13.97v-48.84c0-5.1-4.13-9.23-9.23-9.23h0Z"/>
+    <path d="M97.23,101.63l18.47-15.11v70.13c0,5.1-4.13,9.23-9.23,9.23h0c-5.1,0-9.23-4.13-9.23-9.23v-55.03Z"/>
+    <line class="s14_temp1_c1" x1="148.12" y1="80.28" x2="121.98" y2="80.28"/>
+    <line class="s14_temp1_c1" x1="90.82" y1="106.48" x2="65.42" y2="106.48"/>
+    <line class="s14_temp1_c1" x1="90.05" y1="106.48" x2="122.88" y2="80.28"/>
+    <circle cx="106.47" cy="152.19" r="18.48" transform="translate(-50.14 52.33) rotate(-22.5)"/>
+    <rect class="s14_temp1_c2" x="5.5" y="5.5" width="202.54" height="202.54"/>
+  </g>
+</svg>

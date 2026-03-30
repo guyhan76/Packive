@@ -2418,10 +2418,10 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
               <input value={symbolSearch} onChange={e => setSymbolSearch(e.target.value)}
                 placeholder="Search symbols..."
                 className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-[10px] mb-2 focus:border-blue-400 outline-none" />
-              <div className="flex gap-1 flex-wrap mb-2">
+              <div className="flex gap-1 flex-nowrap mb-2 overflow-x-auto">
                 {SYMBOL_CATEGORIES.map(cat => (
                   <button key={cat.id} onClick={() => setSymbolCategory(cat.id)}
-                    className={"px-2 py-0.5 rounded-full text-[9px] font-medium transition-all " + (symbolCategory === cat.id ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200")}>
+                    className={"px-1.5 py-0.5 rounded-full text-[8px] font-medium whitespace-nowrap transition-all " + (symbolCategory === cat.id ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200")}>
                     {cat.name}
                   </button>
                 ))}
@@ -2446,7 +2446,8 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                     import("fabric").then(({ FabricImage }) => {
                       FabricImage.fromURL(encoded).then((img) => {
                         if (!img) { console.error("FabricImage.fromURL returned null"); return; }
-                        img.set({ left: 100, top: 100 });
+                        const cw = c.getWidth(); const ch = c.getHeight();
+                        img.set({ left: cw / 2, top: ch / 2, originX: 'center', originY: 'center' });
                         img.scaleToWidth(80);
                         c.add(img);
                         c.setActiveObject(img);
@@ -2458,7 +2459,7 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                     setShowSymbolPanel(false);
                   }}
                    className="flex flex-col items-center gap-1 p-2 rounded-lg border border-gray-100 hover:border-blue-300 hover:bg-blue-50 transition-all group"
-                    title={sym.name + " / " + sym.nameKo}>
+                    title={sym.name}>
                     <div className="w-10 h-10 flex items-center justify-center" dangerouslySetInnerHTML={{__html: sym.svg.replace(/currentColor/g, "#333")}} />
                     <span className="text-[8px] text-gray-400 group-hover:text-blue-600 truncate w-full text-center">{sym.name}</span>
                   </button>
@@ -2566,12 +2567,12 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                       <option value="all">All Types</option>
                       <optgroup label="FEFCO">
                         {BOX_CATEGORIES.filter(c => c.standard === 'FEFCO').map(cat => (
-                          <option key={cat.id} value={cat.id}>{cat.nameKo} · {cat.description}</option>
+                          <option key={cat.id} value={cat.id}>{cat.name} · {cat.description}</option>
                         ))}
                       </optgroup>
                       <optgroup label="ECMA">
                         {BOX_CATEGORIES.filter(c => c.standard === 'ECMA').map(cat => (
-                          <option key={cat.id} value={cat.id}>{cat.nameKo} · {cat.description}</option>
+                          <option key={cat.id} value={cat.id}>{cat.name} · {cat.description}</option>
                         ))}
                       </optgroup>
                     </select>
