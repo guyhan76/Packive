@@ -2039,12 +2039,48 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     <div className="h-screen flex flex-col bg-gray-50 overflow-hidden select-none">
       {/* TOP BAR */}
       <div className="h-12 bg-white border-b border-gray-200 flex items-center px-4 gap-2 shrink-0 z-20">
-        <button onClick={onBack} className="flex items-center gap-1 text-gray-600 hover:text-gray-900 text-sm font-medium"><span className="text-base">&#8592;</span> Back</button>
+        {/* LEFT: Back + Logo + File info */}
+        <button onClick={onBack} className="flex items-center gap-1 text-gray-600 hover:text-gray-900 text-sm font-medium" title="Back to home">
+          <span className="text-base">&#8592;</span> Back
+        </button>
+        <div className="w-px h-7 bg-gray-200 mx-1" />
+        <img src="/packive-logo.png" alt="Packive" className="h-14 object-contain" />
         <div className="w-px h-7 bg-gray-200 mx-1" />
         {boxType && <span className="text-sm font-semibold text-gray-800">{boxType}</span>}
-        {dielineFileName && <span className="text-[11px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded font-medium truncate max-w-[200px]" title={dielineFileName}>{dielineFileName}</span>}
-        {!dielineFileName && boxType && <span className="text-xs text-gray-400">{L} x {W} x {D} mm</span>}
+        {dielineFileName && <span className="text-xs text-blue-600 truncate max-w-[160px] font-medium" title={dielineFileName}>{dielineFileName}</span>}
+        {!dielineFileName && boxType && <span className="text-xs text-gray-500">{L}x{W}x{D}</span>}
+
         <div className="flex-1" />
+
+        {/* Dieline tools */}
+        <button onClick={() => { if (!window.confirm("Start a completely new blank canvas?\nAll current work will be removed.")) return; const c = fcRef.current; if(!c) return; c.getObjects().slice().forEach((o:any) => c.remove(o)); c.requestRenderAll(); setDielineFileName(""); setDielineUngrouped(false); setDielineSizes(null); setDielineModelInfo(""); pushHistory(); refreshLayers(); }} className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded" title="New Canvas">New</button>
+        <button onClick={() => dielineFileRef.current?.click()} className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded" title="Upload Dieline">Upload</button>
+        <div className="w-px h-6 bg-gray-200" />
+        <button onClick={() => { const c = fcRef.current; if (!c) return; const nv = !dielineVisible; setDielineVisible(nv); c.getObjects().forEach((o: any) => { if (o._isGuideLayer || o._isDieLine || o._isFoldLine) { o.visible = nv; } }); c.requestRenderAll(); }} className={`px-2 py-1 text-xs rounded ${dielineVisible ? "text-gray-800 bg-gray-100" : "text-gray-400"}`} title="Toggle Dieline">Die</button>
+        <button onClick={() => { const c = fcRef.current; if (!c) return; const nv = !dielineInfoVisible; setDielineInfoVisible(nv); let count = 0; c.getObjects().forEach((o: any) => { if (o._isDielineInfo || o._isPanelLabel || o._isPanelOverlay) { o.visible = nv; count++; } let childChanged = false; if (o._objects) { o._objects.forEach((ch: any) => { if (ch._isDielineInfo || ch._isPanelLabel || ch._isPanelOverlay) { ch.visible = nv; count++; childChanged = true; } }); } if (o.getObjects) { try { o.getObjects().forEach((ch: any) => { if (ch._isDielineInfo || ch._isPanelLabel || ch._isPanelOverlay) { ch.visible = nv; count++; childChanged = true; } }); } catch(e) {} } if (childChanged) { o.dirty = true; o.setCoords?.(); } }); console.log("[Info] toggled", count, "info objects to", nv); c.requestRenderAll(); }} className={`px-2 py-1 text-xs rounded ${dielineInfoVisible ? "text-gray-800 bg-gray-100" : "text-gray-400"}`} title="Toggle Info">Info</button>
+        <button onClick={() => { const c = fcRef.current; if (!c) return; const nl = !dielineLocked; setDielineLocked(nl); c.getObjects().forEach((o: any) => { if (o._isGuideLayer || o._isDieLine || o._isFoldLine) { o.selectable = !nl; o.evented = !nl; } }); c.requestRenderAll(); }} className={`px-2 py-1 text-xs rounded ${dielineLocked ? "text-amber-600 bg-amber-50" : "text-gray-400"}`} title="Lock/Unlock Dieline">{dielineLocked ? "🔒 Locked" : "🔓 Lock"}</button>
+        <button onClick={() => { const c = fcRef.current; if (!c) return; const objs = c.getObjects().slice(); let ungroupCount = 0; objs.forEach((o: any) => { if ((o._isGuideLayer || o._isDieLine) && o.type === 'group') { const children = o.getObjects ? o.getObjects() : (o._objects || []); const cloned = [...children]; const groupLeft = o.left || 0; const groupTop = o.top || 0; c.remove(o); cloned.forEach((ch: any) => { ch._isDieLine = true; ch._isGuideLayer = true; ch.selectable = !dielineLocked; ch.evented = !dielineLocked; if (o.group) { const pt = o.translateToOriginPoint(ch.getCenterPoint(), 'center', 'center'); ch.set({ left: pt.x, top: pt.y }); } c.add(ch); ungroupCount++; }); } }); if (ungroupCount > 0) { setDielineUngrouped(true); c.requestRenderAll(); pushHistory(); refreshLayers(); console.log("[Ungroup]", ungroupCount, "children extracted"); } else { console.log("[Ungroup] No groups found to ungroup"); } }} className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded" title="Ungroup Dieline">Ungroup</button>
+        <button onClick={() => { const c = fcRef.current; if (!c) return; const dieObjs = c.getObjects().filter((o: any) => o._isDieLine || o._isGuideLayer); if (dieObjs.length < 2) { console.log("[Regroup] Not enough objects"); return; } const F = fabricModRef.current; if (!F) return; dieObjs.forEach((o: any) => c.remove(o)); const group = new F.Group(dieObjs); group.set({ _isDieLine: true, _isGuideLayer: true, selectable: !dielineLocked, evented: !dielineLocked, name: "__dieline_upload__" }); c.add(group); setDielineUngrouped(false); c.requestRenderAll(); pushHistory(); refreshLayers(); console.log("[Regroup]", dieObjs.length, "objects regrouped"); }} className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded" title="Regroup Dieline">Regroup</button>
+        <div className="w-px h-6 bg-gray-200" />
+
+        {/* Undo/Redo */}
+        <button onClick={undo} title="Undo (Ctrl+Z)" className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500 text-sm">&#8630;</button>
+        <button onClick={redo} title="Redo (Ctrl+Y)" className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500 text-sm">&#8631;</button>
+        <div className="w-px h-6 bg-gray-200" />
+
+        {/* Zoom */}
+        <button onClick={() => applyZoom(zoom - 25)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500 text-xs">-</button>
+        <span className="text-xs text-gray-600 w-10 text-center font-medium">{zoom}%</span>
+        <button onClick={() => applyZoom(zoom + 25)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500 text-xs">+</button>
+        <button onClick={() => { const c = fcRef.current; if (!c) return; const objs = c.getObjects(); if (objs.length === 0) { applyZoom(100); return; } let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity; objs.forEach((o:any) => { const b = o.getBoundingRect(); if(b.left<minX) minX=b.left; if(b.top<minY) minY=b.top; if(b.left+b.width>maxX) maxX=b.left+b.width; if(b.top+b.height>maxY) maxY=b.top+b.height; }); const cw=c.getWidth(),ch=c.getHeight(); const fitZ = Math.min(cw/(maxX-minX+40), ch/(maxY-minY+40)) * 100; applyZoom(Math.round(Math.min(fitZ,200))); }} className="px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded" title="Fit to view">Fit</button>
+        <div className="w-px h-6 bg-gray-200" />
+
+        {/* Save/Export */}
+        <button onClick={() => fileLoadRef.current?.click()} title="Load" className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded">Load</button>
+        <button onClick={fileSave} title="Save (Ctrl+S)" className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md">Save</button>
+        <button onClick={() => setShowExport(true)} className="px-4 py-1.5 text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 rounded-md shadow-sm">Export</button>
+
+        {/* Hidden file inputs */}
         <input ref={dielineFileRef} type="file" accept=".eps,.ai,.pdf,.svg" className="hidden" onChange={async (e) => {
           const f = e.target.files?.[0]; if (!f) return;
           const c = fcRef.current; if (!c) return;
@@ -2163,78 +2199,27 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           } catch (err: any) { alert("Failed to load dieline: " + err.message); }
           e.target.value = "";
         }} />
-        <button onClick={() => { if (!window.confirm("Start a completely new blank canvas?\nAll current work including dielines will be permanently removed.")) return; const c = fcRef.current; if (!c) return; c.clear(); c.backgroundColor = "#ffffff"; c.requestRenderAll(); setDielineFileName(""); setDielineUngrouped(false); pushHistory(); refreshLayers(); setDielineSizes(null); setDielineModelInfo(""); setDielineDims(null); }} className="px-2.5 py-1.5 rounded-md text-[11px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors" title="New canvas">New</button>
-        <button onClick={() => dielineFileRef.current?.click()} className="px-2.5 py-1.5 rounded-md text-[11px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors">Upload Dieline</button>
-        <button onClick={() => { const c = fcRef.current; if (!c) return; const nv = !dielineVisible; setDielineVisible(nv); c.getObjects().forEach((o: any) => { if (o._isGuideLayer || o._isDieLine || o._isFoldLine || o._isPanelLabel) o.set({ visible: nv }); }); c.requestRenderAll(); }} className={`px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors ${dielineVisible ? "text-gray-900 bg-gray-100" : "text-gray-500 hover:text-gray-900 hover:bg-gray-100"}`}>{dielineVisible ? "Lines On" : "Lines Off"}</button>
-              <button onClick={() => { const c = fcRef.current; if (!c) return; const nv = !dielineInfoVisible; setDielineInfoVisible(nv); let count = 0; c.getObjects().forEach((o: any) => { if (o._isDieLine || o._isDieline) { const children = o._objects || []; children.forEach((child: any) => { if (child._isDielineInfo) { child.set({ opacity: nv ? 1 : 0 }); count++; } }); o.dirty = true; o.set('dirty', true); if (o._cacheCanvas) { o._cacheCanvas = null; } } else if (o._isDielineInfo) { o.set({ opacity: nv ? 1 : 0 }); count++; } }); console.log("[Info Toggle] " + (nv ? "Show" : "Hide") + " " + count + " info objects"); c.requestRenderAll(); }} className="px-2.5 py-1.5 rounded-md text-[11px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors">{dielineInfoVisible ? "Info On" : "Info Off"}</button>
-        <button onClick={() => { const c = fcRef.current; if (!c) return; const nl = !dielineLocked; setDielineLocked(nl); c.getObjects().forEach((o: any) => { if (o._isGuideLayer || o._isDieLine || o._isFoldLine || o._isPanelLabel) o.set({ selectable: !nl, evented: !nl }); }); c.requestRenderAll(); }} className={`px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors ${dielineLocked ? "text-amber-700 bg-amber-50" : "text-gray-500 hover:text-gray-900 hover:bg-gray-100"}`}>{dielineLocked ? "Locked" : "Unlocked"}</button>
-        <button onClick={async () => { const c = fcRef.current; if (!c) return; const F = fabricModRef.current; if (!F) return; const dieGroup = c.getObjects().find((o: any) => o.name === "__dieline_upload__" || o._isDieline || o._isDieLine) as any; if (!dieGroup) { alert("No dieline group found"); return; } if (!window.confirm("Ungroup dieline into individual objects?\nYou can then select and delete unnecessary elements.")) return; try { const gScX = dieGroup.scaleX || 1; const gScY = dieGroup.scaleY || 1; const gLeft = dieGroup.left || 0; const gTop = dieGroup.top || 0; const gW = (dieGroup.width || 0); const gH = (dieGroup.height || 0); const json = dieGroup.toObject(); const subObjects = json.objects || []; console.log("[Ungroup] subObjects:", subObjects.length, "group:", {gLeft, gTop, gScX, gScY, gW, gH}); c.remove(dieGroup); let count = 0; for (const objData of subObjects) { try { const obj = await F.util.enlivenObjects([objData]); const item = obj[0]; if (!item) continue; const itemLeft = objData.left || 0; const itemTop = objData.top || 0; const worldLeft = gLeft + (itemLeft * gScX); const worldTop = gTop + (itemTop * gScY); item.set({ left: worldLeft, top: worldTop, scaleX: (objData.scaleX || 1) * gScX, scaleY: (objData.scaleY || 1) * gScY, selectable: true, evented: true, hasControls: true, hasBorders: true, lockMovementX: false, lockMovementY: false, _isDieLine: false, _isUngroupedDieLine: true, _isGuideLayer: false, name: `__dieline_obj_${count}__` }); // Tag text & thin elements as dieline info
-const objType = (objData.type || "").toLowerCase();
-const isTxt = (objType === "text" || objType === "i-text" || objType === "textbox");
-const isThinLine = ((objType === "line" || objType === "path" || objType === "polyline") && !/(237,\s*28,\s*36|ed1c24|0,\s*166,\s*80|00a650)/i.test(objData.stroke || ""));
-const isArrow = (objType === "polygon") && ((objData.width || 0) < 15 && (objData.height || 0) < 15) && !/(237,\s*28,\s*36|ed1c24|0,\s*166,\s*80|00a650)/i.test(objData.stroke || "");
-if (isTxt || isThinLine || isArrow) {
-  item._isDielineInfo = true;
-  item.name = (item.name || "") + "_info";
-}
-item.setCoords(); c.add(item); count++; } catch(e) { console.warn("[Ungroup] skip item:", e); } } console.log("[Ungroup] added:", count, "objects");
-// -- Panel Map Data (Phase 5-1) - data only, no canvas overlay --
-let _pmBox = selectedBoxCode;
-if (_pmBox) _pmBox = _pmBox.replace(/^(FEFCO|ECMA)\s+/i, (m: string, p1: string) => p1 + String.fromCharCode(45));
-const _pmL = dimLength, _pmW = dimWidth, _pmD = dimHeight;
-if (_pmL > 0 && _pmW > 0 && _pmD > 0 && _pmBox) {
-  const pm = generatePanelMap(_pmBox, _pmL, _pmW, _pmD, svgMmWRef.current, svgMmHRef.current);
-  if (pm) {
-    setPanelMapData(pm); console.log("[PanelMap] Generated:", pm.boxType, pm.panels.length, "panels");
-  } else {
-    console.log("[PanelMap] Unknown box type:", _pmBox);
-  }
-} else {
-  console.log("[PanelMap] Skipped - dims:", _pmL, _pmW, _pmD, "box:", _pmBox);
-}
-c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHistory(); refreshLayers(); alert(`Ungrouped: ${count} objects.\nAll elements are now selectable.\nSelect unwanted elements and press Delete.`); } catch(err: any) { console.error("[Ungroup] error:", err); alert("Ungroup failed: " + err.message); } }} className={`px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors ${dielineUngrouped ? "text-gray-400 bg-gray-50 cursor-not-allowed" : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"}`} disabled={dielineUngrouped}>{dielineUngrouped ? "Ungrouped" : "Ungroup"}</button>
-        <button onClick={() => { const c = fcRef.current; if (!c) return; const F = fabricModRef.current; if (!F) return; const ungroupedObjs = c.getObjects().filter((o: any) => o._isUngroupedDieLine); if (ungroupedObjs.length === 0) { alert("No ungrouped dieline objects found"); return; } if (!window.confirm(`Regroup ${ungroupedObjs.length} dieline objects back into one group?`)) return; try { const group = new F.Group(ungroupedObjs, { name: "__dieline_upload__", _isDieline: true, _isDieLine: true, selectable: true, evented: true }); ungroupedObjs.forEach((o: any) => c.remove(o)); c.add(group); group.setCoords(); c.requestRenderAll(); setDielineUngrouped(false); setDielineLocked(false); pushHistory(); refreshLayers(); console.log("[Regroup] Regrouped " + ungroupedObjs.length + " objects"); } catch(e) { console.error("[Regroup] Error:", e); alert("Regroup failed: " + e); } }} className={`px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors ${!dielineUngrouped ? "text-gray-400 bg-gray-50 cursor-not-allowed" : "text-orange-600 hover:text-orange-900 hover:bg-orange-50"}`} disabled={!dielineUngrouped}>{!dielineUngrouped ? "Grouped" : "Regroup"}</button>
-        <div className="w-px h-7 bg-gray-200 mx-1" />
-        <button onClick={undo} title="Undo (Ctrl+Z)" className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500">&#8630;</button>
-        <button onClick={redo} title="Redo (Ctrl+Y)" className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500">&#8631;</button>
-        <div className="w-px h-7 bg-gray-200 mx-1" />
-        <button onClick={() => applyZoom(zoom - 25)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-400 text-sm">-</button>
-        <span className="text-[11px] text-gray-600 w-10 text-center">{zoom}%</span>
-        <button onClick={() => applyZoom(zoom + 25)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-400 text-sm">+</button>
-        <button onClick={() => { const c = fcRef.current; if (!c) return; const objs = c.getObjects(); if (objs.length === 0) { applyZoom(100); return; } let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity; objs.forEach((o: any) => { const b = o.getBoundingRect(); if(b.left<minX) minX=b.left; if(b.top<minY) minY=b.top; if(b.left+b.width>maxX) maxX=b.left+b.width; if(b.top+b.height>maxY) maxY=b.top+b.height; }); const objW=maxX-minX; const objH=maxY-minY; const cW=c.getWidth(); const cH=c.getHeight(); const pad=40; const fitZ=Math.floor(Math.min((cW-pad*2)/objW,(cH-pad*2)/objH)*100); applyZoom(Math.max(25,Math.min(fitZ,200))); const vpt=c.viewportTransform||[1,0,0,1,0,0]; const s=fitZ/100; vpt[4]=(cW-objW*s)/2-minX*s; vpt[5]=(cH-objH*s)/2-minY*s; c.setViewportTransform(vpt); c.requestRenderAll(); }} className="text-[11px] text-blue-600 hover:text-blue-800 font-medium ml-1">Fit</button>
-        <div className="w-px h-7 bg-gray-200 mx-1" />
-        <button onClick={fileSave} title="Save Design (Ctrl+S)" className="px-3 py-1.5 rounded-md text-[11px] font-medium bg-gray-900 text-white hover:bg-gray-800 transition-colors">{saveStatus === "saved" ? "✓ Saved" : "Save"}</button>
-        <button onClick={() => fileLoadRef.current?.click()} title="Load Design File" className="px-2.5 py-1.5 rounded-md text-[11px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors border border-gray-200">{saveStatus === "loaded" ? "✓ Loaded" : "Load"}</button>
         <input ref={fileLoadRef} type="file" accept=".json,.pkv.json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) { if (window.confirm("Loading will replace current canvas. Continue?")) { fileLoad(f); } } e.target.value = ""; }} />
-        <div className="w-px h-7 bg-gray-200 mx-1" />
-        <button onClick={() => setShowExport(true)} className="px-4 py-1.5 rounded-md text-[11px] font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors">Export</button>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
         {/* ═══ LEFT TOOLBAR ═══ */}
         <div className="w-14 bg-[#fafafa] border-r border-gray-200 flex flex-col items-center py-2 shrink-0 overflow-y-auto gap-0.5">
+          <button onClick={() => setShowDielinePanel(p => !p)} title="Box"
+            className="w-11 h-12 flex flex-col items-center justify-center rounded-lg text-xs transition-all bg-blue-600 text-white hover:bg-blue-700 shadow-md mb-1">
+            <span className="text-sm leading-none">📦</span>
+            <span className="text-[8px] mt-0.5 font-bold">Box</span>
+          </button>
+          <div className="w-8 h-px bg-gray-200 my-1" />
           <span className="text-[7px] font-bold text-gray-400 tracking-widest mb-0.5">DESIGN</span>
           {[
-            { icon: "↖", label: "Select", action: () => { const c = fcRef.current; if(c){ c.isDrawingMode = false; setDrawMode(false); setMeasureMode(false); setEyedropperMode(false); c.defaultCursor = "default"; c.hoverCursor = "move"; } } },
             { icon: "T", label: "Text", action: addText },
             { icon: "🖼", label: "Image", action: addImage },
             { icon: "◆", label: "Shapes", action: () => setShowShapePanel(p => !p) },
             { icon: "⚠", label: "Symbols", action: () => setShowSymbolPanel(p => !p) },
             { icon: "▭", label: "Handle", action: () => setShowHandlePanel(p => !p) },
-          ].map(btn => (
-            <button key={btn.label} onClick={btn.action} title={btn.label}
-              className="w-11 h-11 flex flex-col items-center justify-center rounded-lg text-xs transition-all hover:bg-white hover:shadow-sm text-gray-500 hover:text-gray-800">
-              <span className="text-sm leading-none">{btn.icon}</span>
-              <span className="text-[8px] mt-0.5 font-medium">{btn.label}</span>
-            </button>
-          ))}
-          <div className="w-8 h-px bg-gray-200 my-1" />
-          <span className="text-[7px] font-bold text-gray-400 tracking-widest mb-0.5">PACKAGE</span>
-          {[
             { icon: "⊞", label: "Table", action: () => setShowTablePanel(p => !p) },
-            { icon: "▮▯", label: "Barcode", action: () => setShowBarcodePanel(p => !p) },
-            // Marks button removed — use Image upload instead
-            { icon: "📦", label: "Box", action: () => setShowDielinePanel(p => !p) },
+            { icon: "⣿", label: "Barcode", action: () => setShowBarcodePanel(p => !p) },
           ].map(btn => (
             <button key={btn.label} onClick={btn.action} title={btn.label}
               className="w-11 h-11 flex flex-col items-center justify-center rounded-lg text-xs transition-all hover:bg-white hover:shadow-sm text-gray-500 hover:text-gray-800">
@@ -2242,12 +2227,6 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
               <span className="text-[8px] mt-0.5 font-medium">{btn.label}</span>
             </button>
           ))}
-          <div className="w-8 h-px bg-gray-200 my-1" />
-          <button onClick={() => setShowShortcuts(true)} title="Shortcuts (F1)"
-            className="w-11 h-11 flex flex-col items-center justify-center rounded-lg text-xs transition-all hover:bg-white hover:shadow-sm text-gray-500 hover:text-gray-800">
-            <span className="text-sm leading-none">⌨</span>
-            <span className="text-[8px] mt-0.5 font-medium">Keys</span>
-          </button>
           <div className="w-8 h-px bg-gray-200 my-1" />
           <span className="text-[7px] font-bold text-gray-400 tracking-widest mb-0.5">MEASURE</span>
           <button onClick={() => { setMeasureMode(m => { if(!m){setMeasurePts([]);setMeasureMouseMm(null);setMeasureResult("Click first point...");} else {setMeasureResult("");} return !m; }); }}
@@ -2259,6 +2238,13 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
             className={`w-11 h-11 flex flex-col items-center justify-center rounded-lg transition-all ${showRuler ? "bg-gray-100 text-gray-700 shadow-sm" : "text-gray-500 hover:bg-white hover:shadow-sm hover:text-gray-800"}`}>
             <span className="text-sm">📐</span>
             <span className="text-[8px] mt-0.5 font-medium">Ruler</span>
+          </button>
+          <div className="flex-1" />
+          <div className="w-8 h-px bg-gray-200 my-1" />
+          <button onClick={() => setShowShortcuts(true)} title="Shortcuts (F1)"
+            className="w-11 h-11 flex flex-col items-center justify-center rounded-lg text-xs transition-all hover:bg-white hover:shadow-sm text-gray-500 hover:text-gray-800">
+            <span className="text-sm leading-none">⌨</span>
+            <span className="text-[8px] mt-0.5 font-medium">Keys</span>
           </button>
         </div>
 
