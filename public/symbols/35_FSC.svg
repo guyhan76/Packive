@@ -1,11 +1,13 @@
-<svg id="_레이어_2" data-name="레이어 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 213.54 213.54">
+<svg id="_레이어_2" data-name="레이어 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200.0 200.0">
+<g transform="translate(10.00,10.00) scale(0.8429)">
+
   <defs>
     <style>
       .s35_FSC_c1 {
         fill: none;
         stroke: #000;
         stroke-miterlimit: 10;
-        stroke-width: 11px;
+        stroke-width: 11.0px;
       }
     </style>
   </defs>
@@ -18,4 +20,6 @@
     <path d="M167.42,42.52c-.64-1.18-1.33-2.38-2.27-3.35,1.83-.69,2.36-3.34.65-4.47-.4-.26-1.38-.53-1.84-.53h-4.08s-.05,8.88,0,8.77h2.06v-3.41c1.95-.33,2.31,2.27,3.35,3.41,0,0,2.16.04,2.39,0,.07-.01-.23-.38-.27-.41ZM164.22,37.51c-.55.21-1.77.27-2.27,0v-1.5h1.81c.85,0,1.41,1.14.47,1.5Z"/>
     <rect class="s35_FSC_c1" x="5.5" y="5.5" width="202.54" height="202.54"/>
   </g>
+
+</g>
 </svg>

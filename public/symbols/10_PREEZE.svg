@@ -1,8 +1,10 @@
-<svg id="_레이어_2" data-name="레이어 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 213.54 213.54">
+<svg id="_레이어_2" data-name="레이어 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200.0 200.0">
+<g transform="translate(10.00,10.00) scale(0.8429)">
+
   <defs>
     <style>
       .s10_PREEZE_c1 {
-        stroke-width: 11px;
+        stroke-width: 11.0px;
       }
 
       .s10_PREEZE_c1, .s10_PREEZE_c2 {
@@ -13,7 +15,7 @@
 
       .s10_PREEZE_c2 {
         stroke-linecap: round;
-        stroke-width: 7px;
+        stroke-width: 11.0px;
       }
     </style>
   </defs>
@@ -40,4 +42,6 @@
     <line class="s10_PREEZE_c2" x1="49.46" y1="74.72" x2="73.57" y2="74.72"/>
     <rect class="s10_PREEZE_c1" x="5.5" y="5.5" width="202.54" height="202.54"/>
   </g>
+
+</g>
 </svg>

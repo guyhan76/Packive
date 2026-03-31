@@ -1,4 +1,6 @@
-<svg id="_레이어_2" data-name="레이어 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 213.54 213.54">
+<svg id="_레이어_2" data-name="레이어 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200.0 200.0">
+<g transform="translate(10.00,10.00) scale(0.8429)">
+
   <defs>
     <style>
       .s8_sun_c1 {
@@ -15,12 +17,12 @@
       }
 
       .s8_sun_c2 {
-        stroke-width: 6px;
+        stroke-width: 11.0px;
       }
 
       .s8_sun_c3 {
         fill: none;
-        stroke-width: 11px;
+        stroke-width: 11.0px;
       }
     </style>
   </defs>
@@ -49,4 +51,6 @@
     </g>
     <rect class="s8_sun_c3" x="5.5" y="5.5" width="202.54" height="202.54"/>
   </g>
+
+</g>
 </svg>

@@ -1,8 +1,10 @@
-<svg id="_레이어_2" data-name="레이어 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 213.54 213.54">
+<svg id="_레이어_2" data-name="레이어 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200.0 200.0">
+<g transform="translate(10.00,10.00) scale(0.8429)">
+
   <defs>
     <style>
       .s14_temp1_c1 {
-        stroke-width: 6px;
+        stroke-width: 11.0px;
       }
 
       .s14_temp1_c1, .s14_temp1_c2 {
@@ -12,7 +14,7 @@
       }
 
       .s14_temp1_c2 {
-        stroke-width: 11px;
+        stroke-width: 11.0px;
       }
     </style>
   </defs>
@@ -25,4 +27,6 @@
     <circle cx="106.47" cy="152.19" r="18.48" transform="translate(-50.14 52.33) rotate(-22.5)"/>
     <rect class="s14_temp1_c2" x="5.5" y="5.5" width="202.54" height="202.54"/>
   </g>
+
+</g>
 </svg>

@@ -1,11 +1,13 @@
-<svg id="_레이어_2" data-name="레이어 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 213.54 213.54">
+<svg id="_레이어_2" data-name="레이어 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200.0 200.0">
+<g transform="translate(10.00,10.00) scale(0.8429)">
+
   <defs>
     <style>
       .s13_caution_c1 {
         fill: none;
         stroke: #000;
         stroke-miterlimit: 10;
-        stroke-width: 11px;
+        stroke-width: 11.0px;
       }
     </style>
   </defs>
@@ -15,4 +17,6 @@
     <path d="M105.96,137.9c8.24-.98,9.28,11.22,1.76,12.1-8.45,1-9.47-11.19-1.76-12.1Z"/>
     <rect class="s13_caution_c1" x="5.5" y="5.5" width="202.54" height="202.54"/>
   </g>
+
+</g>
 </svg>

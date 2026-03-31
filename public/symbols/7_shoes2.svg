@@ -1,4 +1,6 @@
-<svg id="s7_shoes2__레이어_2"  xmlns="http://www.w3.org/2000/svg" viewBox="0 0 71.66 71.66">
+<svg id="s7_shoes2__레이어_2"  xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200.0 200.0">
+<g transform="translate(10.00,10.00) scale(2.5119)">
+
   <defs>
     <style>
       .s7_shoes2_c1 {
@@ -19,7 +21,7 @@
       }
 
       .s7_shoes2_c4 {
-        stroke-width: 1.66px;
+        stroke-width: 3.69px;
       }
     </style>
   </defs>
@@ -37,4 +39,6 @@
     <path class="s7_shoes2_c2" d="M38.6,20.31c.66.31,1.28.59,2.01.79l-.4.58s-.75-.18-2-.77"/>
     <path class="s7_shoes2_c2" d="M37.16,22.18c.59.27,1.27.54,1.89.71l-.4.58s-.87-.21-2.05-.75"/>
   </g>
+
+</g>
 </svg>

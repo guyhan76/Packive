@@ -1,11 +1,13 @@
-<svg id="_레이어_2" data-name="레이어 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 213.54 213.54">
+<svg id="_레이어_2" data-name="레이어 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200.0 200.0">
+<g transform="translate(10.00,10.00) scale(0.8429)">
+
   <defs>
     <style>
       .s15_gori_c1 {
         fill: none;
         stroke: #000;
         stroke-miterlimit: 10;
-        stroke-width: 11px;
+        stroke-width: 11.0px;
       }
     </style>
   </defs>
@@ -22,4 +24,6 @@
     <polygon points="120.63 88.78 137.97 106.12 134.91 109.18 106.77 81.04 95.23 92.57 78.63 109.18 75.57 106.12 92.91 88.78 103.71 77.98 75.57 49.83 78.63 46.77 106.77 74.92 112.62 69.07 134.91 46.77 137.97 49.83 116.42 71.39 109.83 77.98 120.63 88.78"/>
     <rect class="s15_gori_c1" x="5.5" y="5.5" width="202.54" height="202.54"/>
   </g>
+
+</g>
 </svg>

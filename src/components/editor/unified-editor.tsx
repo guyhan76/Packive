@@ -2002,13 +2002,19 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     else if (key === "fontWeight") obj.set({ fontWeight: value === "bold" ? "bold" : "normal" });
     else if (key === "fontStyle") obj.set({ fontStyle: value === "italic" ? "italic" : "normal" });
     else if (key === "textAlign") obj.set({ textAlign: value });
-    else if (key === "fill") obj.set({ fill: value });
-    else if (key === "stroke") obj.set({ stroke: value });
+    else if (key === "fill") {
+      obj.set({ fill: value });
+      if ((obj as any)._objects) { (obj as any)._objects.forEach((child: any) => { const cf = child.fill; if (cf && cf !== "none" && cf !== "transparent" && cf !== "") { child.set({ fill: value }); } if (child._objects) child._objects.forEach((gc: any) => { const gf = gc.fill; if (gf && gf !== "none" && gf !== "transparent" && gf !== "") { gc.set({ fill: value }); } }); }); }
+    }
+    else if (key === "stroke") {
+      obj.set({ stroke: value });
+      if ((obj as any)._objects) { (obj as any)._objects.forEach((child: any) => { child.set({ stroke: value }); if (child._objects) child._objects.forEach((gc: any) => gc.set({ stroke: value })); }); }
+    }
     else if (key === "strokeWidth") obj.set({ strokeWidth: Number(value) });
     else if (key === "angle") obj.set({ angle: Number(value) });
-    else if (key === "fillCmyk") { const cm = value as {c:number;m:number;y:number;k:number}; obj.set({ fill: cmykToHex(cm.c,cm.m,cm.y,cm.k) }); (obj as any)._cmykFill = cm; }
-    else if (key === "strokeCmyk") { const cm = value as {c:number;m:number;y:number;k:number}; obj.set({ stroke: cmykToHex(cm.c,cm.m,cm.y,cm.k) }); (obj as any)._cmykStroke = cm; }
-    else if (key === "spotFill") { const s = value as {name:string;hex:string;cmyk?:[number,number,number,number]}; obj.set({ fill: s.hex }); (obj as any)._spotFill = true; (obj as any)._spotFillName = s.name; if (s.cmyk) { (obj as any)._cmykFill = {c:s.cmyk[0],m:s.cmyk[1],y:s.cmyk[2],k:s.cmyk[3]}; } }
+    else if (key === "fillCmyk") { const cm = value as {c:number;m:number;y:number;k:number}; const hex = cmykToHex(cm.c,cm.m,cm.y,cm.k); obj.set({ fill: hex }); (obj as any)._cmykFill = cm; if ((obj as any)._objects) { (obj as any)._objects.forEach((child: any) => { const cf = child.fill; if (cf && cf !== "none" && cf !== "transparent" && cf !== "") { child.set({ fill: hex }); } if (child._objects) child._objects.forEach((gc: any) => { const gf = gc.fill; if (gf && gf !== "none" && gf !== "transparent" && gf !== "") { gc.set({ fill: hex }); } }); }); } }
+    else if (key === "strokeCmyk") { const cm = value as {c:number;m:number;y:number;k:number}; const hex = cmykToHex(cm.c,cm.m,cm.y,cm.k); obj.set({ stroke: hex }); (obj as any)._cmykStroke = cm; if ((obj as any)._objects) { (obj as any)._objects.forEach((child: any) => { child.set({ stroke: hex }); if (child._objects) child._objects.forEach((gc: any) => gc.set({ stroke: hex })); }); } }
+    else if (key === "spotFill") { const s = value as {name:string;hex:string;cmyk?:[number,number,number,number]}; obj.set({ fill: s.hex }); (obj as any)._spotFill = true; (obj as any)._spotFillName = s.name; if (s.cmyk) { (obj as any)._cmykFill = {c:s.cmyk[0],m:s.cmyk[1],y:s.cmyk[2],k:s.cmyk[3]}; } if ((obj as any)._objects) { (obj as any)._objects.forEach((child: any) => { const cf = child.fill; if (cf && cf !== "none" && cf !== "transparent" && cf !== "") { child.set({ fill: s.hex }); } if (child._objects) child._objects.forEach((gc: any) => { const gf = gc.fill; if (gf && gf !== "none" && gf !== "transparent" && gf !== "") { gc.set({ fill: s.hex }); } }); }); } }
     else if (key === "spotStroke") { const s = value as {name:string;hex:string;cmyk?:[number,number,number,number]}; obj.set({ stroke: s.hex }); (obj as any)._spotStroke = true; (obj as any)._spotStrokeName = s.name; if (s.cmyk) { (obj as any)._cmykStroke = {c:s.cmyk[0],m:s.cmyk[1],y:s.cmyk[2],k:s.cmyk[3]}; } if (!obj.strokeWidth || obj.strokeWidth < 0.5) obj.set({ strokeWidth: 1 }); }
     else if (key === "clearSpotFill") { delete (obj as any)._spotFillName; delete (obj as any)._spotFillPantone; }
     else if (key === "clearSpotStroke") { delete (obj as any)._spotStrokeName; delete (obj as any)._spotStrokePantone; }
@@ -2435,29 +2441,24 @@ c.requestRenderAll(); setDielineUngrouped(true); setDielineLocked(false); pushHi
                   .map(sym => (
                   <button key={sym.id} onClick={() => {
                     const c = fcRef.current; if (!c) return;
-                    const svgStr = sym.svg.replace(/currentColor/g, "#000000");
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(svgStr, "image/svg+xml");
-                    const svgEl = doc.querySelector("svg");
-                    if (!svgEl) { console.error("No SVG element found"); return; }
-                    if (!svgEl.getAttribute("xmlns")) svgEl.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-                    svgEl.setAttribute("width", "200");
-                    svgEl.setAttribute("height", "200");
-                    const serialized = new XMLSerializer().serializeToString(svgEl);
-                    const encoded = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(serialized)));
-                    import("fabric").then(({ FabricImage }) => {
-                      FabricImage.fromURL(encoded).then((img) => {
-                        if (!img) { console.error("FabricImage.fromURL returned null"); return; }
+                    (async () => {
+                      try {
+                        const F = fabricModRef.current;
+                        if (!F) { console.error("No Fabric module"); return; }
+                        const result = await F.loadSVGFromString(sym.svg);
+                        const objects = (result.objects || []).filter((o: any) => o != null);
+                        if (objects.length === 0) { console.error("No SVG objects loaded for", sym.name); return; }
+                        const group = F.util.groupSVGElements(objects, result.options);
                         const cw = c.getWidth(); const ch = c.getHeight();
-                        img.set({ left: cw / 2, top: ch / 2, originX: 'center', originY: 'center' });
-                        img.scaleToWidth(80);
-                        c.add(img);
-                        c.setActiveObject(img);
+                        group.set({ left: cw / 2, top: ch / 2, originX: "center", originY: "center" });
+                        group.scaleToWidth(80);
+                        c.add(group);
+                        c.setActiveObject(group);
                         c.requestRenderAll();
                         if (typeof refreshLayers === "function") refreshLayers();
                         console.log("Symbol added to canvas:", sym.name);
-                      });
-                    });
+                      } catch (e) { console.error("Symbol load error:", sym.name, e); }
+                    })();
                     setShowSymbolPanel(false);
                   }}
                    className="flex flex-col items-center gap-1 p-2 rounded-lg border border-gray-100 hover:border-blue-300 hover:bg-blue-50 transition-all group"

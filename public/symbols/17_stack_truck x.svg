@@ -1,4 +1,6 @@
-<svg id="_레이어_2" data-name="레이어 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 389.3 381">
+<svg id="_레이어_2" data-name="레이어 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200.0 200.0">
+<g transform="translate(10.00,11.92) scale(0.4624)">
+
   <defs>
     <style>
       .s17_stack_truck_x_c1 {
@@ -12,4 +14,6 @@
     <path class="s17_stack_truck_x_c1" d="M248.02,316.3c0,17.5-14.18,31.68-31.68,31.68s-31.68-14.18-31.68-31.68,14.19-31.68,31.68-31.68,31.68,14.18,31.68,31.68Z"/>
     <rect class="s17_stack_truck_x_c1" x="14.02" y="363.78" width="375.28" height="17.21"/>
   </g>
+
+</g>
 </svg>
