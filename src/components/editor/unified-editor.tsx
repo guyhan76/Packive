@@ -483,9 +483,9 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     await c.loadFromJSON(snapshot);
     restoreCustomProps(c, snapshot);
     c.requestRenderAll();
-    loadingRef.current = false;
     refreshLayers();
     setTimeout(() => { setSelProps(null); setTableEditCell(null); }, 30);
+    setTimeout(() => { loadingRef.current = false; }, 200);
   }, []);
 
   const redo = useCallback(async () => {
@@ -497,9 +497,9 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     await c.loadFromJSON(snapshot);
     restoreCustomProps(c, snapshot);
     c.requestRenderAll();
-    loadingRef.current = false;
     refreshLayers();
     setTimeout(() => { setSelProps(null); setTableEditCell(null); }, 30);
+    setTimeout(() => { loadingRef.current = false; }, 200);
   }, []);
   const SAVE_KEY = "packive-temp-design";
   const SAVE_META_KEY = "packive-temp-meta";
@@ -2038,69 +2038,98 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   return (
     <div className="h-screen flex flex-col bg-gray-50 overflow-hidden select-none">
       {/* TOP BAR */}
-      <div className="h-12 bg-white border-b border-gray-200 flex items-center px-4 gap-2 shrink-0 z-20">
-        {/* LEFT: Back + Logo + File info */}
-        <button onClick={onBack} className="flex items-center gap-1 text-gray-600 hover:text-gray-900 text-sm font-medium" title="Back to home">
-          <span className="text-base">&#8592;</span> Back
-        </button>
-        <div className="w-px h-7 bg-gray-200 mx-1" />
-        <img src="/packive-logo.png" alt="Packive" className="h-14 object-contain" />
-        <div className="w-px h-7 bg-gray-200 mx-1" />
-        {boxType && <span className="text-sm font-semibold text-gray-800">{boxType}</span>}
-        {dielineFileName && <span className="text-xs text-blue-600 truncate max-w-[160px] font-medium" title={dielineFileName}>{dielineFileName}</span>}
-        {!dielineFileName && boxType && <span className="text-xs text-gray-500">{L}x{W}x{D}</span>}
+      <div className="h-11 bg-white border-b border-gray-200 flex items-center pl-3 pr-2 shrink-0 z-20">
+
+        {/* LEFT: Logo + File info */}
+        <a href="/" className="flex items-center shrink-0 mr-3" title="Home">
+          <img src="/packive-logo.png" alt="Packive" className="h-16 object-contain" />
+        </a>
+        {boxType && <span className="text-xs font-semibold text-gray-700 mr-1">{boxType}</span>}
+        {dielineFileName && <span className="text-[11px] text-blue-600 truncate max-w-[140px] font-medium" title={dielineFileName}>{dielineFileName}</span>}
+        {!dielineFileName && boxType && <span className="text-[11px] text-gray-400">{L}x{W}x{D}</span>}
 
         <div className="flex-1" />
 
-        {/* Dieline tools */}
-        {/* ── Dieline Tools ── */}
-        <button onClick={() => { if (!window.confirm("Start a completely new blank canvas?\nAll current work will be removed.")) return; const c = fcRef.current; if(!c) return; c.getObjects().slice().forEach((o:any) => c.remove(o)); c.requestRenderAll(); setDielineFileName(""); setDielineUngrouped(false); setDielineSizes(null); setDielineModelInfo(""); pushHistory(); refreshLayers(); }} className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-md transition-colors" title="New Canvas">New</button>
+        {/* CENTER: Dieline tools (icon buttons) */}
+        <div className="flex items-center gap-1">
+          {/* New */}
+          <button onClick={() => { if (!window.confirm("Start a completely new blank canvas?\nAll current work will be removed.")) return; const c = fcRef.current; if(!c) return; c.getObjects().slice().forEach((o:any) => c.remove(o)); c.requestRenderAll(); setDielineFileName(""); setDielineSizes(null); setDielineModelInfo(""); pushHistory(); refreshLayers(); }}
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 transition-colors" title="New Canvas">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+          </button>
 
-        <button onClick={() => dielineFileRef.current?.click()} className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-md transition-colors" title="Upload Dieline (.eps, .svg, .pdf)">Upload</button>
+          {/* Upload */}
+          <button onClick={() => dielineFileRef.current?.click()}
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 transition-colors" title="Upload Dieline (.eps, .svg, .pdf)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </button>
 
-        <div className="w-px h-6 bg-gray-200 mx-1" />
+          <div className="w-px h-5 bg-gray-200 mx-0.5" />
 
-        {/* Dieline On/Off toggle */}
-        <button onClick={() => { const c = fcRef.current; if (!c) return; const nv = !dielineVisible; setDielineVisible(nv); c.getObjects().forEach((o: any) => { if (o._isGuideLayer || o._isDieLine || o._isFoldLine) { o.visible = nv; } }); c.requestRenderAll(); }}
-          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${dielineVisible ? "bg-blue-50 text-blue-700 border border-blue-200" : "bg-gray-50 text-gray-400 border border-gray-200"}`}
-          title="Toggle Dieline Visibility">
-          Dieline {dielineVisible ? "On" : "Off"}
-        </button>
+          {/* Dieline On/Off */}
+          <button onClick={() => { const c = fcRef.current; if (!c) return; const nv = !dielineVisible; setDielineVisible(nv); c.getObjects().forEach((o: any) => { if (o._isGuideLayer || o._isDieLine || o._isFoldLine) { o.visible = nv; } }); c.requestRenderAll(); }}
+            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${dielineVisible ? "bg-blue-50 text-blue-600" : "text-gray-400 hover:bg-gray-100"}`}
+            title={dielineVisible ? "Hide Dieline" : "Show Dieline"}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{dielineVisible ? <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></> : <><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></>}</svg>
+          </button>
 
-        {/* Info On/Off toggle */}
-        <button onClick={() => { const c = fcRef.current; if (!c) return; const hasDieline = dielineVisible && c.getObjects().some((o: any) => o._isGuideLayer || o._isDieLine); if (!hasDieline) return; const nv = !dielineInfoVisible; setDielineInfoVisible(nv); let count = 0; const toggleDeep = (obj: any) => { if (obj._isDielineInfo || obj._isPanelLabel || obj._isPanelOverlay || obj._isDimLine || obj._isDimArrow) { obj.visible = nv; obj.dirty = true; obj.setCoords?.(); count++; } if (obj.type === "group" && typeof obj.getObjects === "function") { obj.getObjects().forEach((child: any) => toggleDeep(child)); obj.dirty = true; obj.setCoords?.(); } }; c.getObjects().forEach((o: any) => toggleDeep(o)); console.log("[Info toggle]", nv ? "ON" : "OFF", count, "objects"); c.requestRenderAll(); }}
-          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${dielineInfoVisible ? "bg-blue-50 text-blue-700 border border-blue-200" : "bg-gray-50 text-gray-400 border border-gray-200"}`}
-          title="Toggle Dieline Info, Dimensions & Arrows">
-          Info {dielineInfoVisible ? "On" : "Off"}
-        </button>
+          {/* Info On/Off */}
+          <button onClick={() => { const c = fcRef.current; if (!c) return; const hasDieline = dielineVisible && c.getObjects().some((o: any) => o._isGuideLayer || o._isDieLine); if (!hasDieline) return; const nv = !dielineInfoVisible; setDielineInfoVisible(nv); let count = 0; const toggleDeep = (obj: any) => { if (obj._isDielineInfo || obj._isPanelLabel || obj._isPanelOverlay || obj._isDimLine || obj._isDimArrow) { obj.visible = nv; obj.dirty = true; obj.setCoords?.(); count++; } if (obj.type === "group" && typeof obj.getObjects === "function") { obj.getObjects().forEach((child: any) => toggleDeep(child)); obj.dirty = true; obj.setCoords?.(); } }; c.getObjects().forEach((o: any) => toggleDeep(o)); console.log("[Info toggle]", nv ? "ON" : "OFF", count, "objects"); c.requestRenderAll(); }}
+            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${dielineInfoVisible ? "bg-blue-50 text-blue-600" : "text-gray-400 hover:bg-gray-100"}`}
+            title={dielineInfoVisible ? "Hide Info & Dimensions" : "Show Info & Dimensions"}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          </button>
 
-        {/* Lock toggle */}
-        <button onClick={() => { const c = fcRef.current; if (!c) return; const nl = !dielineLocked; setDielineLocked(nl); c.getObjects().forEach((o: any) => { if (o._isGuideLayer || o._isDieLine || o._isFoldLine) { o.selectable = !nl; o.evented = !nl; } }); c.requestRenderAll(); }}
-          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${dielineLocked ? "bg-amber-50 text-amber-700 border border-amber-200" : "bg-gray-50 text-gray-400 border border-gray-200"}`}
-          title="Lock/Unlock Dieline">
-          {dielineLocked ? "🔒 Locked" : "🔓 Unlocked"}
-        </button>
+          {/* Lock */}
+          <button onClick={() => { const c = fcRef.current; if (!c) return; const nl = !dielineLocked; setDielineLocked(nl); c.getObjects().forEach((o: any) => { if (o._isGuideLayer || o._isDieLine || o._isFoldLine) { o.selectable = !nl; o.evented = !nl; } }); c.requestRenderAll(); }}
+            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${dielineLocked ? "bg-blue-50 text-blue-600" : "text-gray-400 hover:bg-gray-100"}`}
+            title={dielineLocked ? "Unlock Dieline" : "Lock Dieline"}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{dielineLocked ? <><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></> : <><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></>}</svg>
+          </button>
+        </div>
 
-        
-        <div className="w-px h-6 bg-gray-200 mx-1" />
+        <div className="flex-1" />
 
-        {/* Undo/Redo */}
-        <button onClick={undo} title="Undo (Ctrl+Z)" className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500 text-sm">&#8630;</button>
-        <button onClick={redo} title="Redo (Ctrl+Y)" className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500 text-sm">&#8631;</button>
-        <div className="w-px h-6 bg-gray-200" />
+        {/* RIGHT: Undo/Redo + Zoom + Save/Export - aligned with right panel (w-80) */}
+        <div className="flex items-center justify-end gap-0.5 w-80 shrink-0">
+          {/* Undo */}
+          <button onClick={undo} title="Undo (Ctrl+Z)" className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+          </button>
+          {/* Redo */}
+          <button onClick={redo} title="Redo (Ctrl+Y)" className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10"/></svg>
+          </button>
 
-        {/* Zoom */}
-        <button onClick={() => applyZoom(zoom - 25)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500 text-xs">-</button>
-        <span className="text-xs text-gray-600 w-10 text-center font-medium">{zoom}%</span>
-        <button onClick={() => applyZoom(zoom + 25)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500 text-xs">+</button>
-        <button onClick={() => { const c = fcRef.current; if (!c) return; const objs = c.getObjects(); if (objs.length === 0) { applyZoom(100); return; } let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity; objs.forEach((o:any) => { const b = o.getBoundingRect(); if(b.left<minX) minX=b.left; if(b.top<minY) minY=b.top; if(b.left+b.width>maxX) maxX=b.left+b.width; if(b.top+b.height>maxY) maxY=b.top+b.height; }); const cw=c.getWidth(),ch=c.getHeight(); const fitZ = Math.min(cw/(maxX-minX+40), ch/(maxY-minY+40)) * 100; applyZoom(Math.round(Math.min(fitZ,200))); }} className="px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded" title="Fit to view">Fit</button>
-        <div className="w-px h-6 bg-gray-200" />
+          <div className="w-px h-5 bg-gray-200 mx-1" />
 
-        {/* Save/Export */}
-        <button onClick={() => fileLoadRef.current?.click()} title="Load" className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded">Load</button>
-        <button onClick={fileSave} title="Save (Ctrl+S)" className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md">Save</button>
-        <button onClick={() => setShowExport(true)} className="px-4 py-1.5 text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 rounded-md shadow-sm">Export</button>
+          {/* Zoom */}
+          <button onClick={() => applyZoom(zoom - 25)} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 text-xs font-medium">−</button>
+          <span className="text-[11px] text-gray-500 w-10 text-center font-medium select-none">{zoom}%</span>
+          <button onClick={() => applyZoom(zoom + 25)} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 text-xs font-medium">+</button>
+          <button onClick={() => { const c = fcRef.current; if (!c) return; const objs = c.getObjects(); if (objs.length === 0) { applyZoom(100); return; } let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity; objs.forEach((o:any) => { const b=o.getBoundingRect(); minX=Math.min(minX,b.left); minY=Math.min(minY,b.top); maxX=Math.max(maxX,b.left+b.width); maxY=Math.max(maxY,b.top+b.height); }); const cw=c.getWidth(), ch=c.getHeight(), ow=maxX-minX, oh=maxY-minY; const z=Math.floor(Math.min(cw/ow, ch/oh)*90); applyZoom(Math.min(Math.max(z,25),400)); }}
+            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 transition-colors" title="Fit to View">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+          </button>
 
+          <div className="w-px h-5 bg-gray-200 mx-1" />
+
+          {/* Load */}
+          <button onClick={() => fileLoadRef.current?.click()} title="Load Project"
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          </button>
+          {/* Save */}
+          <button onClick={fileSave} title="Save (Ctrl+S)"
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          </button>
+          {/* Export */}
+          <button onClick={() => setShowExport(true)}
+            className="px-4 py-1.5 text-[11px] font-semibold bg-blue-600 text-white hover:bg-blue-700 rounded-lg shadow-sm transition-colors">
+            Export
+          </button>
+        </div>
         {/* Hidden file inputs */}
         <input ref={dielineFileRef} type="file" accept=".eps,.ai,.pdf,.svg" className="hidden" onChange={async (e) => {
           const f = e.target.files?.[0]; if (!f) return;
@@ -2212,7 +2241,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
             console.log("[Dieline] SVG original:", svgOrigW, "x", svgOrigH, "units, =", origMmW.toFixed(2), "x", origMmH.toFixed(2), "mm");
             svgMmWRef.current = origMmW; svgMmHRef.current = origMmH;
-            pendingDielineRef.current = { group, origMmW, origMmH, svgOrigW, svgOrigH, infoObjs };
+            const infoObjs: any[] = []; pendingDielineRef.current = { group, origMmW, origMmH, svgOrigW, svgOrigH, infoObjs };
             setUploadSizeW(parseFloat(origMmW.toFixed(2)));
             setUploadSizeH(parseFloat(origMmH.toFixed(2)));
             setShowSizeConfirm(true);
@@ -2273,7 +2302,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
         <div className="relative flex-1 flex overflow-hidden">
           {/* Text Popup */}
           {showTextPanel && (
-            <div className="absolute left-1 top-1 z-30 bg-white rounded-xl shadow-xl border p-3 w-52">
+            <div className="absolute left-14 top-8 z-50 bg-white rounded-xl shadow-xl border p-3 w-52">
               <div className="text-xs font-semibold text-gray-700 mb-2">Add Text</div>
               {["heading", "subheading", "body"].map(p => (
                 <button key={p} onClick={() => addText(p)}
@@ -2288,7 +2317,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
 
           {showShapePanel && (
-            <div className="absolute left-1 top-1 z-30 bg-white rounded-xl shadow-2xl border p-3 w-72 max-h-[520px] overflow-y-auto">
+            <div className="absolute left-14 top-8 z-50 bg-white rounded-xl shadow-2xl border p-3 w-72 max-h-[520px] overflow-y-auto">
               <div className="flex items-center justify-between mb-2">
                 <div className="text-xs font-semibold text-gray-700">Shapes</div>
                 <button onClick={() => setShowShapePanel(false)} className="text-gray-400 hover:text-gray-600 text-sm">×</button>
@@ -2410,7 +2439,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
           {/* Barcode Popup */}
           {showBarcodePanel && (
-            <div className="absolute left-1 top-1 z-30 bg-white rounded-xl shadow-xl border p-3 w-56">
+            <div className="absolute left-14 top-8 z-50 bg-white rounded-xl shadow-xl border p-3 w-56">
               <div className="text-xs font-semibold text-gray-700 mb-2">Barcode</div>
               <select value={barcodeType} onChange={e => setBarcodeType(e.target.value as any)} className="w-full border rounded px-2 py-1 text-sm mb-2">
 
@@ -2425,7 +2454,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
           {/* Packaging Symbols Popup */}
           {showSymbolPanel && (
-            <div className="absolute left-14 top-16 z-30 bg-white rounded-xl shadow-xl border p-3 w-72 max-h-[80vh] overflow-y-auto">
+            <div className="absolute left-14 top-8 z-50 bg-white rounded-xl shadow-xl border p-3 w-72 max-h-[80vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-2">
                 <div className="text-xs font-bold text-gray-700">Packaging Symbols ({PACKAGING_SYMBOLS.length})</div>
                 <button onClick={() => setShowSymbolPanel(false)} className="text-gray-400 hover:text-gray-600 text-sm">x</button>
@@ -2479,7 +2508,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           )}
           {/* Handle Panel */}
           {showHandlePanel && (
-            <div className="absolute left-14 top-16 z-30 bg-white rounded-xl shadow-xl border p-3 w-80 max-h-[80vh] overflow-y-auto">
+            <div className="absolute left-14 top-8 z-50 bg-white rounded-xl shadow-xl border p-3 w-80 max-h-[80vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-3">
                 <div className="text-xs font-bold text-gray-700">Handle Types (5)</div>
                 <button onClick={() => setShowHandlePanel(false)} className="text-gray-400 hover:text-gray-600 text-sm">X</button>
@@ -2522,7 +2551,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
           {/* Table Popup */}
           {showTablePanel && (
-            <div className="absolute left-1 top-1 z-30 bg-white rounded-xl shadow-2xl border p-4 w-60">
+            <div className="absolute left-14 top-8 z-50 bg-white rounded-xl shadow-2xl border p-4 w-60">
               <div className="flex items-center justify-between mb-3">
                 <div className="text-sm font-bold text-gray-800">Insert Table</div>
                 <button onClick={() => setShowTablePanel(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">&times;</button>
