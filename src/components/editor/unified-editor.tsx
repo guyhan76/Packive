@@ -2053,15 +2053,36 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
         <div className="flex-1" />
 
         {/* Dieline tools */}
-        <button onClick={() => { if (!window.confirm("Start a completely new blank canvas?\nAll current work will be removed.")) return; const c = fcRef.current; if(!c) return; c.getObjects().slice().forEach((o:any) => c.remove(o)); c.requestRenderAll(); setDielineFileName(""); setDielineUngrouped(false); setDielineSizes(null); setDielineModelInfo(""); pushHistory(); refreshLayers(); }} className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded" title="New Canvas">New</button>
-        <button onClick={() => dielineFileRef.current?.click()} className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded" title="Upload Dieline">Upload</button>
-        <div className="w-px h-6 bg-gray-200" />
-        <button onClick={() => { const c = fcRef.current; if (!c) return; const nv = !dielineVisible; setDielineVisible(nv); c.getObjects().forEach((o: any) => { if (o._isGuideLayer || o._isDieLine || o._isFoldLine) { o.visible = nv; } }); c.requestRenderAll(); }} className={`px-2 py-1 text-xs rounded ${dielineVisible ? "text-gray-800 bg-gray-100" : "text-gray-400"}`} title="Toggle Dieline">Die</button>
-        <button onClick={() => { const c = fcRef.current; if (!c) return; const nv = !dielineInfoVisible; setDielineInfoVisible(nv); let count = 0; c.getObjects().forEach((o: any) => { if (o._isDielineInfo || o._isPanelLabel || o._isPanelOverlay) { o.visible = nv; count++; } let childChanged = false; if (o._objects) { o._objects.forEach((ch: any) => { if (ch._isDielineInfo || ch._isPanelLabel || ch._isPanelOverlay) { ch.visible = nv; count++; childChanged = true; } }); } if (o.getObjects) { try { o.getObjects().forEach((ch: any) => { if (ch._isDielineInfo || ch._isPanelLabel || ch._isPanelOverlay) { ch.visible = nv; count++; childChanged = true; } }); } catch(e) {} } if (childChanged) { o.dirty = true; o.setCoords?.(); } }); console.log("[Info] toggled", count, "info objects to", nv); c.requestRenderAll(); }} className={`px-2 py-1 text-xs rounded ${dielineInfoVisible ? "text-gray-800 bg-gray-100" : "text-gray-400"}`} title="Toggle Info">Info</button>
-        <button onClick={() => { const c = fcRef.current; if (!c) return; const nl = !dielineLocked; setDielineLocked(nl); c.getObjects().forEach((o: any) => { if (o._isGuideLayer || o._isDieLine || o._isFoldLine) { o.selectable = !nl; o.evented = !nl; } }); c.requestRenderAll(); }} className={`px-2 py-1 text-xs rounded ${dielineLocked ? "text-amber-600 bg-amber-50" : "text-gray-400"}`} title="Lock/Unlock Dieline">{dielineLocked ? "🔒 Locked" : "🔓 Lock"}</button>
-        <button onClick={() => { const c = fcRef.current; if (!c) return; const objs = c.getObjects().slice(); let ungroupCount = 0; objs.forEach((o: any) => { if ((o._isGuideLayer || o._isDieLine) && o.type === 'group') { const children = o.getObjects ? o.getObjects() : (o._objects || []); const cloned = [...children]; const groupLeft = o.left || 0; const groupTop = o.top || 0; c.remove(o); cloned.forEach((ch: any) => { ch._isDieLine = true; ch._isGuideLayer = true; ch.selectable = !dielineLocked; ch.evented = !dielineLocked; if (o.group) { const pt = o.translateToOriginPoint(ch.getCenterPoint(), 'center', 'center'); ch.set({ left: pt.x, top: pt.y }); } c.add(ch); ungroupCount++; }); } }); if (ungroupCount > 0) { setDielineUngrouped(true); c.requestRenderAll(); pushHistory(); refreshLayers(); console.log("[Ungroup]", ungroupCount, "children extracted"); } else { console.log("[Ungroup] No groups found to ungroup"); } }} className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded" title="Ungroup Dieline">Ungroup</button>
-        <button onClick={() => { const c = fcRef.current; if (!c) return; const dieObjs = c.getObjects().filter((o: any) => o._isDieLine || o._isGuideLayer); if (dieObjs.length < 2) { console.log("[Regroup] Not enough objects"); return; } const F = fabricModRef.current; if (!F) return; dieObjs.forEach((o: any) => c.remove(o)); const group = new F.Group(dieObjs); group.set({ _isDieLine: true, _isGuideLayer: true, selectable: !dielineLocked, evented: !dielineLocked, name: "__dieline_upload__" }); c.add(group); setDielineUngrouped(false); c.requestRenderAll(); pushHistory(); refreshLayers(); console.log("[Regroup]", dieObjs.length, "objects regrouped"); }} className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded" title="Regroup Dieline">Regroup</button>
-        <div className="w-px h-6 bg-gray-200" />
+        {/* ── Dieline Tools ── */}
+        <button onClick={() => { if (!window.confirm("Start a completely new blank canvas?\nAll current work will be removed.")) return; const c = fcRef.current; if(!c) return; c.getObjects().slice().forEach((o:any) => c.remove(o)); c.requestRenderAll(); setDielineFileName(""); setDielineUngrouped(false); setDielineSizes(null); setDielineModelInfo(""); pushHistory(); refreshLayers(); }} className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-md transition-colors" title="New Canvas">New</button>
+
+        <button onClick={() => dielineFileRef.current?.click()} className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-md transition-colors" title="Upload Dieline (.eps, .svg, .pdf)">Upload</button>
+
+        <div className="w-px h-6 bg-gray-200 mx-1" />
+
+        {/* Dieline On/Off toggle */}
+        <button onClick={() => { const c = fcRef.current; if (!c) return; const nv = !dielineVisible; setDielineVisible(nv); c.getObjects().forEach((o: any) => { if (o._isGuideLayer || o._isDieLine || o._isFoldLine) { o.visible = nv; } }); c.requestRenderAll(); }}
+          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${dielineVisible ? "bg-blue-50 text-blue-700 border border-blue-200" : "bg-gray-50 text-gray-400 border border-gray-200"}`}
+          title="Toggle Dieline Visibility">
+          Dieline {dielineVisible ? "On" : "Off"}
+        </button>
+
+        {/* Info On/Off toggle */}
+        <button onClick={() => { const c = fcRef.current; if (!c) return; const hasDieline = dielineVisible && c.getObjects().some((o: any) => o._isGuideLayer || o._isDieLine); if (!hasDieline) return; const nv = !dielineInfoVisible; setDielineInfoVisible(nv); let count = 0; const toggleDeep = (obj: any) => { if (obj._isDielineInfo || obj._isPanelLabel || obj._isPanelOverlay || obj._isDimLine || obj._isDimArrow) { obj.visible = nv; obj.dirty = true; obj.setCoords?.(); count++; } if (obj.type === "group" && typeof obj.getObjects === "function") { obj.getObjects().forEach((child: any) => toggleDeep(child)); obj.dirty = true; obj.setCoords?.(); } }; c.getObjects().forEach((o: any) => toggleDeep(o)); console.log("[Info toggle]", nv ? "ON" : "OFF", count, "objects"); c.requestRenderAll(); }}
+          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${dielineInfoVisible ? "bg-blue-50 text-blue-700 border border-blue-200" : "bg-gray-50 text-gray-400 border border-gray-200"}`}
+          title="Toggle Dieline Info, Dimensions & Arrows">
+          Info {dielineInfoVisible ? "On" : "Off"}
+        </button>
+
+        {/* Lock toggle */}
+        <button onClick={() => { const c = fcRef.current; if (!c) return; const nl = !dielineLocked; setDielineLocked(nl); c.getObjects().forEach((o: any) => { if (o._isGuideLayer || o._isDieLine || o._isFoldLine) { o.selectable = !nl; o.evented = !nl; } }); c.requestRenderAll(); }}
+          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${dielineLocked ? "bg-amber-50 text-amber-700 border border-amber-200" : "bg-gray-50 text-gray-400 border border-gray-200"}`}
+          title="Lock/Unlock Dieline">
+          {dielineLocked ? "🔒 Locked" : "🔓 Unlocked"}
+        </button>
+
+        
+        <div className="w-px h-6 bg-gray-200 mx-1" />
 
         {/* Undo/Redo */}
         <button onClick={undo} title="Undo (Ctrl+Z)" className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500 text-sm">&#8630;</button>
@@ -3063,7 +3084,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             <div id='canvas-centering-wrapper'>
             <div style={{position:'relative',display:'inline-block'}}>
               <canvas ref={canvasElRef} className="shadow-lg" style={{border:"1px solid #e0e0e0"}} />
-              {dielineInfoVisible && dielineSizes && (
+              {dielineInfoVisible && dielineVisible && dielineSizes && (
                 <div style={{position:"fixed",bottom:40,left:95,background:"rgba(255,255,255,0.95)",border:"1px solid #ddd",borderRadius:6,padding:"10px 14px",fontSize:12,fontFamily:"monospace",lineHeight:"1.6",boxShadow:"0 2px 8px rgba(0,0,0,0.1)",zIndex:50,maxWidth:360}}>
                   <div style={{fontWeight:700,fontSize:14,marginBottom:8,color:"#333",borderBottom:"1px solid #eee",paddingBottom:6}}>{dielineModelInfo}{(dielineSizes as any)._multiPart ? " (Multi-part)" : ""}</div>
                   {(dielineSizes as any)._multiPart && (dielineSizes as any)._parts ? (
