@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React, { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { useI18n } from "@/components/i18n-context";
 

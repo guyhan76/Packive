@@ -1,4 +1,4 @@
-﻿// CIELAB HLC Colour Atlas - Level 2 (v3)
+// CIELAB HLC Colour Atlas - Level 2 (v3)
 // Mathematically generated, sRGB gamut, unique colors only
 // Based on freieFarbe e.V. HLC structure (CC BY 4.0)
 // Generated: 2026-02-28

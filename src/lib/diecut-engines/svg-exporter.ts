@@ -1,4 +1,4 @@
-﻿// src/lib/diecut-engines/svg-exporter.ts
+// src/lib/diecut-engines/svg-exporter.ts
 // Dieline SVG/PDF exporter — industry standard layers
 
 import { DiecutResult } from "./fefco-0215"

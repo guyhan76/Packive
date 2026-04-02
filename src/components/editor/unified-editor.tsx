@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React, { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { generatePanelMap, detectPanelsFromSVG, type PanelMap, type Panel, panelToCanvas } from '@/lib/panel-map';
@@ -197,6 +197,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     return "Inter";
   }, []);
   const [zoom, setZoom] = useState(100);
+
   const [rulerUnit, setRulerUnit] = useState<"mm" | "inch">("mm");
   const [rulerScroll, setRulerScroll] = useState({ left: 0, top: 0 });
   const [guides, setGuides] = useState<Array<{ id: string; pos: number; dir: "h" | "v" }>>([]);
@@ -955,7 +956,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
         perPixelTargetFind: false,
       });
 
-      fcRef.current = canvas;
+      fcRef.current = canvas; (window as any).__pc = canvas;
       canvas.backgroundColor = '#FFFFFF';
       canvas.requestRenderAll();
       setCanvasReady(true);
@@ -1539,6 +1540,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     scaleYRef.current = newPxPerMm; // Y axis is reference (least distorted)
     console.log("[Dieline] Measure scale: X=", scaleXRef.current.toFixed(4), "Y=", scaleYRef.current.toFixed(4), "px/mm");
     c.add(group); c.sendObjectToBack(group); c.requestRenderAll();
+        (window as any).__pc = c; // keep ref fresh after dieline load
     setShowSizeConfirm(false);
     pendingDielineRef.current = null;
   }, [uploadSizeW, uploadSizeH]);
@@ -3193,6 +3195,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     else {
                       const result = await addBleedGuides(cv, {
                         scale: scaleRef.current,
+                        svgMmW: svgMmWRef.current,
                         canvasWidth: cv.getWidth(),
                         canvasHeight: cv.getHeight(),
                         bleedMm: 3,

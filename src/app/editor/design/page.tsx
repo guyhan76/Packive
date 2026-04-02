@@ -1,4 +1,4 @@
-﻿// src/app/editor/design/page.tsx
+// src/app/editor/design/page.tsx
 "use client";
 
 import React, { useState, useCallback, useMemo, useEffect, useRef, Suspense } from "react";

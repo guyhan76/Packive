@@ -1,4 +1,4 @@
-﻿// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
 // design-templates.ts v3 — 2026 Trend-Based Premium Templates for Packive
 // Inspired by: Ultra-Clean Industrial, Apothecary Aesthetic, Narrative Pop,
 //   Soft Neutrals, Nature Greens, Warm Earth Tones, Modern Blues

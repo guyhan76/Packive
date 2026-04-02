@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 /* ── CorelDRAW 8 EPS Parser ──
    Pattern: "v1 v2 /" is a segment separator

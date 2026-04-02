@@ -1,4 +1,4 @@
-﻿const LOCALE_FONT_MAP: Record<string, string> = {
+const LOCALE_FONT_MAP: Record<string, string> = {
   en: "Inter",
   ko: "Noto Sans KR",
   ja: "Noto Sans JP",

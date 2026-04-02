@@ -1,4 +1,4 @@
-﻿// src/lib/panel-map.ts
+// src/lib/panel-map.ts
 // Phase 4: Panel Map System - 박스 타입별 패널 자동 감지
 
 export interface Panel {

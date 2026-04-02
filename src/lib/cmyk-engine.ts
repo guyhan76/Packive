@@ -1,4 +1,4 @@
-﻿// Packive CMYK Color Engine - FOGRA39 ICC Profile based
+// Packive CMYK Color Engine - FOGRA39 ICC Profile based
 // Forward: CMYK -> sRGB (using fogra39-lut.bin, 21^4 grid)
 // Reverse: sRGB -> CMYK (using fogra39-reverse-lut.bin, 64^3 grid)
 

@@ -1,145 +1,97 @@
 /**
- * Packive Bleed Guide System v5
- * 
- * 실무 인쇄 Bleed 규칙:
- * - 일반 면: 칼선 바깥 3mm 확장
- * - Glue 탭: bleed 제외, 시작점에서 5mm offset
- * - 색상: 초록 실선 (Pacdora 표준)
- * 
- * 현재 Phase 0: 전체 bounding box 기준 bleed
- * Phase 4 이후: Panel Map으로 면별 bleed (glue 탭 5mm 제외)
+ * Packive Bleed Guide System v11
+ * - Uses group position/scale directly (zoom-independent)
+ * - No getBoundingRect (affected by viewport transform)
  */
 
 const DEFAULT_BLEED_MM = 3;
 
-/**
- * 칼선 객체의 bounding box (canvas 좌표계)
- */
-function getDielineBBox(canvas: any): { left: number; top: number; width: number; height: number } | null {
-  const allObjs = canvas.getObjects();
-  const dielineObjs = allObjs.filter((o: any) =>
-    o._isDieLine || o._isDieline ||
-    (o.name && typeof o.name === 'string' && (o.name.includes('dieline') || o.name.includes('__dieline')))
-  );
-
-  if (dielineObjs.length === 0) return null;
-
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
-  for (const obj of dielineObjs) {
-    if (obj.setCoords) obj.setCoords();
-
-    if (obj.aCoords) {
-      const pts = [obj.aCoords.tl, obj.aCoords.tr, obj.aCoords.bl, obj.aCoords.br];
-      for (const p of pts) {
-        if (!p) continue;
-        minX = Math.min(minX, p.x);
-        minY = Math.min(minY, p.y);
-        maxX = Math.max(maxX, p.x);
-        maxY = Math.max(maxY, p.y);
-      }
-    } else {
-      const w = (obj.width || 0) * (obj.scaleX || 1);
-      const h = (obj.height || 0) * (obj.scaleY || 1);
-      const L = obj.left || 0;
-      const T = obj.top || 0;
-      const ox = obj.originX || 'left';
-      const oy = obj.originY || 'top';
-      let aL = L, aT = T;
-      if (ox === 'center') aL = L - w / 2;
-      else if (ox === 'right') aL = L - w;
-      if (oy === 'center') aT = T - h / 2;
-      else if (oy === 'bottom') aT = T - h;
-      minX = Math.min(minX, aL);
-      minY = Math.min(minY, aT);
-      maxX = Math.max(maxX, aL + w);
-      maxY = Math.max(maxY, aT + h);
-    }
-  }
-
-  if (minX === Infinity) return null;
-  return { left: minX, top: minY, width: maxX - minX, height: maxY - minY };
+interface BleedConfig {
+  scale?: number;
+  bleedMm?: number;
 }
 
-/**
- * Bleed 가이드를 추가합니다.
- * 초록색 실선, 칼선 바깥 3mm
- */
-export async function addBleedGuides(
-  canvas: any,
-  config: { scale: number; canvasWidth: number; canvasHeight: number; bleedMm?: number }
-): Promise<{ bleedRect: any; safeRect: any; trimRect: any } | null> {
+export async function addBleedGuides(canvas: any, config: BleedConfig) {
   const { Rect } = await import("fabric");
   const bleedMm = config.bleedMm ?? DEFAULT_BLEED_MM;
-  const s = config.scale;
-
   removeBleedGuides(canvas);
 
-  const bbox = getDielineBBox(canvas);
-  if (!bbox) {
-    console.warn('[BLEED] No dieline found');
-    return null;
-  }
+  const g = canvas.getObjects().find((o: any) =>
+    o._isDieLine || o._isDieline || o._isGuideLayer ||
+    (o.name && (o.name.includes("dieline") || o.name.includes("__dieline")))
+  );
+  if (!g) { console.warn("[BLEED] No dieline found"); return null; }
 
-  const bleedPx = bleedMm * s;
+  // Calculate dieline bounds in object coordinates (zoom-independent)
+  // Group center is at (g.left, g.top)
+  // Rendered size = g.width * g.scaleX, g.height * g.scaleY
+  const gScaleX = g.scaleX || 1;
+  const gScaleY = g.scaleY || 1;
+  const renderedW = g.width * gScaleX;
+  const renderedH = g.height * gScaleY;
 
-  // 초록색 실선 bleed (Pacdora 스타일)
+  // Group origin is center by default in Fabric.js
+  const dieLeft = g.left - renderedW / 2;
+  const dieTop = g.top - renderedH / 2;
+
+  // Calculate bleed in object pixels
+  // pxPerMm = renderedW / actualMmWidth
+  // We know viewBox to mm conversion: svgMm = viewBox * 0.264583
+  // renderedW = g.width * gScaleX where g.width is in SVG units
+  // So pxPerMm = renderedW / (g.width * 0.264583)
+  const svgMm = config.svgMmW || g.width * 0.264583;
+  const pxPerMm = renderedW / svgMm;
+  const bleedPx = bleedMm * pxPerMm;
+
   const bleedRect = new Rect({
-    left: bbox.left - bleedPx,
-    top: bbox.top - bleedPx,
-    width: bbox.width + bleedPx * 2,
-    height: bbox.height + bleedPx * 2,
+    left: dieLeft - bleedPx,
+    top: dieTop - bleedPx,
+    width: renderedW + bleedPx * 2,
+    height: renderedH + bleedPx * 2,
     fill: "transparent",
-    stroke: "#22c55e",
+    stroke: "#ff3333",
     strokeWidth: 1,
-    strokeDashArray: undefined,
+    strokeDashArray: [],
     selectable: false,
     evented: false,
-    originX: 'left',
-    originY: 'top',
+    excludeFromExport: true,
+    name: "__bleed_guide__",
     _isBleedGuide: true,
-    _isGuideLayer: true,
-    name: `Bleed ${bleedMm}mm`,
   });
 
   canvas.add(bleedRect);
-  canvas.bringObjectToFront(bleedRect);
   canvas.requestRenderAll();
-
-  console.log(`[BLEED] Green solid line added: ${bleedMm}mm (${bleedPx.toFixed(1)}px) outside dieline`);
-  return { bleedRect, safeRect: null as any, trimRect: null as any };
+  console.log("[BLEED] Guide added: " + bleedMm + "mm = " + bleedPx.toFixed(1) + "px (pxPerMm=" + pxPerMm.toFixed(4) + ")");
+  console.log("[BLEED] Dieline: left=" + dieLeft.toFixed(1) + " top=" + dieTop.toFixed(1) + " w=" + renderedW.toFixed(1) + " h=" + renderedH.toFixed(1));
+  return bleedRect;
 }
 
-/**
- * 블리드 가이드 제거
- */
-export function removeBleedGuides(canvas: any): void {
-  const guides = canvas.getObjects().filter((o: any) => o._isBleedGuide);
+export function removeBleedGuides(canvas: any) {
+  const guides = canvas.getObjects().filter(
+    (o: any) => o._isBleedGuide || o.name === "__bleed_guide__"
+  );
   guides.forEach((g: any) => canvas.remove(g));
   if (guides.length > 0) canvas.requestRenderAll();
 }
 
-/**
- * 블리드 가이드 토글
- */
-export function toggleBleedGuides(canvas: any, visible: boolean): void {
-  const guides = canvas.getObjects().filter((o: any) => o._isBleedGuide);
-  guides.forEach((g: any) => g.set({ visible }));
+export function toggleBleedGuides(canvas: any, visible: boolean) {
+  canvas.getObjects().forEach((o: any) => {
+    if (o._isBleedGuide || o.name === "__bleed_guide__") {
+      o.visible = visible;
+    }
+  });
   canvas.requestRenderAll();
 }
 
-/**
- * PDF BleedBox/TrimBox (pt 단위)
- */
 export function calcPdfBoxes(
   canvasWidth: number,
   canvasHeight: number,
   bleedMm: number = DEFAULT_BLEED_MM
-): { trimBox: number[]; bleedBox: number[]; artBox: number[] } {
+) {
   const bleedPt = bleedMm * 2.83465;
   return {
     trimBox: [0, 0, canvasWidth, canvasHeight],
     bleedBox: [-bleedPt, -bleedPt, canvasWidth + bleedPt, canvasHeight + bleedPt],
-    artBox: [0, 0, canvasWidth, canvasHeight],
+    artBox: [bleedPt, bleedPt, canvasWidth - bleedPt, canvasHeight - bleedPt],
   };
 }

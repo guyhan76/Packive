@@ -1,4 +1,4 @@
-﻿// table-to-vector.ts - SVG post-processing
+// table-to-vector.ts - SVG post-processing
 import type { TableConfig, TableCellData } from "./table-engine";
 
 function createSvgElement(tag: string, attrs: Record<string, string | number>): Element {

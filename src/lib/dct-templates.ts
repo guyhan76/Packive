@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Die Cut Templates - FEFCO/ECMA to DCT template ID mapping
  * Template IDs from https://www.diecuttemplates.com/dielines
  */

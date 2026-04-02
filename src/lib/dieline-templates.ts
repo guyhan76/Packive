@@ -1,4 +1,4 @@
-﻿// --- Dieline Template Library v5 ---
+// --- Dieline Template Library v5 ---
 // FEFCO + ECMA global standard, 25 box types
 // Phase 1-1: Box type expansion (3 → 25)
 // EPM API modelName format: fefco_0201, A20_20_03_03

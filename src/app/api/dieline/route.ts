@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { generateDieline, downloadDieline, DctDielineVariables, DctConfig } from '@/lib/dct-api';
 import { getDctTemplateId, modelNameToBoxCode } from '@/lib/dct-templates';
 

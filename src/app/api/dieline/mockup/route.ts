@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { create3dMockup, DctConfig } from '@/lib/dct-api';
 
 function getDctConfig(): DctConfig {

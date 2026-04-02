@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 
 const S = ({ children, ...p }: React.SVGProps<SVGSVGElement> & { children: React.ReactNode }) => (
   <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}>{children}</svg>

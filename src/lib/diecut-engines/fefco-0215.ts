@@ -1,4 +1,4 @@
-﻿// FEFCO 0215: Tuck Top + Snap Lock Bottom
+// FEFCO 0215: Tuck Top + Snap Lock Bottom
 // High-precision engine — reference-accurate shapes
 // Bezier curves + true arcs for Illustrator-grade output
 

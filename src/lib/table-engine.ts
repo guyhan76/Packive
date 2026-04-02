@@ -1,4 +1,4 @@
-﻿// ─── Packive Table Engine v4 ───
+// ─── Packive Table Engine v4 ───
 // Canvas2D 렌더링 → FabricImage 방식
 
 export interface TableCellData {

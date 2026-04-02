@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Die Cut Templates API Client
  * https://www.diecuttemplates.com/docs/introduction
  */

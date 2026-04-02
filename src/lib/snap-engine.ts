@@ -1,4 +1,4 @@
-﻿// snap-engine.ts – canvas-local coordinate snap system
+// snap-engine.ts – canvas-local coordinate snap system
 export interface SnapLine {
   type: "v" | "h";   // vertical or horizontal
   pos: number;        // canvas-local coordinate (px)

@@ -1,4 +1,4 @@
-﻿// src/lib/text-to-outlines.ts
+// src/lib/text-to-outlines.ts
 // Convert SVG <text> elements to <path> outlines using opentype.js
 // This ensures fonts render identically in any environment
 // NOTE: opentype.js must be dynamically imported (Turbopack compatibility)

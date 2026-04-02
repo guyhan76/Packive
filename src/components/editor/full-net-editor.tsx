@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React, { useRef, useState, useCallback, useEffect, useMemo } from "react";
 
 interface PanelData { json: string | null; thumbnail: string | null; designed: boolean; }
