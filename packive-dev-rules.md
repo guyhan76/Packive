@@ -1,186 +1,188 @@
 # Packive Dev Rules & Strategy Guide
-> 최종 업데이트: 2026-04-02
-> 이 문서는 개발 시 항상 참고하여 방향을 잃지 않도록 합니다.
+> Last Updated: 2026-04-02
+> Review this document before every development session.
 
 ---
 
-## 1. 가격 정책 (확정)
+## 1. Pricing Policy (Confirmed)
 
-| 플랜 | 가격 | 크레딧 | 내용 |
+| Plan | Price | Credits | Description |
 |---|---|---|---|
-| **Free** | $0 | 10 크레딧 (1회) | 편집 무제한, 내보내기 불가, 워터마크 표시 |
-| **Single Export** | $9.99 | 15 크레딧 | 인쇄용 CMYK PDF 1회 + 3D 목업 1장 |
-| **Full Package** | $14.99 | 30 크레딧 | 인쇄용 CMYK PDF 3회 + 3D 목업 3장 + AI 벡터 5회 |
-| **Starter (월간)** | $19.99/월 | 100 크레딧/월 | 개인/소규모 사업자 |
-| **Pro (월간)** | $49.99/월 | 500 크레딧/월 | 전문 디자이너/중소기업 |
-| **Business (월간)** | $149/월 | 2,000 크레딧/월 | 인쇄소/에이전시/팀 |
-| **크레딧 추가 구매** | $9.99 | 100 크레딧 | 수시 구매 가능 |
+| **Free** | $0 | 10 credits (one-time) | Unlimited editing, no export, watermark |
+| **Single Export** | $9.99 | 15 credits | CMYK PDF x1 + 3D mockup x1 |
+| **Full Package** | $14.99 | 30 credits | CMYK PDF x3 + 3D mockup x3 + AI vector x5 |
+| **Starter (monthly)** | $19.99/mo | 100 credits/mo | Individual / small business |
+| **Pro (monthly)** | $49.99/mo | 500 credits/mo | Professional designer / SME |
+| **Business (monthly)** | $149/mo | 2,000 credits/mo | Print shop / agency / team |
+| **Credit top-up** | $9.99 | 100 credits | On-demand purchase |
 
-### 크레딧 소모 기준
+### Credit Consumption
 
-| 기능 | 크레딧 소모 |
+| Feature | Credits |
 |---|---|
-| 칼선 자동 생성 (EPM API) | 5 |
-| AI 벡터 생성 (Recraft V4) | 2 |
-| 3D 목업 생성 (Gemini) | 3 |
-| 브랜드 추출 (Firecrawl) | 1 |
-| CMYK PDF 내보내기 | 5 |
-| 디자인 편집/저장/로드 | 0 (무료) |
+| Dieline auto-generation (EPM API) | 5 |
+| AI vector generation (Recraft V4) | 2 |
+| 3D mockup generation (Gemini) | 3 |
+| Brand extraction (Firecrawl) | 1 |
+| CMYK PDF export | 5 |
+| Design edit / save / load | 0 (free) |
 
-### 업셀 흐름
-Free(체험) → Single $9.99(첫 결제) → Full $14.99(재구매) → Starter $19.99(월간 전환) → Pro $49.99 → Business $149
+### Upsell Flow
+Free (trial) -> Single $9.99 (first payment) -> Full $14.99 (repeat) -> Starter $19.99 (subscription) -> Pro $49.99 -> Business $149
 
-### 수익 목표
-- 1인 기업 월 순수익 $15,000 목표
-- 유료 회원 500명 × 평균 객단가(ARPU) $40 = 월 매출 $20,000
-- API 비용 ~35% 차감 후 순수익 $13,000~$15,000
+### Revenue Target
+- Solo founder target: $15,000/mo net profit
+- 500 paid users x $40 avg ARPU = $20,000/mo gross
+- API cost ~35% -> net $13,000~$15,000
 
 ---
 
-## 2. 경쟁사 분석: Packive vs Pacdora
+## 2. Competitor Analysis: Packive vs Pacdora
 
-### 직접 경쟁사: Pacdora (유일)
-- 가격: Pro $29/월, 연 $199 ($16.6/월)
-- 2025년 매출 $1.8M, 16명 팀, 600만+ 가입자
-- 5,700+ 사전제작 3D 목업, 3,000+ 칼선 템플릿
+### Direct Competitor: Pacdora (ONLY ONE)
+- Price: Pro $29/mo, Annual $199 ($16.6/mo)
+- 2025 revenue: $1.8M, 16 person team, 6M+ registered users
+- 5,700+ pre-made 3D mockups, 3,000+ dieline templates
 
-### Pacdora 강점 (우리가 대응해야 할 부분)
-| 항목 | 내용 | Packive 대응 |
+### Pacdora Strengths (We must respond)
+
+| Item | Detail | Packive Response |
 |---|---|---|
-| 3D 목업 라이브러리 | 5,700+ 사전제작 고품질 목업 | AI 실시간 생성 (Gemini)으로 무한 다양성 확보 |
-| 사용자 기반 | 600만 가입자, SEO 강력 | 가격 경쟁력 + AI 차별화로 공략 |
-| 리셀러 라이센스 | Business 플랜에 포함 | Phase 6에서 추가 예정 |
-| 브랜드 인지도 | 7년 축적 | 마케팅에서 "vs Pacdora" 비교 콘텐츠 활용 |
-| 2D↔3D 실시간 전환 | 디자인 변경 즉시 3D 반영 | Sprint 2에서 구현 |
+| 3D mockup library | 5,700+ pre-made high-quality | AI real-time generation (Gemini) = infinite variety |
+| User base | 6M users, strong SEO | Price advantage + AI differentiation |
+| Reseller license | Business plan only | Add in Phase 6 |
+| Brand recognition | 7 years accumulated | "vs Pacdora" comparison marketing |
+| 2D-3D real-time toggle | Design changes reflect in 3D instantly | Implement in Sprint 2 |
 
-### Pacdora 약점 (우리가 공략할 부분) ⭐
-| 약점 | Packive 차별화 |
+### Pacdora Weaknesses (We ATTACK here)
+
+| Weakness | Packive Advantage |
 |---|---|
-| **1회 결제 불가** | Single $9.99 / Full $14.99로 구독 부담 제거 |
-| **2D 편집기 약함** | Fabric.js 풀 에디터 (텍스트, 이미지, 도형, 표, 바코드, 심볼) |
-| **브랜드 자동화 없음** | URL 입력 → Firecrawl로 로고/색상/폰트 자동 추출 → 캔버스 적용 |
-| **AI가 래스터만 생성** | Recraft V4로 인쇄용 SVG 벡터 직접 생성 |
-| **면별 AI 디자인 없음** | Stitch MCP로 Panel Map 면별 자동 디자인 배치 |
-| **CMYK 엔진 불명확** | FOGRA39 ICC 기반 CMYK 소프트프루프 + PDF 내보내기 |
-| **박스 선택 UX 단순** | Packly식 2D+3D 동시 미리보기 (벤치마킹) |
+| **No one-time payment** | Single $9.99 / Full $14.99 = no subscription burden |
+| **Weak 2D editor** | Fabric.js full editor (text, image, shape, table, barcode, symbol) |
+| **No brand automation** | URL input -> Firecrawl auto-extract logo/colors/font -> apply to canvas |
+| **AI generates raster only** | Recraft V4 generates print-ready SVG vectors |
+| **No per-face AI design** | Stitch MCP auto-design per Panel Map face |
+| **CMYK engine unclear** | FOGRA39 ICC-based CMYK soft-proof + PDF export |
+| **Simple box selection UX** | Packly-style 2D+3D simultaneous preview |
 
-### Packive 핵심 마케팅 메시지
-1. **"Pacdora보다 34% 저렴"** — Starter $19.99 vs Pacdora Pro $29
-2. **"$9.99로 인쇄 시작"** — 구독 없이 CMYK PDF 1회 결제
-3. **"URL 하나로 완성 패키지 디자인"** — 브랜드 자동 추출 → AI 디자인
-4. **"벡터 AI"** — 인쇄 품질 SVG를 AI가 자동 생성
-5. **"세상에서 가장 간단하고 빠르고 저렴한 패키지 디자인"**
-
----
-
-## 3. Packly 벤치마킹 2가지 ⭐⭐
-
-### 벤치마킹 1: 박스 선택 화면 (2D 칼선 + 3D 박스 동시 미리보기)
-
-**Packly 방식:**
-- 50종+ 박스를 3D 렌더링 이미지로 카드형 나열
-- 각 카드에 박스 이름 + 3D 형태 이미지 표시
-- 클릭 시 치수 입력 화면으로 이동
-- 치수 입력하면 2D 칼선전개도 + 3D 박스 형태가 동시에 표시
-- 사용자가 한눈에 "이 치수면 이런 박스가 된다"를 확인
-
-**Packive 구현 방향:**
-- 좌측: 박스 카테고리 (맞뚜껑 A식, 조립 B식, FEFCO-0201, 슬리브, 싸바리 등)
-- 중앙: 선택한 박스의 3D 미리보기 이미지
-- 우측: 치수 입력 패널 (가로, 세로, 높이, 골지 두께)
-- 하단: 2D 칼선전개도 미리보기
-- "디자인 시작" 클릭 → 에디터로 이동, 칼선 자동 로드
-- **구현 시점: Sprint 1 (박스 선택 페이지)**
-
-### 벤치마킹 2: 디자인 완료 후 3D 목업 안내
-
-**Packly 방식:**
-- 디자인 편집 중/완료 후 "3D Preview" 버튼 클릭
-- 2D 칼선 위의 디자인이 즉시 3D 박스 형태로 접혀서 표시
-- 사용자가 각도를 돌려가며 실제 박스 모습 확인
-- 만족하면 "주문하기" 또는 "내보내기"로 진행
-
-**Packive 구현 방향:**
-- 에디터 상단에 "3D Preview" 탭 추가
-- 클릭 시 캔버스 캡처 → Gemini (Nano Banana 2)로 전송
-- 2~5초 내 포토리얼리스틱 3D 목업 이미지 생성
-- 배경 씬 선택 가능 (테이블, 매장 진열대, 스튜디오 등)
-- 3D 목업 이미지 다운로드 가능 (마케팅 용도)
-- **구현 시점: Sprint 2 (3D 목업 미리보기)**
+### Packive Core Marketing Messages
+1. "34% cheaper than Pacdora" - Starter $19.99 vs Pacdora Pro $29
+2. "Start printing at $9.99" - No subscription, just CMYK PDF
+3. "Complete package design from one URL" - Brand auto-extract -> AI design
+4. "Vector AI" - Print-quality SVG generated by AI
+5. "Simplest, fastest, cheapest package design platform"
 
 ---
 
-## 4. 핵심 사용자 플로우 (절대 잊지 말 것) ⭐⭐⭐
+## 3. Packly Benchmarks (2 items)
 
+### Benchmark 1: Box Selection Screen (2D dieline + 3D box simultaneous preview)
 
-박스 선택 → 치수 입력 → 칼선전개도 자동 생성 → 마음껏 디자인/수정 → AI로 더 빠르고 간단하게 → 3D 목업 확인 → 고화질 CMYK PDF 내보내기
+**Packly approach:**
+- 50+ box types shown as 3D rendered image cards
+- Each card: box name + 3D shape image
+- Click -> dimension input screen
+- Enter dimensions -> 2D dieline + 3D box preview shown simultaneously
+- User instantly sees "this dimension = this box shape"
+
+**Packive implementation:**
+- Left: Box categories (A-type, B-type, FEFCO-0201, Sleeve, Rigid box, etc.)
+- Center: 3D preview image of selected box
+- Right: Dimension input panel (width, height, depth, flute thickness)
+- Bottom: 2D dieline preview
+- "Start Design" click -> editor opens with dieline auto-loaded
+- **Timeline: Sprint 1 (Box selection page)**
+
+### Benchmark 2: 3D Mockup After Design Completion
+
+**Packly approach:**
+- During/after design editing, click "3D Preview" button
+- Design on 2D dieline instantly folds into 3D box shape
+- User rotates and inspects the actual box appearance
+- If satisfied, proceed to "Order" or "Export"
+
+**Packive implementation:**
+- "3D Preview" tab in editor top bar
+- Click -> canvas capture -> send to Gemini (Nano Banana 2)
+- 2~5 second photorealistic 3D mockup image generation
+- Selectable background scenes (table, store shelf, studio, etc.)
+- 3D mockup image downloadable (for marketing use)
+- **Timeline: Sprint 2 (3D mockup preview)**
+
+---
+
+## 4. Core User Flow (NEVER FORGET)
 
 Copy
-**사용자 반응 목표: "와~~~ 정말 끝내준다. 너무 좋다"**
-**개발 철학: "더 간단하고, 더 빠르게, 더 싸게"**
+Box select -> Dimensions -> Auto dieline generation -> Design freely -> AI makes it faster & simpler -> 3D mockup check -> CMYK PDF export
+
+Copy
+**Target user reaction: "WOW! This is amazing!"**
+**Dev philosophy: "Simpler, Faster, Cheaper"**
 
 ---
 
-## 5. 개발 스프린트 순서
+## 5. Sprint Schedule
 
-| Sprint | 기간 | 내용 | 핵심 |
+| Sprint | Period | Content | Key |
 |---|---|---|---|
-| **Sprint 1** | 4월 1~2주 | Firecrawl 브랜드 추출 + DESIGN.md | URL → 자동 브랜드 적용 |
-| **Sprint 2** | 4월 2~3주 | 3D 목업 (Nano Banana 2) | 3D Preview 탭, 2~5초 생성 |
-| **Sprint 3** | 4월 4주~5월 1주 | Panel Map 면 인식 고도화 | 면 클릭 하이라이트, clipPath |
-| **Sprint 4** | 5월 1~2주 | Recraft V4 벡터 생성 | 프롬프트 → SVG 벡터 |
-| **Sprint 5** | 5월 3~5주 | Stitch MCP 면별 자동 디자인 | 전체 자동화 파이프라인 |
-| **Sprint 6** | 6월 1~2주 | 고해상도 내보내기 + 템플릿 | CMYK PDF, 업종별 템플릿 |
+| **Sprint 1** | Apr W1-2 | Firecrawl brand extraction + DESIGN.md | URL -> auto brand apply |
+| **Sprint 2** | Apr W2-3 | 3D mockup (Nano Banana 2) | 3D Preview tab, 2~5s gen |
+| **Sprint 3** | Apr W4 ~ May W1 | Panel Map face recognition | Face click highlight, clipPath |
+| **Sprint 4** | May W1-2 | Recraft V4 vector generation | Prompt -> SVG vector |
+| **Sprint 5** | May W3-5 | Stitch MCP per-face auto design | Full automation pipeline |
+| **Sprint 6** | Jun W1-2 | High-res export + templates | CMYK PDF, industry templates |
 
 ---
 
-## 6. API 비용 관리
+## 6. API Cost Management
 
-| API | 단가 | 월 예산 한도 |
+| API | Unit Cost | Monthly Budget Limit |
 |---|---|---|
-| EasyPackMaker | $0.47/칼선 | 월 $500 (1,000건) |
-| Recraft V4 | $0.04/이미지 | 월 $400 (10,000건) |
-| Gemini Flash (3D) | $0.04~$0.15/이미지 | 월 $500 (5,000건) |
-| Firecrawl | $0.01/요청 (500 무료) | 월 $50 |
-| **합계** | | **월 최대 $1,450** |
+| EasyPackMaker | $0.47/dieline | $500 (1,000 calls) |
+| Recraft V4 | $0.04/image | $400 (10,000 calls) |
+| Gemini Flash (3D) | $0.04~$0.15/image | $500 (5,000 calls) |
+| Firecrawl | $0.01/request (500 free) | $50 |
+| **Total** | | **Max $1,450/mo** |
 
-### 비용 초과 방지 규칙
-- 무료 사용자: 10 크레딧 1회 제공 후 추가 없음
-- 모든 API 호출은 크레딧 차감 후 실행
-- 크레딧 잔액 0이면 API 호출 차단
-- 캔버스에 워터마크 (무료/미결제 시)
-- PNG/JPG 내보내기 없음 → 캡처 방지를 위해 워터마크 필수
+### Cost Prevention Rules
+- Free users: 10 credits one-time, no refill
+- All API calls require credit deduction BEFORE execution
+- Credit balance 0 = API call blocked
+- Canvas watermark for free/unpaid users
+- No PNG/JPG export -> watermark required for capture prevention
 
 ---
 
-## 7. 기술 스택 참고
+## 7. Tech Stack Reference
 
-| 항목 | 기술 |
+| Item | Technology |
 |---|---|
-| 프론트엔드 | Next.js + Fabric.js v7 (ES Module) |
-| Fabric 참조 | `fabricModRef.current` (window.fabric 사용 불가) |
-| CMYK 엔진 | FOGRA39 ICC LUT (583KB + 1MB reverse) |
-| 칼선 | EasyPackMaker API → SVG |
-| AI 벡터 | Recraft V4 API → SVG |
-| 3D 목업 | Gemini Flash Image (Nano Banana 2) |
-| 브랜드 추출 | Firecrawl API → DESIGN.md |
-| 면별 디자인 | Google Stitch MCP |
-| 상태 관리 | React useState + useRef |
-| 히스토리 | historyRef (JSON 스냅샷, 최대 50개, 200ms 딜레이) |
+| Frontend | Next.js + Fabric.js v7 (ES Module) |
+| Fabric ref | `fabricModRef.current` (window.fabric NOT available) |
+| CMYK engine | FOGRA39 ICC LUT (583KB + 1MB reverse) |
+| Dieline | EasyPackMaker API -> SVG |
+| AI vector | Recraft V4 API -> SVG |
+| 3D mockup | Gemini Flash Image (Nano Banana 2) |
+| Brand extraction | Firecrawl API -> DESIGN.md |
+| Per-face design | Google Stitch MCP |
+| State management | React useState + useRef |
+| History | historyRef (JSON snapshot, max 50, 200ms delay) |
 
 ---
 
-## 8. 주의사항 & 교훈
+## 8. Lessons Learned & Warnings
 
-- Fabric v7에서 `fabric.util.object.clone` 삭제됨 → `calcTransformMatrix()` 사용
-- `loadFromJSON` 후 이벤트 타이밍 이슈 → `loadingRef` 200ms 딜레이로 해결
-- Ungroup/Regroup은 현재 제거됨 (칼선 손상 위험)
-- `<input type="file">` JSX 파싱 오류 → Turbopack 캐싱 이슈, `.next` 삭제로 해결
-- 빌드는 항상 `npm run build 2>&1 | Select-String -Pattern "error|Error|Compiled"` 로 확인
-- 파일 수정은 PowerShell → Python 스크립트로 실행 (인코딩 UTF-8, newline='')
+- Fabric v7 removed `fabric.util.object.clone` -> use `calcTransformMatrix()`
+- After `loadFromJSON`, event timing issue -> `loadingRef` 200ms delay fix
+- Ungroup/Regroup removed (dieline corruption risk)
+- `<input type="file">` JSX parse error -> Turbopack caching, delete `.next` to fix
+- Always verify build: `npm run build 2>&1 | Select-String -Pattern "error|Error|Compiled"`
+- File edits via PowerShell -> Python script (encoding UTF-8, newline='')
 
 ---
 
-> **개발할 때마다 이 문서를 읽고 시작할 것.**
-> **모든 기능은 "더 간단하고, 더 빠르게, 더 싸게" 원칙에 부합해야 한다.**
-> **사용자가 "와~~~ 정말 끝내준다"라고 느끼지 못하면 출시하지 않는다.**
+> **Read this document before every dev session.**
+> **Every feature must follow: "Simpler, Faster, Cheaper"**
+> **If the user does not feel "WOW! This is amazing!" -> do NOT ship.**
