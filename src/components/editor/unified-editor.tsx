@@ -13,6 +13,8 @@ import { calcSnap, type SnapLine } from "@/lib/snap-engine";
 import { alignObjects, distributeObjects } from "@/lib/align-utils";
 import { addBleedGuides, removeBleedGuides, toggleBleedGuides } from "@/lib/bleed-guide";
 import { runPreflight, type PreflightResult } from "@/lib/preflight";
+import dynamic from 'next/dynamic';
+const Box3DMockupModal = dynamic(() => import("@/components/editor/box-3d-mockup-modal"), { ssr: false });
 import { RECRAFT_STYLES, PACKAGING_PRESETS } from "@/lib/recraft";
 import { DESIGN_CATEGORIES, DESIGN_TEMPLATES, getDesignTemplatesByCategory, placeTemplateOnCanvas, generateTemplatePreviewSVG, type DesignTemplate } from "@/lib/design-templates";
 import { PACKAGING_SYMBOLS, SYMBOL_CATEGORIES } from "@/lib/packaging-symbols";
@@ -78,7 +80,8 @@ function hexToCmyk(hex: string): [number,number,number,number] {
 function cmykToHex(c:number,m:number,y:number,k:number): string {
   if (c === 0 && m === 0 && y === 0 && k === 100) return "#000000"; if (c === 0 && m === 0 && y === 0 && k === 0) return "#ffffff"; if (isLUTReady()) return iccCmykToHex(c, m, y, k);
   const r = Math.round(255*(1-c/100)*(1-k/100)), g = Math.round(255*(1-m/100)*(1-k/100)), b = Math.round(255*(1-y/100)*(1-k/100));
-  return "#" + [r,g,b].map(v => Math.max(0,Math.min(255,v)).toString(16).padStart(2,"0")).join("");
+     a.download = `packive-3d-mockup-${L}x${W}x${D}.png`;
+
 }
 function hsvToHex(h:number,s:number,v:number): string {
   const c=v*s, x=c*(1-Math.abs((h/60)%2-1)), m=v-c;
@@ -206,6 +209,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [dielineInfoVisible, setDielineInfoVisible] = useState(true);
   const [dielineSizes, setDielineSizes] = useState<any>(null);
   const [dielineDims, setDielineDims] = useState<any>(null);
+  const [show3DMockup, setShow3DMockup] = useState(false);
+  const [mockupFaces, setMockupFaces] = useState<{face:string;dataUrl:string|null}[]>([]);
   const [dielineModelInfo, setDielineModelInfo] = useState<string>('');
   const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null);
   const [showPreflight, setShowPreflight] = useState(false);
@@ -3189,23 +3194,140 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 <button onClick={() => { setSnapEnabled(p => { if(p) setSnapLines([]); return !p; }); }} className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${snapEnabled ? "bg-blue-100 text-blue-700" : "text-gray-400 hover:text-gray-600"}`}>
                   {snapEnabled ? "Snap ON" : "Snap OFF"}
                 </button>
-                <button onClick={async () => {
-                  const cv = fcRef.current; if (!cv) return;
-                  if (showBleedGuides) { removeBleedGuides(cv); setShowBleedGuides(false); }
-                    else {
-                      const result = await addBleedGuides(cv, {
-                        scale: scaleRef.current,
-                        svgMmW: svgMmWRef.current,
-                        canvasWidth: cv.getWidth(),
-                        canvasHeight: cv.getHeight(),
-                        bleedMm: 3,
+                                <button onClick={() => {
+                  const cv = fcRef.current;
+                  if (!cv || !dielineDims) { alert('Please load a dieline first.'); return; }
+                  const g = cv.getObjects().find((o: any) => o._isDieLine || o._isDieline);
+                  if (!g) { alert('No dieline found.'); return; }
+                  const origVisible = g.visible;
+                  g.visible = false;
+                  cv.requestRenderAll();
+                  setTimeout(() => {
+                    try {
+                      const gs = g.scaleX || 1;
+                      const gW = g.width * gs;
+                      const gH = g.height * gs;
+                      const gLeft = g.originX === 'center' ? g.left - gW / 2 : g.left;
+                      const gTop = g.originY === 'center' ? g.top - gH / 2 : g.top;
+                      const folds = (g._objects || []).filter((p: any) => p.type === 'path' && (p.stroke || '').includes('0,166,80'));
+                      const vertFolds: number[] = [];
+                      const horzFolds: number[] = [];
+                      folds.forEach((p: any) => {
+                        const b = p.getBoundingRect();
+                        if (b.width < 5 && b.height > 50) vertFolds.push(b.left);
+                        if (b.height < 5 && b.width > 50) horzFolds.push(b.top);
                       });
-                      if (result) { setShowBleedGuides(true); }
-                      else { alert("No dieline found. Please generate a dieline first."); }
+                      vertFolds.sort((a: number, b: number) => a - b);
+                      horzFolds.sort((a: number, b: number) => a - b);
+
+                      const topFoldY = horzFolds.length > 0 ? horzFolds[0] : gTop;
+                      const botFoldY = horzFolds.length > 1 ? horzFolds[horzFolds.length - 1] : (gTop + gH);
+                      const topEdge = gTop;
+                      const botEdge = gTop + gH;
+
+                      const faces: {face:string; dataUrl:string|null}[] = [];
+                      const srcCanvas = cv.getElement() as HTMLCanvasElement;
+                      const vp = cv.viewportTransform || [1,0,0,1,0,0];
+                      const dpr = srcCanvas.width / cv.getWidth();
+
+                      const cropFace = (x1: number, y1: number, x2: number, y2: number): string | null => {
+                        if (x1 >= x2 || y1 >= y2) return null;
+                        const sx = (x1 * vp[0] + vp[4]) * dpr;
+                        const sy = (y1 * vp[3] + vp[5]) * dpr;
+                        const sw = (x2 - x1) * vp[0] * dpr;
+                        const sh = (y2 - y1) * vp[3] * dpr;
+                        const tmp = document.createElement('canvas');
+                        tmp.width = Math.round(sw);
+                        tmp.height = Math.round(sh);
+                        const ctx = tmp.getContext('2d');
+                        if (!ctx) return null;
+                        ctx.drawImage(srcCanvas, Math.round(sx), Math.round(sy), Math.round(sw), Math.round(sh), 0, 0, tmp.width, tmp.height);
+                        return tmp.toDataURL('image/png');
+                      };
+
+                      if (vertFolds.length >= 3) {
+                        // 4 main sides
+                        const sideMap = [
+                          { face: 'front', x1: vertFolds[0], x2: vertFolds[1] },
+                          { face: 'right', x1: vertFolds[1], x2: vertFolds[2] },
+                          { face: 'back',  x1: vertFolds[2], x2: vertFolds[3] || (gLeft + gW) },
+                          { face: 'left',  x1: vertFolds[3] || vertFolds[2], x2: vertFolds[4] || (gLeft + gW) },
+                        ];
+                        sideMap.forEach(s => {
+                          const url = cropFace(s.x1, topFoldY, s.x2, botFoldY);
+                          if (url) faces.push({ face: s.face, dataUrl: url });
+                        });
+
+                        // Top face: front top-flap + back top-flap combined
+                        const ftX1 = vertFolds[0], ftX2 = vertFolds[1];
+                        const btX1 = vertFolds[2], btX2 = vertFolds[3] || (gLeft + gW);
+                        const flapH = topFoldY - topEdge;
+                        if (flapH > 2) {
+                          const fw = Math.round((ftX2 - ftX1) * vp[0] * dpr);
+                          const fh = Math.round(flapH * vp[3] * dpr);
+                          const bw = Math.round((btX2 - btX1) * vp[0] * dpr);
+                          const topCv = document.createElement('canvas');
+                          const finalW = Math.max(fw, bw);
+                          topCv.width = finalW;
+                          topCv.height = fh * 2;
+                          const tc = topCv.getContext('2d');
+                          if (tc) {
+                            // Front flap: draw at top
+                            const fsx = (ftX1 * vp[0] + vp[4]) * dpr;
+                            const fsy = (topEdge * vp[3] + vp[5]) * dpr;
+                            tc.drawImage(srcCanvas, Math.round(fsx), Math.round(fsy), fw, fh, 0, 0, finalW, fh);
+                            // Back flap: draw at bottom, rotated 180 degrees
+                            const bsx = (btX1 * vp[0] + vp[4]) * dpr;
+                            const bsy = (topEdge * vp[3] + vp[5]) * dpr;
+                            tc.save();
+                            tc.translate(finalW, fh * 2);
+                            tc.scale(-1, -1);
+                            tc.drawImage(srcCanvas, Math.round(bsx), Math.round(bsy), bw, fh, 0, 0, finalW, fh);
+                            tc.restore();
+                            faces.push({ face: 'top', dataUrl: topCv.toDataURL('image/png') });
+                          }
+                        }
+
+                        // Bottom face: front bottom-flap + back bottom-flap combined
+                        const bflapH = botEdge - botFoldY;
+                        if (bflapH > 2) {
+                          const fw = Math.round((ftX2 - ftX1) * vp[0] * dpr);
+                          const fh = Math.round(bflapH * vp[3] * dpr);
+                          const bw = Math.round((btX2 - btX1) * vp[0] * dpr);
+                          const botCv = document.createElement('canvas');
+                          const finalW = Math.max(fw, bw);
+                          botCv.width = finalW;
+                          botCv.height = fh * 2;
+                          const bc = botCv.getContext('2d');
+                          if (bc) {
+                            // Front flap: draw at top
+                            const fsx = (ftX1 * vp[0] + vp[4]) * dpr;
+                            const fsy = (botFoldY * vp[3] + vp[5]) * dpr;
+                            bc.drawImage(srcCanvas, Math.round(fsx), Math.round(fsy), fw, fh, 0, 0, finalW, fh);
+                            // Back flap: draw at bottom, rotated 180 degrees
+                            const bsx = (btX1 * vp[0] + vp[4]) * dpr;
+                            const bsy = (botFoldY * vp[3] + vp[5]) * dpr;
+                            bc.save();
+                            bc.translate(finalW, fh * 2);
+                            bc.scale(-1, -1);
+                            bc.drawImage(srcCanvas, Math.round(bsx), Math.round(bsy), bw, fh, 0, 0, finalW, fh);
+                            bc.restore();
+                            faces.push({ face: 'bottom', dataUrl: botCv.toDataURL('image/png') });
+                          }
+                        }
+                      }
+                      setMockupFaces(faces);
+                      setShow3DMockup(true);
+                    } finally {
+                      g.visible = origVisible;
+                      cv.requestRenderAll();
                     }
-                }} className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${showBleedGuides ? "bg-red-100 text-red-700" : "text-gray-400 hover:text-gray-600"}`}>
-                  {showBleedGuides ? "Bleed ON" : "Bleed OFF"}
+                  }, 100);
+                }} className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${dielineDims ? 'text-violet-500 hover:text-violet-700 hover:bg-violet-50' : 'text-gray-300 cursor-not-allowed'}`} disabled={!dielineDims}>
+                  3D Mockup
                 </button>
+
+               
                 <button onClick={() => {
                   const cv = fcRef.current; if (!cv) return;
                   const result = runPreflight(cv, { scale: scaleRef.current });
@@ -4838,7 +4960,18 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           </div>
         </div>
       )}
+     {show3DMockup && (
+        <Box3DMockupModal
+          open={show3DMockup}
+          onClose={() => { setShow3DMockup(false); setMockupFaces([]); }}
+          faceTextures={mockupFaces}
+          L={dielineDims?.L || 300}
+          W={dielineDims?.W || 200}
+          D={dielineDims?.D || 100}
+        />
+      )}
     </div>
+          
   );
 }
 
