@@ -1522,7 +1522,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           c.setActiveObject(as); c.requestRenderAll();
         }
       }
-      else if (e.key === "Escape") { if (drawMode) { const cv = fcRef.current; if (cv) { cv.isDrawingMode = false; } setDrawMode(false); } }
+            else if (e.key === "Escape") { if (drawMode) { const cv = fcRef.current; if (cv) { cv.isDrawingMode = false; } setDrawMode(false); } if (measureMode) { const cv = fcRef.current; if(cv){cv.selection=true;cv.forEachObject((o:any)=>{o.selectable=o._prevSelectable!==undefined?o._prevSelectable:true;o.evented=o._prevEvented!==undefined?o._prevEvented:true;delete o._prevSelectable;delete o._prevEvented;});cv.requestRenderAll();} setMeasureMode(false);setMeasureResult("");setMeasurePts([]);setMeasureMouseMm(null); } }
+
       else if (e.key.startsWith("Arrow")) {
         const obj = c.getActiveObject(); if (!obj) return;
         e.preventDefault();
@@ -1536,7 +1537,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-    }, [undo, redo, pushHistory, refreshLayers, drawMode]);
+        }, [undo, redo, pushHistory, refreshLayers, drawMode, measureMode]);
+
 
 
   // ─── Add Text ───
@@ -2397,7 +2399,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           ))}
           <div className="w-8 h-px bg-gray-200 my-1" />
           <span className="text-[7px] font-bold text-gray-400 tracking-widest mb-0.5">MEASURE</span>
-          <button onClick={() => { setMeasureMode(m => { if(!m){setMeasurePts([]);setMeasureMouseMm(null);setMeasureResult("Click first point...");} else {setMeasureResult("");} return !m; }); }}
+                    <button onClick={() => { setMeasureMode(m => { const c = fcRef.current; if(!m){setMeasurePts([]);setMeasureMouseMm(null);setMeasureResult("Click first point..."); if(c){c.selection=false;c.forEachObject((o:any)=>{o._prevSelectable=o.selectable;o._prevEvented=o.evented;o.selectable=false;o.evented=false;});c.discardActiveObject();c.requestRenderAll();}} else {setMeasureResult(""); if(c){c.selection=true;c.forEachObject((o:any)=>{o.selectable=o._prevSelectable!==undefined?o._prevSelectable:true;o.evented=o._prevEvented!==undefined?o._prevEvented:true;delete o._prevSelectable;delete o._prevEvented;});c.requestRenderAll();}} return !m; }); }}
             className={`w-11 h-11 flex flex-col items-center justify-center rounded-lg transition-all ${measureMode ? "bg-cyan-50 text-cyan-600 shadow-sm" : "text-gray-500 hover:bg-white hover:shadow-sm hover:text-gray-800"}`}>
             <span className="text-sm">📏</span>
             <span className="text-[8px] mt-0.5 font-medium">Measure</span>
