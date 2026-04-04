@@ -562,10 +562,21 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
 
 
   // ─── Layer management ───
-  const refreshLayers = useCallback(() => {
+   const refreshLayers = useCallback(() => {
     const c = fcRef.current; if (!c) return;
+
+    // ── Always bring dieline/guide objects to top so they are never hidden ──
+    const allObjs = c.getObjects();
+    const dieObjs = allObjs.filter((o: any) =>
+      o._isDieLine || o._isFoldLine || o._isGuideLayer || o._isPanelLabel || o._isDieline
+    );
+    if (dieObjs.length > 0) {
+      dieObjs.forEach((o: any) => c.bringObjectToFront(o));
+    }
+
+    // ── Build layer list (user objects only) ──
     const objs = c.getObjects().filter((o: any) =>
-      o.selectable !== false && !o._isDieLine && !o._isFoldLine && !o._isGuideLayer && !o._isPanelLabel
+      o.selectable !== false && !o._isDieLine && !o._isFoldLine && !o._isGuideLayer && !o._isPanelLabel && !o._isDieline
     );
     let imgCount = 1, rectCount = 1, circCount = 1, triCount = 1, ellCount = 1, polyCount = 1, lineCount = 1, pathCount = 1, grpCount = 1;
     const list = objs.map((o: any, i: number) => ({
@@ -600,6 +611,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     })).reverse();
     setLayersList(list);
   }, []);
+
 
   // ─── Zoom ───
 
@@ -4978,7 +4990,50 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             {/* ─── Layers Tab ─── */}
             {rightTab === "layers" && (
               <div className="space-y-1">
-                <div className="text-xs font-semibold text-gray-700 mb-2">Layers ({layersList.length})</div>
+                <div className="text-xs font-semibold text-gray-700 mb-2">Layers</div>
+
+{/* ── Dieline Fixed Layer (Adobe Illustrator style) ── */}
+{(() => {
+  const cv = fcRef.current;
+  const hasDie = cv ? cv.getObjects().some((o: any) => o._isDieLine || o._isDieline || o._isFoldLine) : false;
+  if (!hasDie) return null;
+  return (
+    <div className="flex items-center gap-2 px-2 py-2 rounded-lg bg-red-50 border border-red-200 mb-2 text-xs">
+      <button onClick={() => {
+        const cv2 = fcRef.current; if (!cv2) return;
+        const nv = !dielineVisible;
+        setDielineVisible(nv);
+        cv2.getObjects().forEach((o: any) => {
+          if (o._isDieLine || o._isDieline || o._isFoldLine || o._isGuideLayer || o._isPanelLabel) {
+            o.visible = nv;
+          }
+        });
+        cv2.requestRenderAll();
+      }} className="text-gray-500 hover:text-gray-800 text-sm" title={dielineVisible ? "Hide Dieline" : "Show Dieline"}>
+        {dielineVisible ? "\uD83D\uDC41" : "\uD83D\uDC41\u200D\uD83D\uDDE8"}
+      </button>
+      <div className="flex-1 flex items-center gap-1.5 min-w-0">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+        <span className="truncate text-red-700 font-bold">Dieline</span>
+      </div>
+      <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-600 font-bold shrink-0">CUT</span>
+      <button onClick={() => {
+        const cv2 = fcRef.current; if (!cv2) return;
+        const nl = !dielineLocked;
+        setDielineLocked(nl);
+        cv2.getObjects().forEach((o: any) => {
+          if (o._isDieLine || o._isDieline || o._isFoldLine) {
+            o.set({ selectable: !nl, evented: !nl, lockMovementX: nl, lockMovementY: nl, lockScalingX: nl, lockScalingY: nl, lockRotation: nl, hasControls: !nl, hasBorders: !nl });
+          }
+        });
+        cv2.requestRenderAll();
+      }} className={`text-sm ${dielineLocked ? 'text-red-500' : 'text-green-500'} hover:text-red-700`} title={dielineLocked ? "Unlock Dieline" : "Lock Dieline"}>
+        {dielineLocked ? "\uD83D\uDD12" : "\uD83D\uDD13"}
+      </button>
+    </div>
+  );
+})()}
+
                 {layersList.length === 0 ? (
                   <div className="text-xs text-gray-400 text-center py-6">No objects yet</div>
                 ) : layersList.map((layer, i) => (

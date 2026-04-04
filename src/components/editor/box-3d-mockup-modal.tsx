@@ -229,7 +229,7 @@ export default function Box3DMockupModal({ open, onClose, faceTextures, L, W, D 
           <div className="flex items-center gap-2">
             <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
               <button
-                onClick={() => { setBoxMaterial('white'); setAiImage(null); }}
+                onClick={() => { setBoxMaterial('white');}}
                 className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${
                   boxMaterial === 'white' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                 }`}
@@ -238,7 +238,7 @@ export default function Box3DMockupModal({ open, onClose, faceTextures, L, W, D 
                 White
               </button>
               <button
-                onClick={() => { setBoxMaterial('kraft'); setAiImage(null); }}
+                onClick={() => { setBoxMaterial('kraft');}}
                 className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${
                   boxMaterial === 'kraft' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                 }`}
