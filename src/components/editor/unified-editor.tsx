@@ -212,10 +212,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [show3DMockup, setShow3DMockup] = useState(false);
   const [mockupFaces, setMockupFaces] = useState<{face:string;dataUrl:string|null}[]>([]);
   const [dielineModelInfo, setDielineModelInfo] = useState<string>('');
-  const [showAIMockup, setShowAIMockup] = useState(false);
-  const [aiMockupImage, setAiMockupImage] = useState<string | null>(null);
-  const [aiMockupLoading, setAiMockupLoading] = useState(false);
-
+ 
   const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null);
   const [showPreflight, setShowPreflight] = useState(false);
   // ─── AI Panel State ───
@@ -1508,7 +1505,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           c.setActiveObject(as); c.requestRenderAll();
         }
       }
-      else if (e.key === "F1") { e.preventDefault(); setShowShortcuts(prev => !prev); }
+      else if (e.key === "Escape") { if (drawMode) { const cv = fcRef.current; if (cv) { cv.isDrawingMode = false; } setDrawMode(false); } }
       else if (e.key.startsWith("Arrow")) {
         const obj = c.getActiveObject(); if (!obj) return;
         e.preventDefault();
@@ -1522,7 +1519,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [undo, redo, pushHistory, refreshLayers]);
+    }, [undo, redo, pushHistory, refreshLayers, drawMode]);
 
 
   // ─── Add Text ───
@@ -1664,9 +1661,14 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     else if (type === "roundsquare") s = new Rect({ left: cx-hsz, top: cy-hsz, width: sz, height: sz, fill: color, rx: 10, ry: 10 });
     else if (type === "circle") s = new Circle({ left: cx-hsz, top: cy-hsz, radius: hsz, fill: color });
     else if (type === "ellipse") s = new Ellipse({ left: cx-sz, top: cy-hsz*0.7, rx: sz, ry: hsz*0.7, fill: color });
-    else if (type === "ring") s = new Circle({ left: cx-hsz, top: cy-hsz, radius: hsz, fill: "", stroke: color, strokeWidth: 8 });
+    else if (type === "ring") s = new Circle({ left: cx-hsz, top: cy-hsz, radius: hsz, fill: "", stroke: color, strokeWidth: 0.5 });
     else if (type === "semicircle") s = new Path(`M ${cx-hsz} ${cy} A ${hsz} ${hsz} 0 0 1 ${cx+hsz} ${cy} Z`, { fill: color });
     else if (type === "quarter") s = new Path(`M ${cx} ${cy} L ${cx+hsz} ${cy} A ${hsz} ${hsz} 0 0 0 ${cx} ${cy-hsz} Z`, { fill: color });
+    else if (type === "ellipseframe") s = new Ellipse({ left: cx-sz, top: cy-hsz*0.7, rx: sz, ry: hsz*0.7, fill: "", stroke: color, strokeWidth: 0.5 });
+    else if (type === "semicircleframe") s = new Path(`M ${cx-hsz} ${cy} A ${hsz} ${hsz} 0 0 1 ${cx+hsz} ${cy} L ${cx-hsz} ${cy}`, { fill: "", stroke: color, strokeWidth: 0.5 });
+    else if (type === "quarterframe") s = new Path(`M ${cx} ${cy} L ${cx} ${cy-hsz} A ${hsz} ${hsz} 0 0 1 ${cx+hsz} ${cy} Z`, { fill: "", stroke: color, strokeWidth: 0.5, strokeLineJoin: "round" });
+
+
 
     // === Polygons ===
     else if (type === "triangle") s = new Triangle({ left: cx-hsz, top: cy-hsz, width: sz, height: sz, fill: color });
@@ -1704,6 +1706,26 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     else if (type === "dotted") s = new FL([cx-sz, cy, cx+sz, cy], { stroke: color, strokeWidth: 3, strokeDashArray: [3,3], fill: "" });
     else if (type === "thick") s = new FL([cx-sz, cy, cx+sz, cy], { stroke: color, strokeWidth: 8, fill: "" });
     else if (type === "diagonal") s = new FL([cx-hsz, cy+hsz, cx+hsz, cy-hsz], { stroke: color, strokeWidth: 3, fill: "" });
+    else if (type === "arc") s = new Path(`M ${cx-hsz} ${cy} Q ${cx} ${cy-hsz*1.5} ${cx+hsz} ${cy}`, { fill: "", stroke: color, strokeWidth: 1 });
+    else if (type === "semicircleline") s = new Path(`M ${cx-hsz} ${cy} A ${hsz} ${hsz} 0 0 1 ${cx+hsz} ${cy}`, { fill: "", stroke: color, strokeWidth: 1 });
+    else if (type === "waveline") s = new Path(`M ${cx-sz} ${cy} Q ${cx-hsz*0.5} ${cy-hsz} ${cx} ${cy} Q ${cx+hsz*0.5} ${cy+hsz} ${cx+sz} ${cy}`, { fill: "", stroke: color, strokeWidth: 1 });
+        else if (type === "freehand") {
+      if (c.isDrawingMode) {
+        c.isDrawingMode = false;
+        setDrawMode(false);
+      } else {
+        c.isDrawingMode = true;
+        const fab = (window as any).__fabric || require("fabric");
+        if (fab && fab.PencilBrush) {
+          const brush = new fab.PencilBrush(c);
+          brush.color = color; brush.width = brushSize;
+          c.freeDrawingBrush = brush;
+        }
+        setDrawMode(true);
+      }
+      return;
+    }
+
 
     // === Symbols ===
     else if (type === "heart") s = new Path("M 25 45 L 5 25 A 10 10 0 0 1 25 10 A 10 10 0 0 1 45 25 Z", { left: cx-22, top: cy-22, fill: color });
@@ -1726,9 +1748,9 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     else if (type === "tab") s = new Path("M 0 10 Q 0 0 10 0 L 50 0 Q 60 0 60 10 L 60 40 L 0 40 Z", { left: cx-30, top: cy-20, fill: color });
     else if (type === "capsule") s = new Rect({ left: cx-sz, top: cy-hsz*0.5, width: sz*2, height: hsz, fill: color, rx: hsz*0.5, ry: hsz*0.5 });
     else if (type === "arch") s = new Path(`M ${cx-sz} ${cy+hsz} L ${cx-sz} ${cy-hsz*0.3} A ${sz} ${sz*0.7} 0 0 1 ${cx+sz} ${cy-hsz*0.3} L ${cx+sz} ${cy+hsz} Z`, { fill: color });
-    else if (type === "frame") { s = new Rect({ left: cx-sz, top: cy-hsz, width: sz*2, height: sz, fill: "", stroke: color, strokeWidth: 6 }); }
-    else if (type === "roundframe") { s = new Rect({ left: cx-sz, top: cy-hsz, width: sz*2, height: sz, fill: "", stroke: color, strokeWidth: 6, rx: 12, ry: 12 }); }
-    else if (type === "circleframe") { s = new Circle({ left: cx-hsz, top: cy-hsz, radius: hsz, fill: "", stroke: color, strokeWidth: 6 }); }
+    else if (type === "frame") { s = new Rect({ left: cx-sz, top: cy-hsz, width: sz*2, height: sz, fill: "", stroke: color, strokeWidth: 0.5 }); }
+    else if (type === "squareframe") { s = new Rect({ left: cx-hsz, top: cy-hsz, width: sz, height: sz, fill: "", stroke: color, strokeWidth: 0.5, rx: 6, ry: 6 }); }
+    else if (type === "roundframe") { s = new Rect({ left: cx-sz, top: cy-hsz, width: sz*2, height: sz, fill: "", stroke: color, strokeWidth: 0.5, rx: 12, ry: 12 }); }
 
     if (s) { c.add(s); c.setActiveObject(s); c.renderAll(); refreshLayers(); pushHistory(); }
     setShowShapePanel(false);
@@ -2407,20 +2429,24 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 <div className="text-[9px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Basic</div>
                 <div className="grid grid-cols-5 gap-1">
 
-                  {([
+                                  {([
                     {id:"rect",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><rect x="2" y="6" width="20" height="12" fill="currentColor"/></svg>},
                     {id:"square",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><rect x="4" y="4" width="16" height="16" fill="currentColor"/></svg>},
                     {id:"roundrect",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><rect x="2" y="6" width="20" height="12" rx="4" fill="currentColor"/></svg>},
                     {id:"roundsquare",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><rect x="4" y="4" width="16" height="16" rx="4" fill="currentColor"/></svg>},
                     {id:"circle",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><circle cx="12" cy="12" r="10" fill="currentColor"/></svg>},
                     {id:"ellipse",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><ellipse cx="12" cy="12" rx="11" ry="7" fill="currentColor"/></svg>},
-                    {id:"ring",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="3"/></svg>},
                     {id:"semicircle",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M2 14 A10 10 0 0 1 22 14 Z" fill="currentColor"/></svg>},
                     {id:"quarter",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M12 12 L12 2 A10 10 0 0 1 22 12 Z" fill="currentColor"/></svg>},
-                    {id:"frame",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><rect x="2" y="4" width="20" height="16" fill="none" stroke="currentColor" strokeWidth="3"/></svg>},
-                    {id:"roundframe",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><rect x="2" y="4" width="20" height="16" rx="4" fill="none" stroke="currentColor" strokeWidth="3"/></svg>},
-                    {id:"circleframe",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="3"/></svg>},
-                  ] as {id:string;icon:React.ReactNode}[]).map(s => (
+                    {id:"frame",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><rect x="3" y="5" width="18" height="14" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg>},
+                    {id:"squareframe",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg>},
+                    {id:"roundframe",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><rect x="3" y="5" width="18" height="14" rx="5" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg>},
+                    {id:"ring",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg>},
+                    {id:"ellipseframe",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><ellipse cx="12" cy="12" rx="11" ry="7" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg>},
+                    {id:"semicircleframe",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M2 14 A10 10 0 0 1 22 14 M2 14 L22 14" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg>},
+                    {id:"quarterframe",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M12 2 A10 10 0 0 1 22 12 L12 12 L12 2" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg>},
+                  ] as {id:string;icon:React.ReactNode}[]).map(s => (             
+
                     <button key={s.id} onClick={() => addShape(s.id)} title={s.id}
                       className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-gray-600 transition-all hover:scale-105">{s.icon}</button>
                   ))}
@@ -2492,15 +2518,19 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
               <div className="mb-3">
                 <div className="text-[9px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Lines</div>
                 <div className="grid grid-cols-5 gap-1">
-                  {([
+                                 {([
                     {id:"line",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="2"/></svg>},
                     {id:"dashed",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="2" strokeDasharray="4 3"/></svg>},
                     {id:"dotted",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="2" strokeDasharray="2 2"/></svg>},
                     {id:"thick",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="5"/></svg>},
                     {id:"diagonal",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><line x1="4" y1="20" x2="20" y2="4" stroke="currentColor" strokeWidth="2"/></svg>},
-                  ] as {id:string;icon:React.ReactNode}[]).map(s => (
+                    {id:"arc",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M3 16 Q12 2 21 16" fill="none" stroke="currentColor" strokeWidth="2"/></svg>},
+                    {id:"semicircleline",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M3 14 A9 9 0 0 1 21 14" fill="none" stroke="currentColor" strokeWidth="2"/></svg>},
+                    {id:"waveline",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M2 12 Q7 4 12 12 Q17 20 22 12" fill="none" stroke="currentColor" strokeWidth="2"/></svg>},
+                    {id:"freehand",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M3 17 C5 14 7 8 10 10 C13 12 14 6 17 8 C20 10 21 7 22 7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>},
+                                    ] as {id:string;icon:React.ReactNode}[]).map(s => (
                     <button key={s.id} onClick={() => addShape(s.id)} title={s.id}
-                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-gray-600 transition-all hover:scale-105">{s.icon}</button>
+                      className={`w-full aspect-square flex items-center justify-center rounded-lg border transition-all hover:scale-105 ${s.id === 'freehand' && drawMode ? 'border-blue-500 bg-blue-100 text-blue-600' : 'border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-gray-600'}`}>{s.icon}</button>
                   ))}
                 </div>
               </div>
@@ -3498,75 +3528,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 }} className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${dielineDims ? 'text-violet-500 hover:text-violet-700 hover:bg-violet-50' : 'text-gray-300 cursor-not-allowed'}`} disabled={!dielineDims}>
                   3D Mockup
                 </button>
-                              <button onClick={async () => {
-                  const cv = fcRef.current;
-                  if (!cv || !dielineDims) { alert('Please load a dieline first.'); return; }
-                  setAiMockupLoading(true);
-                  setShowAIMockup(true);
-                  setAiMockupImage(null);
-                  try {
-                    // Step 1: Trigger 3D Mockup capture first (reuse existing face crop logic)
-                    const g = cv.getObjects().find((o: any) => o._isDieLine || o._isDieline);
-                    if (!g) { alert('No dieline found.'); return; }
-                    const origVisible = g.visible;
-                    g.visible = false;
-                    cv.requestRenderAll();
-                    
-                    await new Promise(r => setTimeout(r, 150));
-                    
-                    const gs = g.scaleX || 1;
-                    const gW = g.width * gs;
-                    const gH = g.height * gs;
-                    const gLeft = g.originX === 'center' ? g.left - gW / 2 : g.left;
-                    const gTop = g.originY === 'center' ? g.top - gH / 2 : g.top;
-                    const folds = (g._objects || []).filter((p: any) => p.type === 'path' && (p.stroke || '').includes('0,166,80'));
-                    const vertFolds: number[] = [];
-                    const horzFolds: number[] = [];
-                    folds.forEach((p: any) => {
-                      const b = p.getBoundingRect();
-                      if (b.width < 5 && b.height > 50) vertFolds.push(b.left);
-                      if (b.height < 5 && b.width > 50) horzFolds.push(b.top);
-                    });
-                    vertFolds.sort((a: number, b: number) => a - b);
-                    horzFolds.sort((a: number, b: number) => a - b);
-                    
-                    // Capture full canvas with design only (no dieline)
-                    const dataUrl = cv.toDataURL({ format: 'png', multiplier: 2 });
-                    
-                    g.visible = origVisible;
-                    cv.requestRenderAll();
-                    
-                    // Step 2: Send to AI with enhance mode using the 3D mockup screenshot
-                    // First try to get 3D canvas screenshot if modal is available
-                    const res = await fetch('/api/ai-mockup', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        imageBase64: dataUrl,
-                        L: dielineDims.L,
-                        W: dielineDims.W,
-                        D: dielineDims.D,
-                        boxType: 'FEFCO 0201',
-                        mode: 'dieline',
-                      }),
-                    });
-                    const data = await res.json();
-                    if (data.image) {
-                      setAiMockupImage(data.image);
-                    } else {
-                      alert('AI Mockup generation failed: ' + (data.error || 'Unknown error'));
-                    }
-                  } catch (err: any) {
-                    alert('AI Mockup error: ' + err.message);
-                  } finally {
-                    setAiMockupLoading(false);
-                  }
-                }} className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${dielineDims ? 'text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50' : 'text-gray-300 cursor-not-allowed'}`} disabled={!dielineDims || aiMockupLoading}>
-                  {aiMockupLoading ? 'Generating...' : 'AI Mockup'}
-                </button>
-
-
-               
+                            
                 <button onClick={() => {
                   const cv = fcRef.current; if (!cv) return;
                   const result = runPreflight(cv, { scale: scaleRef.current });
@@ -5242,47 +5204,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           </div>
         </div>
       )}
-            {showAIMockup && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { setShowAIMockup(false); setAiMockupImage(null); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-[800px] max-w-[90vw] overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
-              <div>
-                <h2 className="text-sm font-bold text-gray-800">AI Mockup Preview</h2>
-                <p className="text-[10px] text-gray-400">{dielineDims?.L} x {dielineDims?.W} x {dielineDims?.D} mm | Powered by Nano Banana 2</p>
-              </div>
-              <div className="flex items-center gap-2">
-                {aiMockupImage && (
-                  <button onClick={() => {
-                    const a = document.createElement('a');
-                    a.href = aiMockupImage!;
-                    a.download = `packive-ai-mockup-${dielineDims?.L}x${dielineDims?.W}x${dielineDims?.D}.png`;
-                    a.click();
-                  }} className="px-3 py-1.5 text-[11px] font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition">
-                    Download PNG
-                  </button>
-                )}
-                <button onClick={() => { setShowAIMockup(false); setAiMockupImage(null); }} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition text-lg">
-                  X
-                </button>
-              </div>
-            </div>
-            <div className="bg-gradient-to-b from-gray-50 to-gray-100 flex items-center justify-center" style={{ minHeight: '500px' }}>
-              {aiMockupLoading ? (
-                <div className="flex flex-col items-center gap-3">
-                  <div className="w-10 h-10 border-3 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" />
-                  <p className="text-sm text-gray-500">AI is assembling your box...</p>
-                  <p className="text-[10px] text-gray-400">This may take 10-20 seconds</p>
-                </div>
-              ) : aiMockupImage ? (
-                <img src={aiMockupImage} alt="AI Generated 3D Mockup" className="max-w-full max-h-[500px] object-contain" />
-              ) : (
-                <p className="text-sm text-gray-400">No image generated</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
+ 
      {show3DMockup && (
         <Box3DMockupModal
           open={show3DMockup}
