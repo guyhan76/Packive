@@ -212,6 +212,10 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [show3DMockup, setShow3DMockup] = useState(false);
   const [mockupFaces, setMockupFaces] = useState<{face:string;dataUrl:string|null}[]>([]);
   const [dielineModelInfo, setDielineModelInfo] = useState<string>('');
+  const [showAIMockup, setShowAIMockup] = useState(false);
+  const [aiMockupImage, setAiMockupImage] = useState<string | null>(null);
+  const [aiMockupLoading, setAiMockupLoading] = useState(false);
+
   const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null);
   const [showPreflight, setShowPreflight] = useState(false);
   // ─── AI Panel State ───
@@ -1352,6 +1356,17 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           const baseLeft = Math.min(...allObjs.map((obj:any) => obj.left || 0));
           const baseTop = Math.min(...allObjs.map((obj:any) => obj.top || 0));
           (window as any).__pkClip = { type: "table", config: cfg, left: baseLeft, top: baseTop };
+          } else if (o.type === 'activeselection' || o.type === 'activeSelection') {
+          const objs = (o as any).getObjects();
+          const clones: any[] = [];
+          for (const child of objs) {
+            const cl = await child.clone();
+            ["_cmykFill","_cmykStroke","_spotFillName","_spotFillPantone","_spotStrokeName","_spotStrokePantone"].forEach(k => {
+              if ((child as any)[k] !== undefined) (cl as any)[k] = (child as any)[k];
+            });
+            clones.push(cl);
+          }
+          (window as any).__pkClip = { type: "multi", objects: clones };
         } else {
           const cloned = await o.clone();
           ["_cmykFill","_cmykStroke","_spotFillName","_spotFillPantone","_spotStrokeName","_spotStrokePantone"].forEach(k => {
@@ -1385,6 +1400,42 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             cv.requestRenderAll();
             pushHistory(); refreshLayers();
           } catch(err) { console.error("[PASTE] Table paste error:", err); }
+                          } else if (clip.type === "multi" && clip.objects) {
+          const F = fabricModRef.current;
+          const active = cv.getActiveObject();
+          const groupLeft = active ? (active.left || 0) : 0;
+          const groupTop = active ? (active.top || 0) : 0;
+          cv.discardActiveObject();
+          const newObjs: any[] = [];
+          for (const orig of clip.objects) {
+            const p = await orig.clone();
+            ["_cmykFill","_cmykStroke","_spotFillName","_spotFillPantone","_spotStrokeName","_spotStrokePantone"].forEach(k => {
+              if ((orig as any)[k] !== undefined) (p as any)[k] = (orig as any)[k];
+            });
+            newObjs.push(p);
+          }
+          // Calculate bounding box of cloned objects
+          let minL = Infinity, minT = Infinity, maxR = -Infinity, maxB = -Infinity;
+          newObjs.forEach(p => {
+            const l = p.left || 0, t = p.top || 0;
+            const w = (p.width || 0) * (p.scaleX || 1);
+            const h = (p.height || 0) * (p.scaleY || 1);
+            minL = Math.min(minL, l); minT = Math.min(minT, t);
+            maxR = Math.max(maxR, l + w); maxB = Math.max(maxB, t + h);
+          });
+          // Place group at original position + 30px offset to bottom-right
+          const offsetX = groupLeft - minL + 30;
+          const offsetY = groupTop - minT + 30;
+          newObjs.forEach(p => {
+            p.set({ left: (p.left || 0) + offsetX, top: (p.top || 0) + offsetY });
+            cv.add(p);
+          });
+          if (newObjs.length > 0) {
+            const as = new F.ActiveSelection(newObjs, { canvas: cv });
+            cv.setActiveObject(as);
+          }
+          cv.requestRenderAll(); pushHistory(); refreshLayers();
+
         } else if (clip.type === "object" && clip.obj) {
           const p = await clip.obj.clone();
           ["_cmykFill","_cmykStroke","_spotFillName","_spotFillPantone","_spotStrokeName","_spotStrokePantone"].forEach(k => {
@@ -2017,7 +2068,16 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       obj.set({ stroke: value });
       if ((obj as any)._objects) { (obj as any)._objects.forEach((child: any) => { child.set({ stroke: value }); if (child._objects) child._objects.forEach((gc: any) => gc.set({ stroke: value })); }); }
     }
-    else if (key === "strokeWidth") obj.set({ strokeWidth: Number(value) });
+        else if (key === "strokeWidth") {
+      const sw = Number(value);
+      obj.set({ strokeWidth: sw });
+      if ((obj as any)._objects) {
+        (obj as any)._objects.forEach((child: any) => {
+          child.set({ strokeWidth: sw });
+          if (child._objects) child._objects.forEach((gc: any) => gc.set({ strokeWidth: sw }));
+        });
+      }
+    }
     else if (key === "angle") obj.set({ angle: Number(value) });
     else if (key === "fillCmyk") { const cm = value as {c:number;m:number;y:number;k:number}; const hex = cmykToHex(cm.c,cm.m,cm.y,cm.k); obj.set({ fill: hex }); (obj as any)._cmykFill = cm; if ((obj as any)._objects) { (obj as any)._objects.forEach((child: any) => { const cf = child.fill; if (cf && cf !== "none" && cf !== "transparent" && cf !== "") { child.set({ fill: hex }); } if (child._objects) child._objects.forEach((gc: any) => { const gf = gc.fill; if (gf && gf !== "none" && gf !== "transparent" && gf !== "") { gc.set({ fill: hex }); } }); }); } }
     else if (key === "strokeCmyk") { const cm = value as {c:number;m:number;y:number;k:number}; const hex = cmykToHex(cm.c,cm.m,cm.y,cm.k); obj.set({ stroke: hex }); (obj as any)._cmykStroke = cm; if ((obj as any)._objects) { (obj as any)._objects.forEach((child: any) => { child.set({ stroke: hex }); if (child._objects) child._objects.forEach((gc: any) => gc.set({ stroke: hex })); }); } }
@@ -2331,16 +2391,26 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
               </div>
 
               {/* Basic */}
-              <div className="mb-3">
+                            <div className="mb-3">
                 <div className="text-[9px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Basic</div>
                 <div className="grid grid-cols-5 gap-1">
+
                   {([
-                    {id:"rect",icon:"▬"},{id:"square",icon:"■"},{id:"roundrect",icon:"▢"},{id:"roundsquare",icon:"▣"},{id:"circle",icon:"●"},
-                    {id:"ellipse",icon:"⬮"},{id:"ring",icon:"◯"},{id:"semicircle",icon:"◗"},{id:"quarter",icon:"◔"},{id:"frame",icon:"□"},
-                    {id:"roundframe",icon:"▢"},{id:"circleframe",icon:"○"},
-                  ] as {id:string;icon:string}[]).map(s => (
+                    {id:"rect",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><rect x="2" y="6" width="20" height="12" fill="currentColor"/></svg>},
+                    {id:"square",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><rect x="4" y="4" width="16" height="16" fill="currentColor"/></svg>},
+                    {id:"roundrect",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><rect x="2" y="6" width="20" height="12" rx="4" fill="currentColor"/></svg>},
+                    {id:"roundsquare",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><rect x="4" y="4" width="16" height="16" rx="4" fill="currentColor"/></svg>},
+                    {id:"circle",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><circle cx="12" cy="12" r="10" fill="currentColor"/></svg>},
+                    {id:"ellipse",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><ellipse cx="12" cy="12" rx="11" ry="7" fill="currentColor"/></svg>},
+                    {id:"ring",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="3"/></svg>},
+                    {id:"semicircle",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M2 14 A10 10 0 0 1 22 14 Z" fill="currentColor"/></svg>},
+                    {id:"quarter",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M12 12 L12 2 A10 10 0 0 1 22 12 Z" fill="currentColor"/></svg>},
+                    {id:"frame",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><rect x="2" y="4" width="20" height="16" fill="none" stroke="currentColor" strokeWidth="3"/></svg>},
+                    {id:"roundframe",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><rect x="2" y="4" width="20" height="16" rx="4" fill="none" stroke="currentColor" strokeWidth="3"/></svg>},
+                    {id:"circleframe",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="3"/></svg>},
+                  ] as {id:string;icon:React.ReactNode}[]).map(s => (
                     <button key={s.id} onClick={() => addShape(s.id)} title={s.id}
-                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-base transition-all hover:scale-105">{s.icon}</button>
+                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-gray-600 transition-all hover:scale-105">{s.icon}</button>
                   ))}
                 </div>
               </div>
@@ -2350,11 +2420,19 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 <div className="text-[9px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Polygons</div>
                 <div className="grid grid-cols-5 gap-1">
                   {([
-                    {id:"triangle",icon:"▲"},{id:"righttri",icon:"◣"},{id:"diamond",icon:"◆"},{id:"pentagon",icon:"⬠"},{id:"hexagon",icon:"⬡"},
-                    {id:"heptagon",icon:"7⬡"},{id:"octagon",icon:"⯃"},{id:"decagon",icon:"10"},{id:"parallelogram",icon:"▱"},{id:"trapezoid",icon:"⏢"},
-                  ] as {id:string;icon:string}[]).map(s => (
+                    {id:"triangle",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><polygon points="12,2 22,22 2,22" fill="currentColor"/></svg>},
+                    {id:"righttri",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><polygon points="2,22 22,22 2,2" fill="currentColor"/></svg>},
+                    {id:"diamond",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><polygon points="12,2 22,12 12,22 2,12" fill="currentColor"/></svg>},
+                    {id:"pentagon",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><polygon points="12,2 22,9 19,21 5,21 2,9" fill="currentColor"/></svg>},
+                    {id:"hexagon",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><polygon points="12,2 21,7 21,17 12,22 3,17 3,7" fill="currentColor"/></svg>},
+                    {id:"heptagon",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><polygon points="12,2 20,5 22,14 17,21 7,21 2,14 4,5" fill="currentColor"/></svg>},
+                    {id:"octagon",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><polygon points="8,2 16,2 22,8 22,16 16,22 8,22 2,16 2,8" fill="currentColor"/></svg>},
+                    {id:"decagon",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><polygon points="12,2 18,4 22,9 22,15 18,20 12,22 6,20 2,15 2,9 6,4" fill="currentColor"/></svg>},
+                    {id:"parallelogram",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><polygon points="6,6 22,6 18,18 2,18" fill="currentColor"/></svg>},
+                    {id:"trapezoid",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><polygon points="7,6 17,6 22,18 2,18" fill="currentColor"/></svg>},
+                  ] as {id:string;icon:React.ReactNode}[]).map(s => (
                     <button key={s.id} onClick={() => addShape(s.id)} title={s.id}
-                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-[11px] font-medium transition-all hover:scale-105">{s.icon}</button>
+                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-gray-600 transition-all hover:scale-105">{s.icon}</button>
                   ))}
                 </div>
               </div>
@@ -2364,11 +2442,17 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 <div className="text-[9px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Stars & Badges</div>
                 <div className="grid grid-cols-5 gap-1">
                   {([
-                    {id:"star4",icon:"✦"},{id:"star",icon:"★"},{id:"star6",icon:"✶"},{id:"star8",icon:"✴"},{id:"burst12",icon:"✺"},
-                    {id:"burst24",icon:"❊"},{id:"badge",icon:"🏷"},{id:"seal",icon:"◎"},
-                  ] as {id:string;icon:string}[]).map(s => (
+                    {id:"star4",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><polygon points="12,1 14,9 22,9 16,14 18,22 12,17 6,22 8,14 2,9 10,9" fill="currentColor"/></svg>},
+                    {id:"star",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><polygon points="12,2 15,9 22,9 16,14 18,22 12,17 6,22 8,14 2,9 9,9" fill="currentColor"/></svg>},
+                    {id:"star6",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><polygon points="12,2 14,8 21,5 17,12 21,19 14,16 12,22 10,16 3,19 7,12 3,5 10,8" fill="currentColor"/></svg>},
+                    {id:"star8",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><polygon points="12,1 14,8 21,3 16,10 23,12 16,14 21,21 14,16 12,23 10,16 3,21 8,14 1,12 8,10 3,3 10,8" fill="currentColor"/></svg>},
+                    {id:"burst12",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><circle cx="12" cy="12" r="8" fill="currentColor"/><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="3 2"/></svg>},
+                    {id:"burst24",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><circle cx="12" cy="12" r="9" fill="currentColor"/><circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="2 1.5"/></svg>},
+                    {id:"badge",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><circle cx="12" cy="12" r="10" fill="currentColor"/><circle cx="12" cy="12" r="7" fill="none" stroke="white" strokeWidth="1.5"/></svg>},
+                    {id:"seal",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><circle cx="12" cy="12" r="10" fill="currentColor"/><circle cx="12" cy="12" r="6" fill="none" stroke="white" strokeWidth="1"/></svg>},
+                  ] as {id:string;icon:React.ReactNode}[]).map(s => (
                     <button key={s.id} onClick={() => addShape(s.id)} title={s.id}
-                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-base transition-all hover:scale-105">{s.icon}</button>
+                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-gray-600 transition-all hover:scale-105">{s.icon}</button>
                   ))}
                 </div>
               </div>
@@ -2378,11 +2462,16 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 <div className="text-[9px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Arrows</div>
                 <div className="grid grid-cols-5 gap-1">
                   {([
-                    {id:"arrowright",icon:"➜"},{id:"arrowleft",icon:"⬅"},{id:"arrowup",icon:"⬆"},{id:"arrowdown",icon:"⬇"},{id:"arrowdouble",icon:"⬌"},
-                    {id:"arrowcurve",icon:"↩"},{id:"chevron",icon:"❯"},
-                  ] as {id:string;icon:string}[]).map(s => (
+                    {id:"arrowright",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M2 10h14V6l6 6-6 6v-4H2z" fill="currentColor"/></svg>},
+                    {id:"arrowleft",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M22 10H8V6L2 12l6 6v-4h14z" fill="currentColor"/></svg>},
+                    {id:"arrowup",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M10 22V8H6l6-6 6 6h-4v14z" fill="currentColor"/></svg>},
+                    {id:"arrowdown",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M10 2v14H6l6 6 6-6h-4V2z" fill="currentColor"/></svg>},
+                    {id:"arrowdouble",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M2 12l5-5v3h10V7l5 5-5 5v-3H7v3z" fill="currentColor"/></svg>},
+                    {id:"arrowcurve",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M4 18Q4 8 14 8V4l6 6-6 6v-4Q8 12 8 18z" fill="currentColor"/></svg>},
+                    {id:"chevron",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M2 4h12l6 8-6 8H2l6-8z" fill="currentColor"/></svg>},
+                  ] as {id:string;icon:React.ReactNode}[]).map(s => (
                     <button key={s.id} onClick={() => addShape(s.id)} title={s.id}
-                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-base transition-all hover:scale-105">{s.icon}</button>
+                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-gray-600 transition-all hover:scale-105">{s.icon}</button>
                   ))}
                 </div>
               </div>
@@ -2392,10 +2481,14 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 <div className="text-[9px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Lines</div>
                 <div className="grid grid-cols-5 gap-1">
                   {([
-                    {id:"line",icon:"─"},{id:"dashed",icon:"┅"},{id:"dotted",icon:"···"},{id:"thick",icon:"━"},{id:"diagonal",icon:"╱"},
-                  ] as {id:string;icon:string}[]).map(s => (
+                    {id:"line",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="2"/></svg>},
+                    {id:"dashed",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="2" strokeDasharray="4 3"/></svg>},
+                    {id:"dotted",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="2" strokeDasharray="2 2"/></svg>},
+                    {id:"thick",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="5"/></svg>},
+                    {id:"diagonal",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><line x1="4" y1="20" x2="20" y2="4" stroke="currentColor" strokeWidth="2"/></svg>},
+                  ] as {id:string;icon:React.ReactNode}[]).map(s => (
                     <button key={s.id} onClick={() => addShape(s.id)} title={s.id}
-                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-base transition-all hover:scale-105">{s.icon}</button>
+                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-gray-600 transition-all hover:scale-105">{s.icon}</button>
                   ))}
                 </div>
               </div>
@@ -2405,11 +2498,17 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 <div className="text-[9px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Symbols</div>
                 <div className="grid grid-cols-5 gap-1">
                   {([
-                    {id:"heart",icon:"♥"},{id:"cross",icon:"✚"},{id:"check",icon:"✓"},{id:"xmark",icon:"✗"},{id:"moon",icon:"☽"},
-                    {id:"lightning",icon:"⚡"},{id:"cloud",icon:"☁"},{id:"droplet",icon:"💧"},
-                  ] as {id:string;icon:string}[]).map(s => (
+                    {id:"heart",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M12 21C12 21 3 13.5 3 8.5 3 5.4 5.4 3 8.5 3c1.7 0 3.4.8 3.5 2.1C12.1 3.8 13.8 3 15.5 3 18.6 3 21 5.4 21 8.5 21 13.5 12 21 12 21z" fill="currentColor"/></svg>},
+                    {id:"cross",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M8 2h8v6h6v8h-6v6H8v-6H2V8h6z" fill="currentColor"/></svg>},
+                    {id:"check",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M2 12l7 7L22 5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>},
+                    {id:"xmark",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M4 4l16 16M20 4L4 20" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/></svg>},
+                    {id:"moon",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" fill="currentColor"/></svg>},
+                    {id:"lightning",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><polygon points="13,2 4,14 11,14 10,22 20,10 13,10" fill="currentColor"/></svg>},
+                    {id:"cloud",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M6 19a4 4 0 0 1-.8-7.9A5.5 5.5 0 0 1 16.8 8 4.5 4.5 0 1 1 18 17H6z" fill="currentColor"/></svg>},
+                    {id:"droplet",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M12 2C12 2 4 12 4 16a8 8 0 1 0 16 0c0-4-8-14-8-14z" fill="currentColor"/></svg>},
+                  ] as {id:string;icon:React.ReactNode}[]).map(s => (
                     <button key={s.id} onClick={() => addShape(s.id)} title={s.id}
-                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-base transition-all hover:scale-105">{s.icon}</button>
+                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-gray-600 transition-all hover:scale-105">{s.icon}</button>
                   ))}
                 </div>
               </div>
@@ -2419,10 +2518,13 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 <div className="text-[9px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Callouts & Labels</div>
                 <div className="grid grid-cols-5 gap-1">
                   {([
-                    {id:"bubble",icon:"💬"},{id:"bubbleround",icon:"🗨"},{id:"ribbon",icon:"🎀"},{id:"tag",icon:"🏷"},
-                  ] as {id:string;icon:string}[]).map(s => (
+                    {id:"bubble",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2z" fill="currentColor"/></svg>},
+                    {id:"bubbleround",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><ellipse cx="12" cy="10" rx="10" ry="8" fill="currentColor"/><polygon points="8,16 4,22 14,16" fill="currentColor"/></svg>},
+                    {id:"ribbon",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M1 8l3 4-3 4h7v4h8v-4h7l-3-4 3-4h-7V4H8v4z" fill="currentColor"/></svg>},
+                    {id:"tag",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M2 6h14l5 6-5 6H2z" fill="currentColor"/></svg>},
+                  ] as {id:string;icon:React.ReactNode}[]).map(s => (
                     <button key={s.id} onClick={() => addShape(s.id)} title={s.id}
-                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-base transition-all hover:scale-105">{s.icon}</button>
+                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-gray-600 transition-all hover:scale-105">{s.icon}</button>
                   ))}
                 </div>
               </div>
@@ -2432,13 +2534,66 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 <div className="text-[9px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Packaging</div>
                 <div className="grid grid-cols-5 gap-1">
                   {([
-                    {id:"tab",icon:"⌐"},{id:"capsule",icon:"💊"},{id:"arch",icon:"⌓"},
-                  ] as {id:string;icon:string}[]).map(s => (
+                    {id:"tab",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M4 8a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v12H4z" fill="currentColor"/></svg>},
+                    {id:"capsule",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><rect x="2" y="8" width="20" height="8" rx="4" fill="currentColor"/></svg>},
+                    {id:"arch",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M3 20V12a9 9 0 0 1 18 0v8z" fill="currentColor"/></svg>},
+                  ] as {id:string;icon:React.ReactNode}[]).map(s => (
                     <button key={s.id} onClick={() => addShape(s.id)} title={s.id}
-                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-base transition-all hover:scale-105">{s.icon}</button>
+                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-gray-600 transition-all hover:scale-105">{s.icon}</button>
                   ))}
                 </div>
               </div>
+              {/* Symbols */}
+              <div className="mb-3">
+                <div className="text-[9px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Symbols</div>
+                <div className="grid grid-cols-5 gap-1">
+                  {([
+                    {id:"heart",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M12 21C12 21 3 13.5 3 8.5 3 5.4 5.4 3 8.5 3c1.7 0 3.4.8 3.5 2.1C12.1 3.8 13.8 3 15.5 3 18.6 3 21 5.4 21 8.5 21 13.5 12 21 12 21z" fill="currentColor"/></svg>},
+                    {id:"cross",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M8 2h8v6h6v8h-6v6H8v-6H2V8h6z" fill="currentColor"/></svg>},
+                    {id:"check",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M2 12l7 7L22 5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>},
+                    {id:"xmark",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M4 4l16 16M20 4L4 20" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/></svg>},
+                    {id:"moon",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" fill="currentColor"/></svg>},
+                    {id:"lightning",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><polygon points="13,2 4,14 11,14 10,22 20,10 13,10" fill="currentColor"/></svg>},
+                    {id:"cloud",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M6 19a4 4 0 0 1-.8-7.9A5.5 5.5 0 0 1 16.8 8 4.5 4.5 0 1 1 18 17H6z" fill="currentColor"/></svg>},
+                    {id:"droplet",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M12 2C12 2 4 12 4 16a8 8 0 1 0 16 0c0-4-8-14-8-14z" fill="currentColor"/></svg>},
+                  ] as {id:string;icon:React.ReactNode}[]).map(s => (
+                    <button key={s.id} onClick={() => addShape(s.id)} title={s.id}
+                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-gray-600 transition-all hover:scale-105">{s.icon}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Callouts & Labels */}
+              <div className="mb-3">
+                <div className="text-[9px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Callouts & Labels</div>
+                <div className="grid grid-cols-5 gap-1">
+                  {([
+                    {id:"bubble",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2z" fill="currentColor"/></svg>},
+                    {id:"bubbleround",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><ellipse cx="12" cy="10" rx="10" ry="8" fill="currentColor"/><polygon points="8,16 4,22 14,16" fill="currentColor"/></svg>},
+                    {id:"ribbon",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M1 8l3 4-3 4h7v4h8v-4h7l-3-4 3-4h-7V4H8v4z" fill="currentColor"/></svg>},
+                    {id:"tag",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M2 6h14l5 6-5 6H2z" fill="currentColor"/></svg>},
+                  ] as {id:string;icon:React.ReactNode}[]).map(s => (
+                    <button key={s.id} onClick={() => addShape(s.id)} title={s.id}
+                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-gray-600 transition-all hover:scale-105">{s.icon}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Packaging */}
+              <div className="mb-1">
+                <div className="text-[9px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Packaging</div>
+                <div className="grid grid-cols-5 gap-1">
+                  {([
+                    {id:"tab",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M4 8a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v12H4z" fill="currentColor"/></svg>},
+                    {id:"capsule",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><rect x="2" y="8" width="20" height="8" rx="4" fill="currentColor"/></svg>},
+                    {id:"arch",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M3 20V12a9 9 0 0 1 18 0v8z" fill="currentColor"/></svg>},
+                  ] as {id:string;icon:React.ReactNode}[]).map(s => (
+                    <button key={s.id} onClick={() => addShape(s.id)} title={s.id}
+                      className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-gray-600 transition-all hover:scale-105">{s.icon}</button>
+                  ))}
+                </div>
+              </div>
+
 
             </div>
           )}
@@ -3326,6 +3481,73 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 }} className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${dielineDims ? 'text-violet-500 hover:text-violet-700 hover:bg-violet-50' : 'text-gray-300 cursor-not-allowed'}`} disabled={!dielineDims}>
                   3D Mockup
                 </button>
+                              <button onClick={async () => {
+                  const cv = fcRef.current;
+                  if (!cv || !dielineDims) { alert('Please load a dieline first.'); return; }
+                  setAiMockupLoading(true);
+                  setShowAIMockup(true);
+                  setAiMockupImage(null);
+                  try {
+                    // Step 1: Trigger 3D Mockup capture first (reuse existing face crop logic)
+                    const g = cv.getObjects().find((o: any) => o._isDieLine || o._isDieline);
+                    if (!g) { alert('No dieline found.'); return; }
+                    const origVisible = g.visible;
+                    g.visible = false;
+                    cv.requestRenderAll();
+                    
+                    await new Promise(r => setTimeout(r, 150));
+                    
+                    const gs = g.scaleX || 1;
+                    const gW = g.width * gs;
+                    const gH = g.height * gs;
+                    const gLeft = g.originX === 'center' ? g.left - gW / 2 : g.left;
+                    const gTop = g.originY === 'center' ? g.top - gH / 2 : g.top;
+                    const folds = (g._objects || []).filter((p: any) => p.type === 'path' && (p.stroke || '').includes('0,166,80'));
+                    const vertFolds: number[] = [];
+                    const horzFolds: number[] = [];
+                    folds.forEach((p: any) => {
+                      const b = p.getBoundingRect();
+                      if (b.width < 5 && b.height > 50) vertFolds.push(b.left);
+                      if (b.height < 5 && b.width > 50) horzFolds.push(b.top);
+                    });
+                    vertFolds.sort((a: number, b: number) => a - b);
+                    horzFolds.sort((a: number, b: number) => a - b);
+                    
+                    // Capture full canvas with design only (no dieline)
+                    const dataUrl = cv.toDataURL({ format: 'png', multiplier: 2 });
+                    
+                    g.visible = origVisible;
+                    cv.requestRenderAll();
+                    
+                    // Step 2: Send to AI with enhance mode using the 3D mockup screenshot
+                    // First try to get 3D canvas screenshot if modal is available
+                    const res = await fetch('/api/ai-mockup', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        imageBase64: dataUrl,
+                        L: dielineDims.L,
+                        W: dielineDims.W,
+                        D: dielineDims.D,
+                        boxType: 'FEFCO 0201',
+                        mode: 'dieline',
+                      }),
+                    });
+                    const data = await res.json();
+                    if (data.image) {
+                      setAiMockupImage(data.image);
+                    } else {
+                      alert('AI Mockup generation failed: ' + (data.error || 'Unknown error'));
+                    }
+                  } catch (err: any) {
+                    alert('AI Mockup error: ' + err.message);
+                  } finally {
+                    setAiMockupLoading(false);
+                  }
+                }} className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${dielineDims ? 'text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50' : 'text-gray-300 cursor-not-allowed'}`} disabled={!dielineDims || aiMockupLoading}>
+                  {aiMockupLoading ? 'Generating...' : 'AI Mockup'}
+                </button>
+
 
                
                 <button onClick={() => {
@@ -4960,6 +5182,47 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           </div>
         </div>
       )}
+            {showAIMockup && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { setShowAIMockup(false); setAiMockupImage(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[800px] max-w-[90vw] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+              <div>
+                <h2 className="text-sm font-bold text-gray-800">AI Mockup Preview</h2>
+                <p className="text-[10px] text-gray-400">{dielineDims?.L} x {dielineDims?.W} x {dielineDims?.D} mm | Powered by Nano Banana 2</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {aiMockupImage && (
+                  <button onClick={() => {
+                    const a = document.createElement('a');
+                    a.href = aiMockupImage!;
+                    a.download = `packive-ai-mockup-${dielineDims?.L}x${dielineDims?.W}x${dielineDims?.D}.png`;
+                    a.click();
+                  }} className="px-3 py-1.5 text-[11px] font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition">
+                    Download PNG
+                  </button>
+                )}
+                <button onClick={() => { setShowAIMockup(false); setAiMockupImage(null); }} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition text-lg">
+                  X
+                </button>
+              </div>
+            </div>
+            <div className="bg-gradient-to-b from-gray-50 to-gray-100 flex items-center justify-center" style={{ minHeight: '500px' }}>
+              {aiMockupLoading ? (
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-10 h-10 border-3 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" />
+                  <p className="text-sm text-gray-500">AI is assembling your box...</p>
+                  <p className="text-[10px] text-gray-400">This may take 10-20 seconds</p>
+                </div>
+              ) : aiMockupImage ? (
+                <img src={aiMockupImage} alt="AI Generated 3D Mockup" className="max-w-full max-h-[500px] object-contain" />
+              ) : (
+                <p className="text-sm text-gray-400">No image generated</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
      {show3DMockup && (
         <Box3DMockupModal
           open={show3DMockup}
