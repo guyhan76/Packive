@@ -2363,14 +2363,14 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           </button>
           <div className="w-8 h-px bg-gray-200 my-1" />
           <span className="text-[7px] font-bold text-gray-400 tracking-widest mb-0.5">DESIGN</span>
-          {[
+                        {[
             { icon: "T", label: "Text", action: addText },
-            { icon: "🖼", label: "Image", action: addImage },
+            { icon: "🏞", label: "Image", action: addImage },
             { icon: "◆", label: "Shapes", action: () => setShowShapePanel(p => !p) },
             { icon: "⚠", label: "Symbols", action: () => setShowSymbolPanel(p => !p) },
-            { icon: "▭", label: "Handle", action: () => setShowHandlePanel(p => !p) },
-            { icon: "⊞", label: "Table", action: () => setShowTablePanel(p => !p) },
-            { icon: "⣿", label: "Barcode", action: () => setShowBarcodePanel(p => !p) },
+            { icon: "☐", label: "Handle", action: () => setShowHandlePanel(p => !p) },
+            { icon: "▦", label: "Table", action: () => setShowTablePanel(p => !p) },
+            { icon: "⫼", label: "Barcode", action: () => setShowBarcodePanel(p => !p) },
           ].map(btn => (
             <button key={btn.label} onClick={btn.action} title={btn.label}
               className="w-11 h-11 flex flex-col items-center justify-center rounded-lg text-xs transition-all hover:bg-white hover:shadow-sm text-gray-500 hover:text-gray-800">
@@ -2378,6 +2378,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
               <span className="text-[8px] mt-0.5 font-medium">{btn.label}</span>
             </button>
           ))}
+
           <div className="w-8 h-px bg-gray-200 my-1" />
           <span className="text-[7px] font-bold text-gray-400 tracking-widest mb-0.5">MEASURE</span>
           <button onClick={() => { setMeasureMode(m => { if(!m){setMeasurePts([]);setMeasureMouseMm(null);setMeasureResult("Click first point...");} else {setMeasureResult("");} return !m; }); }}
