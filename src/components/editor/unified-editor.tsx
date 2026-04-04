@@ -263,6 +263,9 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [showTablePanel, setShowTablePanel] = useState(false);
   const [showSymbolPanel, setShowSymbolPanel] = useState(false);
   const [showHandlePanel, setShowHandlePanel] = useState(false);
+  const [handleType, setHandleType] = useState<string | null>(null);
+  const [handleW, setHandleW] = useState(80);
+  const [handleH, setHandleH] = useState(30);
   const [symbolSearch, setSymbolSearch] = useState("");
   const [symbolCategory, setSymbolCategory] = useState<string>("all");
   const [showMarkPanel, setShowMarkPanel] = useState(false);
@@ -2379,12 +2382,12 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           <span className="text-[7px] font-bold text-gray-400 tracking-widest mb-0.5">DESIGN</span>
           {[
             { icon: "T", label: "Text", action: addText },
-            { icon: "🖼", label: "Image", action: addImage },
+            { icon: "🏞", label: "Image", action: addImage },
             { icon: "◆", label: "Shapes", action: () => setShowShapePanel(p => !p) },
             { icon: "⚠", label: "Symbols", action: () => setShowSymbolPanel(p => !p) },
             { icon: "▭", label: "Handle", action: () => setShowHandlePanel(p => !p) },
             { icon: "⊞", label: "Table", action: () => setShowTablePanel(p => !p) },
-            { icon: "⣿", label: "Barcode", action: () => setShowBarcodePanel(p => !p) },
+            { icon: "⫼", label: "Barcode", action: () => setShowBarcodePanel(p => !p) },
           ].map(btn => (
             <button key={btn.label} onClick={btn.action} title={btn.label}
               className="w-11 h-11 flex flex-col items-center justify-center rounded-lg text-xs transition-all hover:bg-white hover:shadow-sm text-gray-500 hover:text-gray-800">
@@ -2725,39 +2728,77 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             </div>
           )}
           {/* Handle Panel */}
-          {showHandlePanel && (
+                   {showHandlePanel && (
             <div className="absolute left-14 top-8 z-50 bg-white rounded-xl shadow-xl border p-3 w-80 max-h-[80vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-3">
                 <div className="text-xs font-bold text-gray-700">Handle Types (5)</div>
-                <button onClick={() => setShowHandlePanel(false)} className="text-gray-400 hover:text-gray-600 text-sm">X</button>
+                <button onClick={() => { setShowHandlePanel(false); setHandleType(null); }} className="text-gray-400 hover:text-gray-600 text-sm">X</button>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => { const c = fcRef.current; if (!c) return; const s = `<svg xmlns="http://www.w3.org/2000/svg" width="280" height="110" viewBox="0 0 140 55"><rect x="15" y="7" width="110" height="40" rx="20" ry="20" fill="none" stroke="#FF0000" stroke-width="1"/></svg>`; const e = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(s))); import("fabric").then(({ FabricImage }) => { FabricImage.fromURL(e).then((img) => { if (!img) return; img.set({ left: c.getWidth()/2, top: c.getHeight()/2, originX: "center", originY: "center" }); img.scaleToWidth(120); c.add(img); c.setActiveObject(img); c.requestRenderAll(); if (typeof refreshLayers === "function") refreshLayers(); }); }); setShowHandlePanel(false); }} className="flex flex-col items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-red-300 hover:bg-red-50 transition-all">
-                  <svg viewBox="0 0 140 55" className="w-full h-10"><rect x="15" y="7" width="110" height="40" rx="20" ry="20" fill="none" stroke="#FF0000" strokeWidth="2"/></svg>
-                  <div className="text-[9px] text-gray-600 font-medium">Full Cut Handle</div>
-                  <div className="text-[7px] text-gray-400">All cut lines (red)</div>
-                </button>
-                <button onClick={() => { const c = fcRef.current; if (!c) return; const s = `<svg xmlns="http://www.w3.org/2000/svg" width="280" height="110" viewBox="0 0 140 55"><rect x="15" y="7" width="110" height="40" rx="20" ry="20" fill="none" stroke="#FF0000" stroke-width="1"/><line x1="35" y1="7" x2="105" y2="7" stroke="#00AA00" stroke-width="1"/></svg>`; const e = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(s))); import("fabric").then(({ FabricImage }) => { FabricImage.fromURL(e).then((img) => { if (!img) return; img.set({ left: c.getWidth()/2, top: c.getHeight()/2, originX: "center", originY: "center" }); img.scaleToWidth(120); c.add(img); c.setActiveObject(img); c.requestRenderAll(); if (typeof refreshLayers === "function") refreshLayers(); }); }); setShowHandlePanel(false); }} className="flex flex-col items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-red-300 hover:bg-red-50 transition-all">
-                  <svg viewBox="0 0 140 55" className="w-full h-10"><rect x="15" y="7" width="110" height="40" rx="20" ry="20" fill="none" stroke="#FF0000" strokeWidth="2"/><line x1="35" y1="7" x2="105" y2="7" stroke="#00AA00" strokeWidth="3"/></svg>
-                  <div className="text-[9px] text-gray-600 font-medium">Half Cut Handle</div>
-                  <div className="text-[7px] text-gray-400">Top: crease (green) Rest: cut (red)</div>
-                </button>
-                <button onClick={() => { const c = fcRef.current; if (!c) return; const s = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 60 60"><circle cx="30" cy="30" r="22" fill="none" stroke="#FF0000" stroke-width="1"/></svg>`; const e = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(s))); import("fabric").then(({ FabricImage }) => { FabricImage.fromURL(e).then((img) => { if (!img) return; img.set({ left: c.getWidth()/2, top: c.getHeight()/2, originX: "center", originY: "center" }); img.scaleToWidth(60); c.add(img); c.setActiveObject(img); c.requestRenderAll(); if (typeof refreshLayers === "function") refreshLayers(); }); }); setShowHandlePanel(false); }} className="flex flex-col items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-red-300 hover:bg-red-50 transition-all">
-                  <svg viewBox="0 0 60 60" className="w-12 h-12 mx-auto"><circle cx="30" cy="30" r="22" fill="none" stroke="#FF0000" strokeWidth="2"/></svg>
-                  <div className="text-[9px] text-gray-600 font-medium">Finger Hole (Circle)</div>
-                  <div className="text-[7px] text-gray-400">Full cut (red)</div>
-                </button>
-                <button onClick={() => { const c = fcRef.current; if (!c) return; const s = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80" viewBox="0 0 60 40"><line x1="5" y1="5" x2="55" y2="5" stroke="#FF0000" stroke-width="1"/><path d="M5,5 A25,30 0 0,0 55,5" fill="none" stroke="#FF0000" stroke-width="1"/></svg>`; const e = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(s))); import("fabric").then(({ FabricImage }) => { FabricImage.fromURL(e).then((img) => { if (!img) return; img.set({ left: c.getWidth()/2, top: c.getHeight()/2, originX: "center", originY: "center" }); img.scaleToWidth(60); c.add(img); c.setActiveObject(img); c.requestRenderAll(); if (typeof refreshLayers === "function") refreshLayers(); }); }); setShowHandlePanel(false); }} className="flex flex-col items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-red-300 hover:bg-red-50 transition-all">
-                  <svg viewBox="0 0 60 40" className="w-12 h-10 mx-auto"><line x1="5" y1="5" x2="55" y2="5" stroke="#FF0000" strokeWidth="2"/><path d="M5,5 A25,30 0 0,0 55,5" fill="none" stroke="#FF0000" strokeWidth="2"/></svg>
-                  <div className="text-[9px] text-gray-600 font-medium">Finger Hole (Semi)</div>
-                  <div className="text-[7px] text-gray-400">All cut lines (red)</div>
-                </button>
-                <button onClick={() => { const c = fcRef.current; if (!c) return; const s = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 60 60"><rect x="8" y="8" width="44" height="44" fill="none" stroke="#FF0000" stroke-width="1"/></svg>`; const e = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(s))); import("fabric").then(({ FabricImage }) => { FabricImage.fromURL(e).then((img) => { if (!img) return; img.set({ left: c.getWidth()/2, top: c.getHeight()/2, originX: "center", originY: "center" }); img.scaleToWidth(60); c.add(img); c.setActiveObject(img); c.requestRenderAll(); if (typeof refreshLayers === "function") refreshLayers(); }); }); setShowHandlePanel(false); }} className="flex flex-col items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-red-300 hover:bg-red-50 transition-all">
-                  <svg viewBox="0 0 60 60" className="w-12 h-12 mx-auto"><rect x="8" y="8" width="44" height="44" fill="none" stroke="#FF0000" strokeWidth="2"/></svg>
-                  <div className="text-[9px] text-gray-600 font-medium">Square Hole</div>
-                  <div className="text-[7px] text-gray-400">Full cut (red)</div>
-                </button>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  {id:"fullcut",label:"Full Cut Handle",desc:"All cut lines (red)",dw:80,dh:30,icon:<svg viewBox="0 0 140 55" className="w-full h-10"><rect x="15" y="7" width="110" height="40" rx="20" ry="20" fill="none" stroke="#FF0000" strokeWidth="2"/></svg>},
+                  {id:"halfcut",label:"Half Cut Handle",desc:"Top: crease, Rest: cut",dw:80,dh:30,icon:<svg viewBox="0 0 140 55" className="w-full h-10"><rect x="15" y="7" width="110" height="40" rx="20" ry="20" fill="none" stroke="#FF0000" strokeWidth="2"/><line x1="35" y1="7" x2="105" y2="7" stroke="#00AA00" strokeWidth="3"/></svg>},
+                  {id:"fingercircle",label:"Finger Hole (Circle)",desc:"Full cut (red)",dw:25,dh:25,icon:<svg viewBox="0 0 60 60" className="w-12 h-12 mx-auto"><circle cx="30" cy="30" r="22" fill="none" stroke="#FF0000" strokeWidth="2"/></svg>},
+                  {id:"fingersemi",label:"Finger Hole (Semi)",desc:"All cut lines (red)",dw:30,dh:15,icon:<svg viewBox="0 0 60 40" className="w-12 h-10 mx-auto"><line x1="5" y1="5" x2="55" y2="5" stroke="#FF0000" strokeWidth="2"/><path d="M5,5 A25,30 0 0,0 55,5" fill="none" stroke="#FF0000" strokeWidth="2"/></svg>},
+                  {id:"squarehole",label:"Square Hole",desc:"Full cut (red)",dw:25,dh:25,icon:<svg viewBox="0 0 60 60" className="w-12 h-12 mx-auto"><rect x="8" y="8" width="44" height="44" fill="none" stroke="#FF0000" strokeWidth="2"/></svg>},
+                ] as {id:string;label:string;desc:string;dw:number;dh:number;icon:React.ReactNode}[]).map(h => (
+                  <button key={h.id} onClick={() => { setHandleType(h.id); setHandleW(h.dw); setHandleH(h.dh); }}
+                    className={`flex flex-col items-center gap-1 p-2 rounded-lg border transition-all ${handleType === h.id ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-red-300 hover:bg-red-50"}`}>
+                    {h.icon}
+                    <div className="text-[9px] text-gray-600 font-medium">{h.label}</div>
+                    <div className="text-[7px] text-gray-400">{h.desc}</div>
+                  </button>
+                ))}
               </div>
+              {handleType && (
+                <div className="mt-3 p-2 bg-blue-50 rounded-lg space-y-2">
+                  <div className="text-[10px] font-semibold text-blue-700">Size (mm)</div>
+                  <div className="flex gap-2">
+                    <label className="flex-1">
+                      <span className="text-[9px] text-gray-500">Width</span>
+                      <input type="number" min={5} max={500} value={handleW} onChange={e => setHandleW(Math.max(5,Math.min(500,Number(e.target.value)||5)))}
+                        className="w-full border rounded px-2 py-1 text-xs text-center" />
+                    </label>
+                    <label className="flex-1">
+                      <span className="text-[9px] text-gray-500">Height</span>
+                      <input type="number" min={5} max={500} value={handleH} onChange={e => setHandleH(Math.max(5,Math.min(500,Number(e.target.value)||5)))}
+                        className="w-full border rounded px-2 py-1 text-xs text-center" />
+                    </label>
+                  </div>
+                  <button onClick={() => {
+                                        const c = fcRef.current; if (!c) return;
+                                        const sc = scaleRef.current || 1;
+                    console.log(`[Handle-Debug] scaleRef.current=${scaleRef.current} scaleXRef.current=${scaleXRef.current}`);
+
+                    const pw = Math.round(handleW * sc);
+                    const ph = Math.round(handleH * sc);
+                    const vw = 1000; const vh = Math.round(vw * ph / pw);
+                    let svgInner = "";
+                    if (handleType === "fullcut") svgInner = `<rect x="10" y="10" width="${vw-20}" height="${vh-20}" rx="${vh/2}" ry="${vh/2}" fill="none" stroke="#FF0000" stroke-width="3"/>`;
+                    else if (handleType === "halfcut") svgInner = `<rect x="10" y="10" width="${vw-20}" height="${vh-20}" rx="${vh/2}" ry="${vh/2}" fill="none" stroke="#FF0000" stroke-width="3"/><line x1="${vh/2}" y1="10" x2="${vw-vh/2}" y2="10" stroke="#00AA00" stroke-width="3"/>`;
+                    else if (handleType === "fingercircle") { const r = Math.min(vw,vh)/2-10; svgInner = `<circle cx="${vw/2}" cy="${vh/2}" r="${r}" fill="none" stroke="#FF0000" stroke-width="3"/>`; }
+                    else if (handleType === "fingersemi") svgInner = `<line x1="10" y1="10" x2="${vw-10}" y2="10" stroke="#FF0000" stroke-width="3"/><path d="M10,10 A${(vw-20)/2},${vh-20} 0 0,0 ${vw-10},10" fill="none" stroke="#FF0000" stroke-width="3"/>`;
+                    else if (handleType === "squarehole") svgInner = `<rect x="10" y="10" width="${vw-20}" height="${vh-20}" fill="none" stroke="#FF0000" stroke-width="3"/>`;
+                    const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${vw}" height="${vh}" viewBox="0 0 ${vw} ${vh}">${svgInner}</svg>`;
+                    const dataUrl = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgStr)));
+                    import("fabric").then(({ FabricImage }) => {
+                      FabricImage.fromURL(dataUrl).then((img) => {
+                        if (!img || !c) return;
+                        img.scaleToWidth(pw);
+                        img.set({ left: c.getWidth()/2, top: c.getHeight()/2, originX: "center", originY: "center" });
+                        c.add(img); c.setActiveObject(img); c.requestRenderAll();
+                        if (typeof refreshLayers === "function") refreshLayers();
+                                                console.log(`[Handle] type:${handleType} input:${handleW}x${handleH}mm scale:${sc}px/mm targetPx:${pw}x${ph} imgNatural:${img.width}x${img.height} imgScale:${img.scaleX?.toFixed(6)}x${img.scaleY?.toFixed(6)} finalPx:${(img.width!*img.scaleX!).toFixed(2)}x${(img.height!*img.scaleY!).toFixed(2)} finalMm:${((img.width!*img.scaleX!)/sc).toFixed(2)}x${((img.height!*img.scaleY!)/sc).toFixed(2)}`);
+
+                      });
+                    });
+                    setShowHandlePanel(false); setHandleType(null);
+
+                  }} className="w-full py-1.5 bg-blue-600 text-white rounded text-[10px] font-semibold hover:bg-blue-700 transition-colors">
+                    Add Handle ({handleW} × {handleH} mm)
+                  </button>
+                </div>
+              )}
               <div className="mt-3 p-2 bg-gray-50 rounded-lg">
                 <div className="text-[8px] text-gray-500 space-y-1">
                   <div className="flex items-center gap-1.5"><span className="w-6 h-0.5 bg-red-500 inline-block"></span> Cut line (red)</div>
@@ -2766,6 +2807,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
               </div>
             </div>
           )}
+
 
           {/* Table Popup */}
           {showTablePanel && (
@@ -3244,7 +3286,13 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           const exactScaleY = sY * 25.4 / 96;
           
           console.log(`[Dieline] viewBox=${viewBoxW.toFixed(1)}x${viewBoxH.toFixed(1)}, svgMm=${svgMmW.toFixed(2)}x${svgMmH.toFixed(2)}mm, scale=${exactScaleX.toFixed(6)}, sX=${sX.toFixed(3)}`);
-          
+                    scaleRef.current = exactScaleX;
+          scaleXRef.current = exactScaleX;
+          scaleYRef.current = exactScaleY;
+          svgMmWRef.current = svgMmW;
+          svgMmHRef.current = svgMmH;
+          console.log(`[Dieline] scaleRef updated: ${exactScaleX.toFixed(6)} px/mm`);
+
           // Auto-fit: scale down zoom if dieline is larger than canvas
           const neededW = viewBoxW * exactScaleX + 80;
           const neededH = viewBoxH * exactScaleY + 80;
