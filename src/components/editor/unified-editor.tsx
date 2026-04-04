@@ -981,10 +981,22 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       canvas.backgroundColor = '#FFFFFF';
       canvas.requestRenderAll();
       setCanvasReady(true);
+         // ── Slim selection / bounding box ──
+      const FObj = (fabricMod as any).Object;
+      if (FObj && FObj.prototype) {
+        FObj.prototype.borderColor = 'rgba(59,130,246,0.5)';
+        FObj.prototype.borderScaleFactor = 1;
+        FObj.prototype.cornerColor = 'rgba(59,130,246,0.8)';
+        FObj.prototype.cornerSize = 8;
+        FObj.prototype.cornerStrokeColor = '#ffffff';
+        FObj.prototype.cornerStyle = 'circle';
+        FObj.prototype.transparentCorners = false;
+        FObj.prototype.padding = 2;
+      }
+
       canvas.fireRightClick = true;
       canvas.stopContextMenu = true;
-
-
+    
       // ── Canvas auto-resize on window/wrapper size change ──
       let resizeTimer: ReturnType<typeof setTimeout> | null = null;
       let skipResize = false;
