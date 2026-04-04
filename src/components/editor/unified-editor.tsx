@@ -3875,20 +3875,31 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
                             </label>
                             <label className="text-[10px] text-gray-500">Opacity
                               <input type="range" min={0} max={100} value={Math.round((selProps.opacity ?? 1) * 100)} onChange={e => updateProp("opacity", Number(e.target.value))} className="w-full mt-1" />
-
-                       {/* Z-Order controls */}
-                       <div className='flex gap-1 mt-2'>
-                         <button onClick={() => { const c=fcRef.current; const obj=c?.getActiveObject(); if(c&&obj){c.bringObjectToFront(obj); c.requestRenderAll(); refreshLayers();} }} className='flex-1 px-2 py-1 text-[9px] bg-gray-100 hover:bg-blue-100 rounded text-gray-600 font-medium'>Front</button>
-                         <button onClick={() => { const c=fcRef.current; const obj=c?.getActiveObject(); if(c&&obj){c.bringObjectForward(obj); c.requestRenderAll(); refreshLayers();} }} className='flex-1 px-2 py-1 text-[9px] bg-gray-100 hover:bg-blue-100 rounded text-gray-600 font-medium'>↑ Up</button>
-                         <button onClick={() => { const c=fcRef.current; const obj=c?.getActiveObject(); if(c&&obj){c.sendObjectBackwards(obj); c.requestRenderAll(); refreshLayers();} }} className='flex-1 px-2 py-1 text-[9px] bg-gray-100 hover:bg-blue-100 rounded text-gray-600 font-medium'>↓ Down</button>
-                         <button onClick={() => { const c=fcRef.current; const obj=c?.getActiveObject(); if(c&&obj){c.sendObjectToBack(obj); c.requestRenderAll(); refreshLayers();} }} className='flex-1 px-2 py-1 text-[9px] bg-gray-100 hover:bg-blue-100 rounded text-gray-600 font-medium'>Back</button>
-                       </div>
                             </label>
                           </div>
                         </div>
                       )}
                     </div>
 
+                    {/* ▶ Layer Order */}
+                    <div className="border rounded-lg overflow-hidden">
+                      <button onClick={() => toggleAcc("zorder")} className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors">
+                        <span className="text-[10px] font-semibold text-gray-600">Layer Order</span>
+                        <span className="text-[9px] text-gray-400">{(accOpen as any).zorder ? "▲" : "▼"}</span>
+                      </button>
+                      {(accOpen as any).zorder && (
+                        <div className="p-2 border-t">
+                          <div className="grid grid-cols-2 gap-1">
+                            <button onClick={() => { const c=fcRef.current; const obj=c?.getActiveObject(); if(c&&obj){c.bringObjectToFront(obj); c.requestRenderAll(); refreshLayers();} }} className="px-2 py-1.5 text-[9px] bg-gray-100 hover:bg-blue-100 rounded text-gray-600 font-medium" title="Bring to Front">⇈ Front</button>
+                            <button onClick={() => { const c=fcRef.current; const obj=c?.getActiveObject(); if(c&&obj){c.bringObjectForward(obj); c.requestRenderAll(); refreshLayers();} }} className="px-2 py-1.5 text-[9px] bg-gray-100 hover:bg-blue-100 rounded text-gray-600 font-medium" title="Bring Forward">↑ Forward</button>
+                            <button onClick={() => { const c=fcRef.current; const obj=c?.getActiveObject(); if(c&&obj){c.sendObjectBackwards(obj); c.requestRenderAll(); refreshLayers();} }} className="px-2 py-1.5 text-[9px] bg-gray-100 hover:bg-blue-100 rounded text-gray-600 font-medium" title="Send Backward">↓ Backward</button>
+                            <button onClick={() => { const c=fcRef.current; const obj=c?.getActiveObject(); if(c&&obj){c.sendObjectToBack(obj); c.requestRenderAll(); refreshLayers();} }} className="px-2 py-1.5 text-[9px] bg-gray-100 hover:bg-blue-100 rounded text-gray-600 font-medium" title="Send to Back">⇊ Back</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                                        
               {/* ▶ Table Editor */}
               {selProps._isTable && selProps._tableConfig && (() => {
                 const tc = selProps._tableConfig;
