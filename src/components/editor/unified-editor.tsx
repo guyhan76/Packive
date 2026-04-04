@@ -2766,19 +2766,21 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     </label>
                   </div>
                   <button onClick={() => {
-                                        const c = fcRef.current; if (!c) return;
-                                        const sc = scaleRef.current || 1;
-                    console.log(`[Handle-Debug] scaleRef.current=${scaleRef.current} scaleXRef.current=${scaleXRef.current}`);
-
+                                     const c = fcRef.current; if (!c) return;
+                    const sc = scaleXRef.current || 1;
+                    console.log(`[Handle-Debug] scaleXRef:${sc}`);
                     const pw = Math.round(handleW * sc);
                     const ph = Math.round(handleH * sc);
+
                     const vw = 1000; const vh = Math.round(vw * ph / pw);
                     let svgInner = "";
-                    if (handleType === "fullcut") svgInner = `<rect x="10" y="10" width="${vw-20}" height="${vh-20}" rx="${vh/2}" ry="${vh/2}" fill="none" stroke="#FF0000" stroke-width="3"/>`;
-                    else if (handleType === "halfcut") svgInner = `<rect x="10" y="10" width="${vw-20}" height="${vh-20}" rx="${vh/2}" ry="${vh/2}" fill="none" stroke="#FF0000" stroke-width="3"/><line x1="${vh/2}" y1="10" x2="${vw-vh/2}" y2="10" stroke="#00AA00" stroke-width="3"/>`;
-                    else if (handleType === "fingercircle") { const r = Math.min(vw,vh)/2-10; svgInner = `<circle cx="${vw/2}" cy="${vh/2}" r="${r}" fill="none" stroke="#FF0000" stroke-width="3"/>`; }
-                    else if (handleType === "fingersemi") svgInner = `<line x1="10" y1="10" x2="${vw-10}" y2="10" stroke="#FF0000" stroke-width="3"/><path d="M10,10 A${(vw-20)/2},${vh-20} 0 0,0 ${vw-10},10" fill="none" stroke="#FF0000" stroke-width="3"/>`;
-                    else if (handleType === "squarehole") svgInner = `<rect x="10" y="10" width="${vw-20}" height="${vh-20}" fill="none" stroke="#FF0000" stroke-width="3"/>`;
+                                        const sw = 2;
+                    if (handleType === "fullcut") svgInner = `<rect x="${sw/2}" y="${sw/2}" width="${vw-sw}" height="${vh-sw}" rx="${(vh-sw)/2}" ry="${(vh-sw)/2}" fill="none" stroke="#FF0000" stroke-width="${sw}"/>`;
+                    else if (handleType === "halfcut") svgInner = `<rect x="${sw/2}" y="${sw/2}" width="${vw-sw}" height="${vh-sw}" rx="${(vh-sw)/2}" ry="${(vh-sw)/2}" fill="none" stroke="#FF0000" stroke-width="${sw}"/><line x1="${(vh-sw)/2}" y1="${sw/2}" x2="${vw-(vh-sw)/2}" y2="${sw/2}" stroke="#00AA00" stroke-width="${sw}"/>`;
+                    else if (handleType === "fingercircle") svgInner = `<circle cx="${vw/2}" cy="${vh/2}" r="${Math.min(vw,vh)/2-sw/2}" fill="none" stroke="#FF0000" stroke-width="${sw}"/>`;
+                    else if (handleType === "fingersemi") svgInner = `<line x1="${sw/2}" y1="${sw/2}" x2="${vw-sw/2}" y2="${sw/2}" stroke="#FF0000" stroke-width="${sw}"/><path d="M${sw/2},${sw/2} A${(vw-sw)/2},${vh-sw} 0 0,0 ${vw-sw/2},${sw/2}" fill="none" stroke="#FF0000" stroke-width="${sw}"/>`;
+                    else if (handleType === "squarehole") svgInner = `<rect x="${sw/2}" y="${sw/2}" width="${vw-sw}" height="${vh-sw}" fill="none" stroke="#FF0000" stroke-width="${sw}"/>`;
+
                     const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${vw}" height="${vh}" viewBox="0 0 ${vw} ${vh}">${svgInner}</svg>`;
                     const dataUrl = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgStr)));
                     import("fabric").then(({ FabricImage }) => {
@@ -3286,12 +3288,9 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           const exactScaleY = sY * 25.4 / 96;
           
           console.log(`[Dieline] viewBox=${viewBoxW.toFixed(1)}x${viewBoxH.toFixed(1)}, svgMm=${svgMmW.toFixed(2)}x${svgMmH.toFixed(2)}mm, scale=${exactScaleX.toFixed(6)}, sX=${sX.toFixed(3)}`);
-                    scaleRef.current = exactScaleX;
-          scaleXRef.current = exactScaleX;
-          scaleYRef.current = exactScaleY;
           svgMmWRef.current = svgMmW;
           svgMmHRef.current = svgMmH;
-          console.log(`[Dieline] scaleRef updated: ${exactScaleX.toFixed(6)} px/mm`);
+          
 
           // Auto-fit: scale down zoom if dieline is larger than canvas
           const neededW = viewBoxW * exactScaleX + 80;
