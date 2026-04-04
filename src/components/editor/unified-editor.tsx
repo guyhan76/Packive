@@ -212,7 +212,21 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [show3DMockup, setShow3DMockup] = useState(false);
   const [mockupFaces, setMockupFaces] = useState<{face:string;dataUrl:string|null}[]>([]);
   const [dielineModelInfo, setDielineModelInfo] = useState<string>('');
- 
+  const [gradHex1, setGradHex1] = useState("#ff0000");
+  const [gradHex2, setGradHex2] = useState("#0000ff");
+  const [gradHue1, setGradHue1] = useState(0);
+  const [gradHue2, setGradHue2] = useState(240);
+  const [gradPickPos1, setGradPickPos1] = useState({s:100,v:100});
+  const [gradPickPos2, setGradPickPos2] = useState({s:100,v:100});
+  const gradDrag1 = useRef(false);
+  const gradDrag2 = useRef(false);
+  const gradPickRef1 = useRef<HTMLDivElement>(null);
+  const gradPickRef2 = useRef<HTMLDivElement>(null);
+
+
+
+ const [gradDirection, setGradDirection] = useState<"r"|"br"|"b"|"bl"|"l"|"tl"|"t"|"tr"|"radial">("r");
+
   const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null);
   const [showPreflight, setShowPreflight] = useState(false);
   // ─── AI Panel State ───
@@ -249,9 +263,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [showTablePanel, setShowTablePanel] = useState(false);
   const [showSymbolPanel, setShowSymbolPanel] = useState(false);
   const [showHandlePanel, setShowHandlePanel] = useState(false);
-  const [handleType, setHandleType] = useState<string | null>(null);
-  const [handleW, setHandleW] = useState(80);
-  const [handleH, setHandleH] = useState(30);
   const [symbolSearch, setSymbolSearch] = useState("");
   const [symbolCategory, setSymbolCategory] = useState<string>("all");
   const [showMarkPanel, setShowMarkPanel] = useState(false);
@@ -981,22 +992,10 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       canvas.backgroundColor = '#FFFFFF';
       canvas.requestRenderAll();
       setCanvasReady(true);
-         // ── Slim selection / bounding box ──
-      const FObj = (fabricMod as any).Object;
-      if (FObj && FObj.prototype) {
-        FObj.prototype.borderColor = 'rgba(59,130,246,0.5)';
-        FObj.prototype.borderScaleFactor = 1;
-        FObj.prototype.cornerColor = 'rgba(59,130,246,0.8)';
-        FObj.prototype.cornerSize = 8;
-        FObj.prototype.cornerStrokeColor = '#ffffff';
-        FObj.prototype.cornerStyle = 'circle';
-        FObj.prototype.transparentCorners = false;
-        FObj.prototype.padding = 2;
-      }
-
       canvas.fireRightClick = true;
       canvas.stopContextMenu = true;
-    
+
+
       // ── Canvas auto-resize on window/wrapper size change ──
       let resizeTimer: ReturnType<typeof setTimeout> | null = null;
       let skipResize = false;
@@ -2378,14 +2377,14 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           </button>
           <div className="w-8 h-px bg-gray-200 my-1" />
           <span className="text-[7px] font-bold text-gray-400 tracking-widest mb-0.5">DESIGN</span>
-                        {[
+          {[
             { icon: "T", label: "Text", action: addText },
-            { icon: "🏞", label: "Image", action: addImage },
+            { icon: "🖼", label: "Image", action: addImage },
             { icon: "◆", label: "Shapes", action: () => setShowShapePanel(p => !p) },
             { icon: "⚠", label: "Symbols", action: () => setShowSymbolPanel(p => !p) },
-            { icon: "☐", label: "Handle", action: () => setShowHandlePanel(p => !p) },
-            { icon: "▦", label: "Table", action: () => setShowTablePanel(p => !p) },
-            { icon: "⫼", label: "Barcode", action: () => setShowBarcodePanel(p => !p) },
+            { icon: "▭", label: "Handle", action: () => setShowHandlePanel(p => !p) },
+            { icon: "⊞", label: "Table", action: () => setShowTablePanel(p => !p) },
+            { icon: "⣿", label: "Barcode", action: () => setShowBarcodePanel(p => !p) },
           ].map(btn => (
             <button key={btn.label} onClick={btn.action} title={btn.label}
               className="w-11 h-11 flex flex-col items-center justify-center rounded-lg text-xs transition-all hover:bg-white hover:shadow-sm text-gray-500 hover:text-gray-800">
@@ -2393,7 +2392,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
               <span className="text-[8px] mt-0.5 font-medium">{btn.label}</span>
             </button>
           ))}
-
           <div className="w-8 h-px bg-gray-200 my-1" />
           <span className="text-[7px] font-bold text-gray-400 tracking-widest mb-0.5">MEASURE</span>
           <button onClick={() => { setMeasureMode(m => { if(!m){setMeasurePts([]);setMeasureMouseMm(null);setMeasureResult("Click first point...");} else {setMeasureResult("");} return !m; }); }}
@@ -2726,84 +2724,40 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
               </div>
             </div>
           )}
-                   {/* Handle Panel */}
+          {/* Handle Panel */}
           {showHandlePanel && (
             <div className="absolute left-14 top-8 z-50 bg-white rounded-xl shadow-xl border p-3 w-80 max-h-[80vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-3">
                 <div className="text-xs font-bold text-gray-700">Handle Types (5)</div>
-                <button onClick={() => { setShowHandlePanel(false); setHandleType(null); }} className="text-gray-400 hover:text-gray-600 text-sm">X</button>
+                <button onClick={() => setShowHandlePanel(false)} className="text-gray-400 hover:text-gray-600 text-sm">X</button>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                {([
-                  { id: "fullcut", label: "Full Cut Handle", desc: "All cut lines (red)", defW: 80, defH: 30, icon: <svg viewBox="0 0 140 55" className="w-full h-8"><rect x="15" y="7" width="110" height="40" rx="20" ry="20" fill="none" stroke="#FF0000" strokeWidth="2"/></svg> },
-                  { id: "halfcut", label: "Half Cut Handle", desc: "Top: crease, Rest: cut", defW: 80, defH: 30, icon: <svg viewBox="0 0 140 55" className="w-full h-8"><rect x="15" y="7" width="110" height="40" rx="20" ry="20" fill="none" stroke="#FF0000" strokeWidth="2"/><line x1="35" y1="7" x2="105" y2="7" stroke="#00AA00" strokeWidth="3"/></svg> },
-                  { id: "fingercircle", label: "Finger Hole (Circle)", desc: "Full cut (red)", defW: 25, defH: 25, icon: <svg viewBox="0 0 60 60" className="w-8 h-8 mx-auto"><circle cx="30" cy="30" r="22" fill="none" stroke="#FF0000" strokeWidth="2"/></svg> },
-                  { id: "fingersemi", label: "Finger Hole (Semi)", desc: "All cut lines (red)", defW: 30, defH: 15, icon: <svg viewBox="0 0 60 40" className="w-10 h-6 mx-auto"><line x1="5" y1="5" x2="55" y2="5" stroke="#FF0000" strokeWidth="2"/><path d="M5,5 A25,30 0 0,0 55,5" fill="none" stroke="#FF0000" strokeWidth="2"/></svg> },
-                  { id: "squarehole", label: "Square Hole", desc: "Full cut (red)", defW: 25, defH: 25, icon: <svg viewBox="0 0 60 60" className="w-8 h-8 mx-auto"><rect x="8" y="8" width="44" height="44" fill="none" stroke="#FF0000" strokeWidth="2"/></svg> },
-                ] as { id: string; label: string; desc: string; defW: number; defH: number; icon: React.ReactNode }[]).map(h => (
-                  <button key={h.id} onClick={() => { setHandleType(h.id); setHandleW(h.defW); setHandleH(h.defH); }}
-                    className={`flex flex-col items-center gap-1 p-2 rounded-lg border transition-all ${handleType === h.id ? 'border-red-400 bg-red-50' : 'border-gray-200 hover:border-red-300 hover:bg-red-50'}`}>
-                    {h.icon}
-                    <div className="text-[9px] text-gray-600 font-medium">{h.label}</div>
-                    <div className="text-[7px] text-gray-400">{h.desc}</div>
-                  </button>
-                ))}
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={() => { const c = fcRef.current; if (!c) return; const s = `<svg xmlns="http://www.w3.org/2000/svg" width="280" height="110" viewBox="0 0 140 55"><rect x="15" y="7" width="110" height="40" rx="20" ry="20" fill="none" stroke="#FF0000" stroke-width="1"/></svg>`; const e = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(s))); import("fabric").then(({ FabricImage }) => { FabricImage.fromURL(e).then((img) => { if (!img) return; img.set({ left: c.getWidth()/2, top: c.getHeight()/2, originX: "center", originY: "center" }); img.scaleToWidth(120); c.add(img); c.setActiveObject(img); c.requestRenderAll(); if (typeof refreshLayers === "function") refreshLayers(); }); }); setShowHandlePanel(false); }} className="flex flex-col items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-red-300 hover:bg-red-50 transition-all">
+                  <svg viewBox="0 0 140 55" className="w-full h-10"><rect x="15" y="7" width="110" height="40" rx="20" ry="20" fill="none" stroke="#FF0000" strokeWidth="2"/></svg>
+                  <div className="text-[9px] text-gray-600 font-medium">Full Cut Handle</div>
+                  <div className="text-[7px] text-gray-400">All cut lines (red)</div>
+                </button>
+                <button onClick={() => { const c = fcRef.current; if (!c) return; const s = `<svg xmlns="http://www.w3.org/2000/svg" width="280" height="110" viewBox="0 0 140 55"><rect x="15" y="7" width="110" height="40" rx="20" ry="20" fill="none" stroke="#FF0000" stroke-width="1"/><line x1="35" y1="7" x2="105" y2="7" stroke="#00AA00" stroke-width="1"/></svg>`; const e = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(s))); import("fabric").then(({ FabricImage }) => { FabricImage.fromURL(e).then((img) => { if (!img) return; img.set({ left: c.getWidth()/2, top: c.getHeight()/2, originX: "center", originY: "center" }); img.scaleToWidth(120); c.add(img); c.setActiveObject(img); c.requestRenderAll(); if (typeof refreshLayers === "function") refreshLayers(); }); }); setShowHandlePanel(false); }} className="flex flex-col items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-red-300 hover:bg-red-50 transition-all">
+                  <svg viewBox="0 0 140 55" className="w-full h-10"><rect x="15" y="7" width="110" height="40" rx="20" ry="20" fill="none" stroke="#FF0000" strokeWidth="2"/><line x1="35" y1="7" x2="105" y2="7" stroke="#00AA00" strokeWidth="3"/></svg>
+                  <div className="text-[9px] text-gray-600 font-medium">Half Cut Handle</div>
+                  <div className="text-[7px] text-gray-400">Top: crease (green) Rest: cut (red)</div>
+                </button>
+                <button onClick={() => { const c = fcRef.current; if (!c) return; const s = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 60 60"><circle cx="30" cy="30" r="22" fill="none" stroke="#FF0000" stroke-width="1"/></svg>`; const e = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(s))); import("fabric").then(({ FabricImage }) => { FabricImage.fromURL(e).then((img) => { if (!img) return; img.set({ left: c.getWidth()/2, top: c.getHeight()/2, originX: "center", originY: "center" }); img.scaleToWidth(60); c.add(img); c.setActiveObject(img); c.requestRenderAll(); if (typeof refreshLayers === "function") refreshLayers(); }); }); setShowHandlePanel(false); }} className="flex flex-col items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-red-300 hover:bg-red-50 transition-all">
+                  <svg viewBox="0 0 60 60" className="w-12 h-12 mx-auto"><circle cx="30" cy="30" r="22" fill="none" stroke="#FF0000" strokeWidth="2"/></svg>
+                  <div className="text-[9px] text-gray-600 font-medium">Finger Hole (Circle)</div>
+                  <div className="text-[7px] text-gray-400">Full cut (red)</div>
+                </button>
+                <button onClick={() => { const c = fcRef.current; if (!c) return; const s = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80" viewBox="0 0 60 40"><line x1="5" y1="5" x2="55" y2="5" stroke="#FF0000" stroke-width="1"/><path d="M5,5 A25,30 0 0,0 55,5" fill="none" stroke="#FF0000" stroke-width="1"/></svg>`; const e = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(s))); import("fabric").then(({ FabricImage }) => { FabricImage.fromURL(e).then((img) => { if (!img) return; img.set({ left: c.getWidth()/2, top: c.getHeight()/2, originX: "center", originY: "center" }); img.scaleToWidth(60); c.add(img); c.setActiveObject(img); c.requestRenderAll(); if (typeof refreshLayers === "function") refreshLayers(); }); }); setShowHandlePanel(false); }} className="flex flex-col items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-red-300 hover:bg-red-50 transition-all">
+                  <svg viewBox="0 0 60 40" className="w-12 h-10 mx-auto"><line x1="5" y1="5" x2="55" y2="5" stroke="#FF0000" strokeWidth="2"/><path d="M5,5 A25,30 0 0,0 55,5" fill="none" stroke="#FF0000" strokeWidth="2"/></svg>
+                  <div className="text-[9px] text-gray-600 font-medium">Finger Hole (Semi)</div>
+                  <div className="text-[7px] text-gray-400">All cut lines (red)</div>
+                </button>
+                <button onClick={() => { const c = fcRef.current; if (!c) return; const s = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 60 60"><rect x="8" y="8" width="44" height="44" fill="none" stroke="#FF0000" stroke-width="1"/></svg>`; const e = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(s))); import("fabric").then(({ FabricImage }) => { FabricImage.fromURL(e).then((img) => { if (!img) return; img.set({ left: c.getWidth()/2, top: c.getHeight()/2, originX: "center", originY: "center" }); img.scaleToWidth(60); c.add(img); c.setActiveObject(img); c.requestRenderAll(); if (typeof refreshLayers === "function") refreshLayers(); }); }); setShowHandlePanel(false); }} className="flex flex-col items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-red-300 hover:bg-red-50 transition-all">
+                  <svg viewBox="0 0 60 60" className="w-12 h-12 mx-auto"><rect x="8" y="8" width="44" height="44" fill="none" stroke="#FF0000" strokeWidth="2"/></svg>
+                  <div className="text-[9px] text-gray-600 font-medium">Square Hole</div>
+                  <div className="text-[7px] text-gray-400">Full cut (red)</div>
+                </button>
               </div>
-
-              {/* Size Input */}
-              {handleType && (
-                <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <div className="text-[10px] font-bold text-blue-700 mb-2">Set Size (mm)</div>
-                  <div className="flex gap-2 items-center mb-2">
-                    <label className="flex-1">
-                      <span className="text-[9px] text-gray-500">W (mm)</span>
-                      <input type="number" value={handleW} onChange={e => setHandleW(Number(e.target.value))} min={5} max={500}
-                        className="w-full px-2 py-1 text-xs border rounded-md focus:ring-1 focus:ring-blue-400 focus:border-blue-400" />
-                    </label>
-                    <span className="text-gray-400 mt-3">×</span>
-                    <label className="flex-1">
-                      <span className="text-[9px] text-gray-500">H (mm)</span>
-                      <input type="number" value={handleH} onChange={e => setHandleH(Number(e.target.value))} min={5} max={500}
-                        className="w-full px-2 py-1 text-xs border rounded-md focus:ring-1 focus:ring-blue-400 focus:border-blue-400" />
-                    </label>
-                  </div>
-                  <button onClick={() => {
-                    const c = fcRef.current; if (!c) return;
-                    const pxW = handleW * scaleRef.current;
-                    const pxH = handleH * scaleRef.current;
-                    let svgStr = '';
-                    if (handleType === 'fullcut') {
-                      const rx = Math.min(pxH / 2, pxW / 4);
-                      svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${pxW}" height="${pxH}" viewBox="0 0 ${pxW} ${pxH}"><rect x="1" y="1" width="${pxW-2}" height="${pxH-2}" rx="${rx}" ry="${rx}" fill="none" stroke="#FF0000" stroke-width="1"/></svg>`;
-                    } else if (handleType === 'halfcut') {
-                      const rx = Math.min(pxH / 2, pxW / 4);
-                      const creaseStart = pxW * 0.15;
-                      const creaseEnd = pxW * 0.85;
-                      svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${pxW}" height="${pxH}" viewBox="0 0 ${pxW} ${pxH}"><rect x="1" y="1" width="${pxW-2}" height="${pxH-2}" rx="${rx}" ry="${rx}" fill="none" stroke="#FF0000" stroke-width="1"/><line x1="${creaseStart}" y1="1" x2="${creaseEnd}" y2="1" stroke="#00A650" stroke-width="1"/></svg>`;
-                    } else if (handleType === 'fingercircle') {
-                      const r = Math.min(pxW, pxH) / 2 - 1;
-                      svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${pxW}" height="${pxH}" viewBox="0 0 ${pxW} ${pxH}"><circle cx="${pxW/2}" cy="${pxH/2}" r="${r}" fill="none" stroke="#FF0000" stroke-width="1"/></svg>`;
-                    } else if (handleType === 'fingersemi') {
-                      svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${pxW}" height="${pxH}" viewBox="0 0 ${pxW} ${pxH}"><line x1="1" y1="1" x2="${pxW-1}" y2="1" stroke="#FF0000" stroke-width="1"/><path d="M1,1 A${pxW/2},${pxH} 0 0,0 ${pxW-1},1" fill="none" stroke="#FF0000" stroke-width="1"/></svg>`;
-                    } else if (handleType === 'squarehole') {
-                      svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${pxW}" height="${pxH}" viewBox="0 0 ${pxW} ${pxH}"><rect x="1" y="1" width="${pxW-2}" height="${pxH-2}" fill="none" stroke="#FF0000" stroke-width="1"/></svg>`;
-                    }
-                    const dataUrl = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgStr)));
-                    import("fabric").then(({ FabricImage }) => {
-                      FabricImage.fromURL(dataUrl).then((img: any) => {
-                        if (!img) return;
-                        img.set({ left: c.getWidth()/2, top: c.getHeight()/2, originX: "center", originY: "center" });
-                        c.add(img); c.setActiveObject(img); c.requestRenderAll();
-                        if (typeof refreshLayers === "function") refreshLayers();
-                      });
-                    });
-                    setShowHandlePanel(false); setHandleType(null);
-                  }} className="w-full py-1.5 text-[11px] font-bold bg-red-500 text-white rounded-lg hover:bg-red-600 transition">
-                    Add Handle ({handleW} × {handleH} mm)
-                  </button>
-                </div>
-              )}
-
               <div className="mt-3 p-2 bg-gray-50 rounded-lg">
                 <div className="text-[8px] text-gray-500 space-y-1">
                   <div className="flex items-center gap-1.5"><span className="w-6 h-0.5 bg-red-500 inline-block"></span> Cut line (red)</div>
@@ -4236,7 +4190,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                         <div className="p-2 space-y-2 border-t">
                           {/* Color mode tabs */}
                           <div className="flex bg-gray-100 rounded-lg p-0.5">
-                            {(["cmyk","spot"] as ColorMode[]).map(m => (
+                            {(["cmyk","spot","gradient"] as ColorMode[]).map(m => (
                               <button key={m} onClick={() => setColorMode(m)}
                                 className={`flex-1 py-1 rounded text-[10px] font-medium transition-colors ${colorMode === m ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
                                 {m.toUpperCase()}
@@ -4682,9 +4636,91 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                               {selProps._spotStrokeName && <div className="text-[9px] bg-purple-50 text-purple-700 px-2 py-1 rounded">Stroke: {selProps._spotStrokeName}</div>}
                               {(selProps._spotFillName || selProps._spotStrokeName) && (
                                 <button onClick={() => { updateProp("clearSpotFill", null); updateProp("clearSpotStroke", null); }} className="text-[9px] text-red-500 hover:underline">Clear Spot Colors</button>
-                              )}
+                              )}                                
+
                             </div>
                           )}
+                                                                                                 {colorMode === "gradient" && (
+                            <div className="space-y-2 mt-2 p-2 bg-gray-50 rounded-lg">
+                              <div className="text-[10px] font-semibold text-gray-500">Direction</div>
+                              <div className="grid grid-cols-3 gap-1">
+                                {([
+                                  {id:"tl",label:"↖"},{id:"t",label:"↑"},{id:"tr",label:"↗"},
+                                  {id:"l",label:"←"},{id:"radial",label:"◎"},{id:"r",label:"→"},
+                                  {id:"bl",label:"↙"},{id:"b",label:"↓"},{id:"br",label:"↘"},
+                                ] as {id:string;label:string}[]).map(d => (
+                                  <button key={d.id} onClick={() => setGradDirection(d.id as any)} title={d.id}
+                                    className={`py-1.5 rounded text-xs font-bold transition-all ${gradDirection === d.id ? "bg-blue-600 text-white" : "bg-white text-gray-500 hover:bg-gray-200 border"}`}>
+                                    {d.label}
+                                  </button>
+                                ))}
+                              </div>
+                              {/* Color 1 Picker */}
+                              <div>
+                                <div className="text-[9px] font-medium text-gray-500 mb-1">Color 1</div>
+                                <div ref={gradPickRef1} className="relative w-full h-28 rounded cursor-crosshair border border-gray-200 select-none"
+                                  style={{background:`linear-gradient(to top,#000,transparent),linear-gradient(to right,#fff,hsl(${gradHue1},100%,50%))`}}
+                                  onMouseDown={e=>{e.preventDefault();gradDrag1.current=true;const rect=e.currentTarget.getBoundingClientRect();const s=Math.max(0,Math.min(100,((e.clientX-rect.left)/rect.width)*100));const v=Math.max(0,Math.min(100,(1-(e.clientY-rect.top)/rect.height)*100));setGradPickPos1({s,v});setGradHex1(hsvToHex(gradHue1,s/100,v/100));const onMove=(ev:MouseEvent)=>{if(!gradDrag1.current)return;const r=gradPickRef1.current?.getBoundingClientRect();if(!r)return;const ms=Math.max(0,Math.min(100,((ev.clientX-r.left)/r.width)*100));const mv=Math.max(0,Math.min(100,(1-(ev.clientY-r.top)/r.height)*100));setGradPickPos1({s:ms,v:mv});setGradHex1(hsvToHex(gradHue1,ms/100,mv/100));};const onUp=()=>{gradDrag1.current=false;document.removeEventListener("mousemove",onMove);document.removeEventListener("mouseup",onUp);};document.addEventListener("mousemove",onMove);document.addEventListener("mouseup",onUp);}}>
+                                  <div className="absolute w-3 h-3 border-2 border-white rounded-full shadow pointer-events-none" style={{left:`calc(${gradPickPos1.s}% - 6px)`,top:`calc(${100-gradPickPos1.v}% - 6px)`,backgroundColor:gradHex1,boxShadow:"0 0 0 1px rgba(0,0,0,0.3)"}}/>
+                                </div>
+                                <input type="range" min="0" max="360" value={gradHue1} onChange={e=>{const h=Number(e.target.value);setGradHue1(h);setGradHex1(hsvToHex(h,gradPickPos1.s/100,gradPickPos1.v/100));}} className="w-full h-2 rounded-full cursor-pointer appearance-none mt-1" style={{background:"linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)"}}/>
+                                <div className="flex items-center gap-1 mt-1">
+                                  <div className="w-5 h-5 rounded border" style={{backgroundColor:gradHex1}}/>
+                                  <span className="text-[9px] font-mono text-gray-500">{gradHex1}</span>
+                                  {(()=>{const c=hexToCmyk(gradHex1);return <span className="text-[8px] text-gray-400 ml-auto">C{c[0]} M{c[1]} Y{c[2]} K{c[3]}</span>;})()}
+                                </div>
+                              </div>
+                              {/* Color 2 Picker */}
+                              <div>
+                                <div className="text-[9px] font-medium text-gray-500 mb-1">Color 2</div>
+                                <div ref={gradPickRef2} className="relative w-full h-28 rounded cursor-crosshair border border-gray-200 select-none"
+                                  style={{background:`linear-gradient(to top,#000,transparent),linear-gradient(to right,#fff,hsl(${gradHue2},100%,50%))`}}
+                                  onMouseDown={e=>{e.preventDefault();gradDrag2.current=true;const rect=e.currentTarget.getBoundingClientRect();const s=Math.max(0,Math.min(100,((e.clientX-rect.left)/rect.width)*100));const v=Math.max(0,Math.min(100,(1-(e.clientY-rect.top)/rect.height)*100));setGradPickPos2({s,v});setGradHex2(hsvToHex(gradHue2,s/100,v/100));const onMove=(ev:MouseEvent)=>{if(!gradDrag2.current)return;const r=gradPickRef2.current?.getBoundingClientRect();if(!r)return;const ms=Math.max(0,Math.min(100,((ev.clientX-r.left)/r.width)*100));const mv=Math.max(0,Math.min(100,(1-(ev.clientY-r.top)/r.height)*100));setGradPickPos2({s:ms,v:mv});setGradHex2(hsvToHex(gradHue2,ms/100,mv/100));};const onUp=()=>{gradDrag2.current=false;document.removeEventListener("mousemove",onMove);document.removeEventListener("mouseup",onUp);};document.addEventListener("mousemove",onMove);document.addEventListener("mouseup",onUp);}}>
+                                  <div className="absolute w-3 h-3 border-2 border-white rounded-full shadow pointer-events-none" style={{left:`calc(${gradPickPos2.s}% - 6px)`,top:`calc(${100-gradPickPos2.v}% - 6px)`,backgroundColor:gradHex2,boxShadow:"0 0 0 1px rgba(0,0,0,0.3)"}}/>
+                                </div>
+                                <input type="range" min="0" max="360" value={gradHue2} onChange={e=>{const h=Number(e.target.value);setGradHue2(h);setGradHex2(hsvToHex(h,gradPickPos2.s/100,gradPickPos2.v/100));}} className="w-full h-2 rounded-full cursor-pointer appearance-none mt-1" style={{background:"linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)"}}/>
+                                <div className="flex items-center gap-1 mt-1">
+                                  <div className="w-5 h-5 rounded border" style={{backgroundColor:gradHex2}}/>
+                                  <span className="text-[9px] font-mono text-gray-500">{gradHex2}</span>
+                                  {(()=>{const c=hexToCmyk(gradHex2);return <span className="text-[8px] text-gray-400 ml-auto">C{c[0]} M{c[1]} Y{c[2]} K{c[3]}</span>;})()}
+                                </div>
+                              </div>
+                              {/* Preview */}
+                              <div className="h-6 rounded border" style={{
+                                background: gradDirection === "radial"
+                                  ? `radial-gradient(circle, ${gradHex1}, ${gradHex2})`
+                                  : `linear-gradient(${{r:"to right",br:"to bottom right",b:"to bottom",bl:"to bottom left",l:"to left",tl:"to top left",t:"to top",tr:"to top right"}[gradDirection] || "to right"}, ${gradHex1}, ${gradHex2})`
+                              }} />
+                              <button onClick={() => {
+                                const c = fcRef.current; const obj = c?.getActiveObject();
+                                if (!obj || !c) { alert("Select an object first"); return; }
+                                const w = (obj as any).width || 100;
+                                const h = (obj as any).height || 100;
+                                const fm = fabricModRef.current;
+                                if (!fm) return;
+                                if (gradDirection === "radial") {
+                                  obj.set("fill", new fm.Gradient({ type: "radial",
+                                    coords: { x1: w/2, y1: h/2, r1: 0, x2: w/2, y2: h/2, r2: Math.max(w,h)/2 },
+                                    colorStops: [{ offset: 0, color: gradHex1 }, { offset: 1, color: gradHex2 }] }));
+                                } else {
+                                  const cm: Record<string,{x1:number;y1:number;x2:number;y2:number}> = {
+                                    r:{x1:0,y1:0,x2:w,y2:0}, br:{x1:0,y1:0,x2:w,y2:h}, b:{x1:0,y1:0,x2:0,y2:h},
+                                    bl:{x1:w,y1:0,x2:0,y2:h}, l:{x1:w,y1:0,x2:0,y2:0}, tl:{x1:w,y1:h,x2:0,y2:0},
+                                    t:{x1:0,y1:h,x2:0,y2:0}, tr:{x1:0,y1:h,x2:w,y2:0}
+                                  };
+                                  obj.set("fill", new fm.Gradient({ type: "linear",
+                                    coords: cm[gradDirection] || {x1:0,y1:0,x2:w,y2:0},
+                                    colorStops: [{ offset: 0, color: gradHex1 }, { offset: 1, color: gradHex2 }] }));
+                                }
+                                c.requestRenderAll();
+                                pushHistory();
+                              }} className="w-full py-1.5 bg-blue-600 text-white rounded text-[10px] font-semibold hover:bg-blue-700 transition-colors">
+                                Apply Gradient
+                              </button>
+                            </div>
+                          )}
+
+
                         </div>
                       )}
                     </div>
