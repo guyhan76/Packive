@@ -260,6 +260,15 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [showShapePanel, setShowShapePanel] = useState(false);
   const [showTextPanel, setShowTextPanel] = useState(false);
   const [showBarcodePanel, setShowBarcodePanel] = useState(false);
+  const [showMarkPanel, setShowMarkPanel] = useState(false);
+  const [markMode, setMarkMode] = useState("spot");
+const [customMarkName, setCustomMarkName] = useState("");
+const [customMarkCmyk, setCustomMarkCmyk] = useState<[number,number,number,number]>([0,100,100,0]);
+const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[number,number,number,number]}[]>(() => {
+  if (typeof window === "undefined") return [];
+  try { return JSON.parse(localStorage.getItem("packive_custom_marks") || "[]"); } catch { return []; }
+});
+
   const [showTablePanel, setShowTablePanel] = useState(false);
   const [showSymbolPanel, setShowSymbolPanel] = useState(false);
   const [showHandlePanel, setShowHandlePanel] = useState(false);
@@ -268,7 +277,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [handleH, setHandleH] = useState(30);
   const [symbolSearch, setSymbolSearch] = useState("");
   const [symbolCategory, setSymbolCategory] = useState<string>("all");
-  const [showMarkPanel, setShowMarkPanel] = useState(false);
   const [showTemplatePanel, setShowTemplatePanel] = useState(false);
   const [templateCategory, setTemplateCategory] = useState<string>("all");
   const [showDielinePanel, setShowDielinePanel] = useState(false);
@@ -364,7 +372,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [barcodeValue, setBarcodeValue] = useState("");
   const [tableRows, setTableRows] = useState(4);
   const [tableCols, setTableCols] = useState(2);
-  const [layersList, setLayersList] = useState<{id:string;type:string;name:string;visible:boolean;locked:boolean}[]>([]);
+  const [layersList, setLayersList] = useState<{id:string;type:string;name:string;visible:boolean;locked:boolean;thumb?:string;markType?:string;markCmyk?:number[]}[]>([]);
   const [selectedPanel, setSelectedPanel] = useState<string | null>(null);
   const [tableEditCell, setTableEditCell] = useState<{row:number;col:number}|null>(null);
   const [tableSelStart, setTableSelStart] = useState<{row:number;col:number}|null>(null);
@@ -527,8 +535,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   }, []);
   const SAVE_KEY = "packive-temp-design";
   const SAVE_META_KEY = "packive-temp-meta";
-  const JSON_PROPS = ["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","_isPanelOverlay","_panelId","_panelRole","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isTable","_tableConfig","_tableRole","_tableRow","_tableCol","_tableId"];
-
+ const JSON_PROPS = ["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","_isPanelOverlay","_panelId","_panelRole","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isTable","_tableConfig","_tableRole","_tableRow","_tableCol","_tableId","_markType","_markMemo","_markCmyk","_markHex","_isMarkAnnotation"];
   const [saveStatus, setSaveStatus] = useState<string|null>(null);
 
 
@@ -619,9 +626,11 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
         if (o.type === "group") return "Group " + (grpCount++) + " (" + (o._objects?.length || 0) + ")";
         return o.name || o.type || "Object";
       })(),
-      locked: !!o.lockMovementX,
+            locked: !!o.lockMovementX,
       thumb: o.type === "image" ? (o._element?.src || o.toDataURL?.({multiplier: 0.1}) || "") : "",
       visible: o.visible !== false,
+      markType: o._markType || undefined,
+      markCmyk: o._markCmyk || undefined,
     })).reverse();
     setLayersList(list);
   }, []);
@@ -1964,6 +1973,10 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
       name: (obj as any).name || "",
       _isTable: isTable,
       _tableConfig: tableConfig,
+            _markType: (obj as any)._markType || '',
+      _markMemo: (obj as any)._markMemo || '',
+      _markCmyk: (obj as any)._markCmyk || null,
+
     };
   }, []);
 
@@ -2390,7 +2403,8 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
             { icon: "▭", label: "Handle", action: () => setShowHandlePanel(p => !p) },
             { icon: "⊞", label: "Table", action: () => setShowTablePanel(p => !p) },
             { icon: "⫼", label: "Barcode", action: () => setShowBarcodePanel(p => !p) },
-          ].map(btn => (
+            { icon: "✎", label: "Mark", action: () => setShowMarkPanel(p => !p) },
+          ].map(btn => (            
             <button key={btn.label} onClick={btn.action} title={btn.label}
               className="w-11 h-11 flex flex-col items-center justify-center rounded-lg text-xs transition-all hover:bg-white hover:shadow-sm text-gray-500 hover:text-gray-800">
               <span className="text-sm leading-none">{btn.icon}</span>
@@ -2811,6 +2825,192 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
               </div>
             </div>
           )}
+    {showMarkPanel && (
+  <div className="absolute left-14 top-8 z-50 bg-white rounded-xl shadow-xl border w-72 max-h-[80vh] overflow-hidden flex flex-col" style={{fontFamily:"Inter, system-ui, sans-serif"}}>
+    <div className="flex items-center justify-between px-3 py-2 border-b bg-gray-50">
+      <span className="text-[11px] font-semibold text-gray-700 tracking-wide">FINISHING MARKS</span>
+      <button onClick={() => setShowMarkPanel(false)} className="w-5 h-5 flex items-center justify-center rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 text-xs">✕</button>
+    </div>
+
+    <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      {/* Status */}
+      {(() => {
+        const c = fcRef.current;
+        const obj = c?.getActiveObject();
+        const hasMark = obj && (obj as any)._markType;
+        return (
+          <div className={`p-2 rounded-md text-[10px] ${obj ? (hasMark ? "bg-green-50 text-green-700 border border-green-200" : "bg-blue-50 text-blue-700 border border-blue-200") : "bg-orange-50 text-orange-600 border border-orange-200"}`}>
+            {!obj ? "Select an object on canvas first" : hasMark ? `Marked as: ${(obj as any)._markType?.toUpperCase()} — ${(obj as any)._markMemo || ""}` : `Selected: ${obj.type || "object"} — ready to mark`}
+          </div>
+        );
+      })()}
+
+      {/* Swatch Name */}
+      <div>
+        <label className="text-[10px] text-gray-500 font-medium block mb-1">Swatch Name</label>
+        <input type="text" value={customMarkName} onChange={e => setCustomMarkName(e.target.value)}
+          placeholder="e.g., Foil Gold, Spot UV, Emboss Logo..."
+          className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-[11px] focus:border-blue-400 focus:ring-1 focus:ring-blue-100 outline-none transition-all" />
+      </div>
+
+      {/* Finishing Type */}
+      <div>
+        <label className="text-[10px] text-gray-500 font-medium block mb-1">Finishing Type</label>
+        <select value={markMode} onChange={e => setMarkMode(e.target.value as any)}
+          className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-[11px] bg-white focus:border-blue-400 outline-none">
+          <option value="spot">Spot Color</option>
+          <option value="foil">Foil Stamping</option>
+          <option value="emboss">Embossing</option>
+          <option value="silk">Silk Screen</option>
+          <option value="uv">UV Coating</option>
+          <option value="varnish">Varnish</option>
+          <option value="diecut">Die Cut</option>
+          <option value="laser">Laser Engrave</option>
+          <option value="whiteink">White Ink</option>
+          <option value="custom">Other (Custom)</option>
+        </select>
+      </div>
+            {/* Spot Color Picker */}
+      <div>
+        <label className="text-[10px] text-gray-500 font-medium block mb-1">Color</label>
+        <div className="flex items-center gap-2 mb-2">
+          <div className="w-9 h-9 rounded-md border border-gray-200 shadow-inner flex-shrink-0"
+            style={{backgroundColor: cmykToHex(...customMarkCmyk)}} />
+          <div className="flex-1">
+            <div className="text-[10px] text-gray-700 font-medium">{customMarkName || "Select a color"}</div>
+            <div className="text-[8px] text-gray-400 font-mono">C{customMarkCmyk[0]} M{customMarkCmyk[1]} Y{customMarkCmyk[2]} K{customMarkCmyk[3]}</div>
+          </div>
+        </div>
+        {/* Search */}
+        <input value={spotSearch} onChange={e => setSpotSearch(e.target.value)}
+          placeholder="Search spot color..."
+          className="w-full border border-gray-200 rounded-md px-2 py-1 text-[10px] focus:border-blue-400 outline-none mb-1.5" />
+        {/* Category chips */}
+        <div className="flex gap-1 flex-wrap mb-1.5">
+          {["All","Red","Orange","Yellow","Green","Blue","Purple","Pink","Brown","Neutral","Metallic","Pastel"].map(cat => (
+            <button key={cat} onClick={() => setSpotCategory(cat)}
+              className={`px-1.5 py-0.5 rounded-full text-[8px] font-medium transition-all ${spotCategory === cat ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
+              {cat}
+            </button>
+          ))}
+        </div>
+        {/* Color grid */}
+        <div className="max-h-48 overflow-y-auto rounded-md border border-gray-100 p-1">
+          <div className="grid grid-cols-8 gap-0.5">
+            {PACKIVE_SPOT_COLORS.filter((c: any) => {
+              const catMatch = spotCategory === "All" || c.category === spotCategory;
+              if (!spotSearch) return catMatch;
+              const q = spotSearch.toLowerCase();
+              return catMatch && (c.name?.toLowerCase().includes(q) || c.hex?.toLowerCase().includes(q) || c.id?.toLowerCase?.().includes(q));
+            }).map((c: any) => (
+              <button key={c.id || c.name} onClick={() => {
+                const cmyk = c.cmyk || hexToCmyk(c.hex || "#000000");
+                setCustomMarkCmyk(cmyk as [number,number,number,number]);
+                if (!customMarkName.trim()) setCustomMarkName(c.name || "Spot Color");
+              }}
+                title={`${c.name}\nC${(c.cmyk||[0,0,0,0])[0]} M${(c.cmyk||[0,0,0,0])[1]} Y${(c.cmyk||[0,0,0,0])[2]} K${(c.cmyk||[0,0,0,0])[3]}`}
+                className={`w-6 h-6 rounded-sm border transition-all hover:scale-125 hover:z-10 hover:shadow-md ${
+                  cmykToHex(...customMarkCmyk) === (c.hex || cmykToHex(...(c.cmyk || [0,0,0,0])))
+                  ? "ring-2 ring-blue-500 border-blue-500" : "border-gray-200"
+                }`}
+                style={{backgroundColor: c.hex || cmykToHex(...(c.cmyk || [0,0,0,0]))}} />
+            ))}
+          </div>
+        </div>
+      </div>
+
+     
+      {/* Quick Presets */}
+      <div>
+        <label className="text-[10px] text-gray-500 font-medium block mb-1">Quick Presets</label>
+        <div className="flex flex-wrap gap-1">
+          {([
+            {n:"Gold Foil",t:"foil",c:[0,20,80,15] as [number,number,number,number]},
+            {n:"Silver Foil",t:"foil",c:[0,0,0,25] as [number,number,number,number]},
+            {n:"Spot UV",t:"uv",c:[80,0,20,0] as [number,number,number,number]},
+            {n:"Emboss",t:"emboss",c:[0,0,0,40] as [number,number,number,number]},
+            {n:"White Ink",t:"whiteink",c:[0,0,0,0] as [number,number,number,number]},
+            {n:"Red Spot",t:"spot",c:[0,100,100,0] as [number,number,number,number]},
+          ]).map(p => (
+            <button key={p.n} onClick={() => { setCustomMarkName(p.n); setMarkMode(p.t as any); setCustomMarkCmyk(p.c); }}
+              className="flex items-center gap-1 px-2 py-1 rounded-full border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all text-[9px] text-gray-600">
+              <span className="w-3 h-3 rounded-full border border-gray-300 inline-block flex-shrink-0" style={{backgroundColor: cmykToHex(...p.c)}} />
+              {p.n}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Apply Mark to Selected Object */}
+      <button onClick={() => {
+        const c = fcRef.current; if (!c) return;
+        const obj = c.getActiveObject(); if (!obj) { alert("Select an object on canvas first"); return; }
+        const name = customMarkName.trim(); if (!name) { alert("Enter a swatch name"); return; }
+        const hex = cmykToHex(...customMarkCmyk);
+        (obj as any)._markType = markMode;
+        (obj as any)._markMemo = name;
+        (obj as any)._markCmyk = [...customMarkCmyk];
+        (obj as any)._markHex = hex;
+        obj.set({ opacity: 0.85 });
+        c.requestRenderAll();
+        if (typeof refreshLayers === "function") refreshLayers();
+        if (typeof pushHistory === "function") pushHistory();
+           setSelProps((prev: any) => prev ? { ...prev, _markType: '', _markMemo: '', _markCmyk: null } : prev);
+        const updated = [...savedCustomMarks.filter(s => s.name !== name), {name, cmyk: [...customMarkCmyk] as [number,number,number,number]}];
+        setSavedCustomMarks(updated);
+        try { localStorage.setItem("packive_custom_marks", JSON.stringify(updated)); } catch {}
+               setSelProps((prev: any) => prev ? { ...prev, _markType: markMode, _markMemo: name, _markCmyk: [...customMarkCmyk] } : prev);
+        setShowMarkPanel(false);
+      }} className="w-full py-2 bg-gray-800 text-white rounded-md text-[11px] font-medium hover:bg-gray-900 transition-colors">
+        Apply Mark to Selected Object
+      </button>
+
+      {/* Remove Mark */}
+      <button onClick={() => {
+        const c = fcRef.current; if (!c) return;
+        const obj = c.getActiveObject(); if (!obj) { alert("Select an object first"); return; }
+        delete (obj as any)._markType;
+        delete (obj as any)._markMemo;
+        delete (obj as any)._markCmyk;
+        delete (obj as any)._markHex;
+        obj.set({ opacity: 1 });
+        c.requestRenderAll();
+        if (typeof refreshLayers === "function") refreshLayers();
+                if (typeof pushHistory === "function") pushHistory();
+        setSelProps((prev: any) => prev ? { ...prev, _markType: '', _markMemo: '', _markCmyk: null } : prev);
+      }} className="w-full py-1.5 border
+ border-gray-200 text-gray-500 rounded-md text-[10px] hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors">
+        Remove Mark from Selected
+      </button>
+    </div>
+
+    {/* Saved Swatches */}
+    {savedCustomMarks.length > 0 && (
+      <div className="border-t bg-gray-50 px-3 py-2">
+        <div className="text-[9px] text-gray-400 font-medium mb-1.5">SAVED SWATCHES</div>
+        <div className="space-y-0.5 max-h-28 overflow-y-auto">
+          {savedCustomMarks.map((sm, idx) => {
+            const smHex = cmykToHex(...sm.cmyk);
+            return (
+              <div key={idx} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-white transition-colors group">
+                <span className="w-4 h-4 rounded-sm border border-gray-200 flex-shrink-0" style={{backgroundColor: smHex}} />
+                <span className="flex-1 text-[10px] text-gray-700 truncate">{sm.name}</span>
+                <span className="text-[8px] text-gray-400 font-mono">C{sm.cmyk[0]}M{sm.cmyk[1]}Y{sm.cmyk[2]}K{sm.cmyk[3]}</span>
+                <button onClick={() => { setCustomMarkName(sm.name); setCustomMarkCmyk([...sm.cmyk]); }}
+                  className="text-[8px] text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">Use</button>
+                <button onClick={() => {
+                  const next = savedCustomMarks.filter((_,j) => j !== idx);
+                  setSavedCustomMarks(next);
+                  try { localStorage.setItem("packive_custom_marks", JSON.stringify(next)); } catch {}
+                }} className="text-[8px] text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">✕</button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    )}
+  </div>
+)}
 
 
           {/* Table Popup */}
@@ -3635,6 +3835,24 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 {selProps ? (
                   <>
                     <div className="text-xs font-semibold text-gray-700 uppercase mb-2">{selProps.type}</div>
+                    {/* ▶ Finishing Mark Info */}
+{selProps._markType && (
+  <div className="mb-2 p-2 rounded-lg border" style={{
+    borderColor: selProps._markCmyk ? cmykToHex(...(selProps._markCmyk as [number,number,number,number])) + "80" : "#ddd",
+    backgroundColor: selProps._markCmyk ? cmykToHex(...(selProps._markCmyk as [number,number,number,number])) + "12" : "#f9f9f9"
+  }}>
+    <div className="flex items-center gap-2 mb-1">
+      <span className="w-4 h-4 rounded-sm border flex-shrink-0" style={{
+        backgroundColor: selProps._markCmyk ? cmykToHex(...(selProps._markCmyk as [number,number,number,number])) : "#888"
+      }} />
+      <span className="text-[11px] font-semibold text-gray-700">{selProps._markMemo || selProps._markType}</span>
+        </div>
+    <div className="flex items-center gap-2">
+      <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-medium">{selProps._markType.toUpperCase()}</span>
+    </div>
+  </div>
+
+)}
 
                     {/* ▶ Position & Size Accordion */}
                     <div className="border rounded-lg overflow-hidden">
@@ -5161,6 +5379,17 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                     <div className="flex-1 flex items-center gap-1.5 min-w-0">
                       {layer.thumb && <img src={layer.thumb} className="w-6 h-6 rounded object-cover border border-gray-200 flex-shrink-0" />}
                       <span className="truncate text-gray-700">{layer.name}</span>
+{layer.markType && (
+  <span className="text-[7px] px-1 py-0.5 rounded-full font-semibold flex-shrink-0 border"
+    style={{
+      backgroundColor: layer.markCmyk ? cmykToHex(...(layer.markCmyk as [number,number,number,number])) + "20" : "#f3f3f3",
+      color: layer.markCmyk ? cmykToHex(...(layer.markCmyk as [number,number,number,number])) : "#888",
+      borderColor: layer.markCmyk ? cmykToHex(...(layer.markCmyk as [number,number,number,number])) + "50" : "#ddd"
+    }}>
+    {layer.markType.toUpperCase()}
+  </span>
+)}
+
                     </div>
                     <span className="text-[10px] px-1 py-0.5 rounded bg-gray-100 text-gray-500 shrink-0">{
                       layer.type === "image" ? "IMG" :
