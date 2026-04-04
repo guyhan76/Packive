@@ -1688,7 +1688,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
     else if (type === "burst12") s = new Polygon(mkPoly(12, hsz, hsz*0.7), { fill: color });
     else if (type === "burst24") s = new Polygon(mkPoly(24, hsz, hsz*0.8), { fill: color });
     else if (type === "badge") s = new Polygon(mkPoly(16, hsz, hsz*0.85), { fill: color });
-
+    else if (type === "seal") s = new Polygon(mkPoly(20, hsz, hsz*0.87), { fill: color });
     // === Arrows ===
     else if (type === "arrowright") s = new Path("M 0 15 L 50 15 L 50 5 L 70 20 L 50 35 L 50 25 L 0 25 Z", { left: cx-35, top: cy-20, fill: color });
     else if (type === "arrowleft") s = new Path("M 70 15 L 20 15 L 20 5 L 0 20 L 20 35 L 20 25 L 70 25 Z", { left: cx-35, top: cy-20, fill: color });
@@ -2449,19 +2449,19 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
                 </div>
               </div>
 
-              {/* Stars & Badges */}
+                            {/* Stars & Badges */}
               <div className="mb-3">
                 <div className="text-[9px] text-gray-400 font-medium mb-1.5 uppercase tracking-wider">Stars & Badges</div>
                 <div className="grid grid-cols-5 gap-1">
                   {([
-                    {id:"star4",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><polygon points="12,1 14,9 22,9 16,14 18,22 12,17 6,22 8,14 2,9 10,9" fill="currentColor"/></svg>},
-                    {id:"star",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><polygon points="12,2 15,9 22,9 16,14 18,22 12,17 6,22 8,14 2,9 9,9" fill="currentColor"/></svg>},
-                    {id:"star6",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><polygon points="12,2 14,8 21,5 17,12 21,19 14,16 12,22 10,16 3,19 7,12 3,5 10,8" fill="currentColor"/></svg>},
-                    {id:"star8",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><polygon points="12,1 14,8 21,3 16,10 23,12 16,14 21,21 14,16 12,23 10,16 3,21 8,14 1,12 8,10 3,3 10,8" fill="currentColor"/></svg>},
-                    {id:"burst12",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><circle cx="12" cy="12" r="8" fill="currentColor"/><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="3 2"/></svg>},
-                    {id:"burst24",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><circle cx="12" cy="12" r="9" fill="currentColor"/><circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="2 1.5"/></svg>},
-                    {id:"badge",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><circle cx="12" cy="12" r="10" fill="currentColor"/><circle cx="12" cy="12" r="7" fill="none" stroke="white" strokeWidth="1.5"/></svg>},
-                    {id:"seal",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><circle cx="12" cy="12" r="10" fill="currentColor"/><circle cx="12" cy="12" r="6" fill="none" stroke="white" strokeWidth="1"/></svg>},
+                    {id:"star4",icon:<svg viewBox="0 0 24 24" className="w-5 h-5">{(() => { const pts: string[] = []; for (let i = 0; i < 8; i++) { const r = i % 2 === 0 ? 11 : 4.4; const a = -Math.PI/2 + i * Math.PI / 4; pts.push(`${12 + Math.cos(a) * r},${12 + Math.sin(a) * r}`); } return <polygon points={pts.join(' ')} fill="currentColor"/>; })()}</svg>},
+                    {id:"star",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><polygon points="12,2 14.9,8.6 22,9.4 16.8,14.1 18.2,21 12,17.5 5.8,21 7.2,14.1 2,9.4 9.1,8.6" fill="currentColor"/></svg>},
+                    {id:"star6",icon:<svg viewBox="0 0 24 24" className="w-5 h-5">{(() => { const pts: string[] = []; for (let i = 0; i < 12; i++) { const r = i % 2 === 0 ? 11 : 5.5; const a = -Math.PI/2 + i * Math.PI / 6; pts.push(`${12 + Math.cos(a) * r},${12 + Math.sin(a) * r}`); } return <polygon points={pts.join(' ')} fill="currentColor"/>; })()}</svg>},
+                    {id:"star8",icon:<svg viewBox="0 0 24 24" className="w-5 h-5"><polygon points="12,1 13.8,8.2 20.5,3.5 16,10 23,12 16,14 20.5,20.5 13.8,15.8 12,23 10.2,15.8 3.5,20.5 8,14 1,12 8,10 3.5,3.5 10.2,8.2" fill="currentColor"/></svg>},
+                    {id:"burst12",icon:<svg viewBox="0 0 24 24" className="w-5 h-5">{(() => { const pts: string[] = []; for (let i = 0; i < 24; i++) { const r = i % 2 === 0 ? 11 : 7.7; const a = -Math.PI/2 + i * Math.PI / 12; pts.push(`${12 + Math.cos(a) * r},${12 + Math.sin(a) * r}`); } return <polygon points={pts.join(' ')} fill="currentColor"/>; })()}</svg>},
+                    {id:"burst24",icon:<svg viewBox="0 0 24 24" className="w-5 h-5">{(() => { const pts: string[] = []; for (let i = 0; i < 48; i++) { const r = i % 2 === 0 ? 11 : 8.8; const a = -Math.PI/2 + i * Math.PI / 24; pts.push(`${12 + Math.cos(a) * r},${12 + Math.sin(a) * r}`); } return <polygon points={pts.join(' ')} fill="currentColor"/>; })()}</svg>},
+                    {id:"badge",icon:<svg viewBox="0 0 24 24" className="w-5 h-5">{(() => { const pts: string[] = []; for (let i = 0; i < 32; i++) { const r = i % 2 === 0 ? 11 : 9.35; const a = -Math.PI/2 + i * Math.PI / 16; pts.push(`${12 + Math.cos(a) * r},${12 + Math.sin(a) * r}`); } return <polygon points={pts.join(' ')} fill="currentColor"/>; })()}</svg>},
+                    {id:"seal",icon:<svg viewBox="0 0 24 24" className="w-5 h-5">{(() => { const pts: string[] = []; for (let i = 0; i < 40; i++) { const r = i % 2 === 0 ? 11 : 9.5; const a = -Math.PI/2 + i * Math.PI / 20; pts.push(`${12 + Math.cos(a) * r},${12 + Math.sin(a) * r}`); } return <polygon points={pts.join(' ')} fill="currentColor"/>; })()}</svg>},
                   ] as {id:string;icon:React.ReactNode}[]).map(s => (
                     <button key={s.id} onClick={() => addShape(s.id)} title={s.id}
                       className="w-full aspect-square flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-gray-600 transition-all hover:scale-105">{s.icon}</button>
@@ -3221,14 +3221,19 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
           
           group.set({ scaleX: exactScaleX, scaleY: exactScaleY, left: finalCW / 2, top: finalCH / 2, selectable: false, evented: false });
 
-          if (autoZoom < 100) {
+                    if (autoZoom < 100) {
+            const z = autoZoom / 100;
             const vpt = c.viewportTransform || [1,0,0,1,0,0];
-            vpt[0] = autoZoom / 100; vpt[3] = autoZoom / 100;
-            vpt[4] = (cW - neededW * autoZoom / 100) / 2;
-            vpt[5] = (cH - neededH * autoZoom / 100) / 2;
+            vpt[0] = z; vpt[3] = z;
+            // Center the dieline in viewport
+            const objCenterX = finalCW / 2;
+            const objCenterY = finalCH / 2;
+            vpt[4] = cW / 2 - objCenterX * z;
+            vpt[5] = cH / 2 - objCenterY * z;
             c.setViewportTransform(vpt);
             c.requestRenderAll();
           }
+
                             
 
             c.add(group);
