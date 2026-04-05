@@ -1344,38 +1344,38 @@ export default function PanelEditor({
         if (saved) {
           const parsed = JSON.parse(saved);
           if (parsed && parsed.objects && parsed.objects.length > 0) {
-            // Remove objects with blob/object URLs that cannot be restored
+            // 시스템 오브젝트 판별 (커스텀 속성 + 시각적 패턴)
+            const _isSys = (obj: any) => {
+              if (obj._isSafeZone || obj._isGuideLine || obj._isGuideText || obj._isSizeLabel || obj._isBgPattern) return true;
+              if (obj.type === 'rect' && obj.fill === 'transparent' && (obj.stroke === '#93B5F7' || obj.stroke === '#3B82F6' || obj.stroke === 'rgba(147,181,247,0.6)')) return true;
+              if (obj.type === 'text' && (obj.fill === '#C0C0C0' || obj.fill === '#B0B0B0' || obj.fill === '#D0D0D0') && obj.selectable === false) return true;
+              if (obj.type === 'line' && obj.strokeDashArray && Array.isArray(obj.strokeDashArray) && obj.selectable === false) return true;
+              return false;
+            };
             parsed.objects = parsed.objects.filter((obj: any) => {
-              if (obj._isSafeZone || obj._isGuideLine || obj._isGuideText || obj._isSizeLabel) return false;
-              if (obj.selectable === false && obj.evented === false) return false;
-              if (obj.type === 'rect' && obj.stroke === '#93B5F7' && obj.fill === 'transparent') return false;
-              if (obj.type === 'text' && obj.fill === '#C0C0C0' && obj.selectable === false) return false;
-              if (obj.type === 'text' && obj.fill === '#B0B0B0' && obj.selectable === false) return false;
-              if (obj.type === 'image' && obj.src && (obj.src.startsWith('blob:') || obj.src.startsWith('object:'))) {
-                console.warn('Skipping blob image in auto-save restore');
-                return false;
-              }
+              if (_isSys(obj)) return false;
+              if (obj.selectable === false && obj.evented === false && !obj._isBgImage && obj.name !== '__bgImage__') return false;
+              if (obj.type === 'image' && obj.src && (obj.src.startsWith('blob:') || obj.src.startsWith('object:'))) return false;
               return true;
             });
             if (parsed.objects.length > 0) {
               console.log('[RESTORE] Using auto-save path, objects:', parsed.objects?.length, 'bgImages:', parsed.objects?.filter((o:any)=>o._isBgImage).length);
               await canvas.loadFromJSON(parsed);
-            canvas.getObjects().forEach((o: any) => { if (o.name === '__bgImage__') { o._isBgImage = true; o.set({ selectable: false, evented: false }); } });
-              canvas.requestRenderAll();
-              canvas.getObjects().slice().forEach((o: any) => {
-                if (o._isSafeZone || o._isGuideLine || o._isGuideText || o._isSizeLabel || o._isBgPattern) canvas.remove(o);
-              });
-
-
-
-              // Re-lock template background images after auto-restore
+              // loadFromJSON 후 캔버스 설정 복원
+              canvas.selection = true;
+              // 배경 이미지 잠금 + 잔여 시스템 오브젝트 제거 + 사용자 오브젝트 편집 보장
+              const _rmObjs: any[] = [];
               canvas.getObjects().forEach((o: any) => {
                 if (o._isBgImage || o.name === '__bgImage__') {
-                o._isBgImage = true;
-                o.set({ selectable: false, evented: false });
-              }
+                  o._isBgImage = true; o.set({ selectable: false, evented: false });
+                } else if (_isSys(o)) {
+                  _rmObjs.push(o);
+                } else {
+                  o.set({ selectable: true, evented: true });
+                }
               });
-
+              _rmObjs.forEach(o => canvas.remove(o));
+              canvas.requestRenderAll();
               addSafeZone();
               didRestore = true;
             }
@@ -1387,18 +1387,36 @@ export default function PanelEditor({
         try {
           const parsed = typeof savedJSON === 'string' ? JSON.parse(savedJSON) : savedJSON;
           if (parsed && parsed.objects) {
+            // 가이드/시스템 오브젝트 필터링 (커스텀 속성 + 시각적 패턴)
+            const _isSystemObj = (obj: any) => {
+              if (obj._isSafeZone || obj._isGuideLine || obj._isGuideText || obj._isSizeLabel || obj._isBgPattern) return true;
+              if (obj.type === 'rect' && obj.fill === 'transparent' && (obj.stroke === '#93B5F7' || obj.stroke === '#3B82F6' || obj.stroke === 'rgba(147,181,247,0.6)')) return true;
+              if (obj.type === 'text' && (obj.fill === '#C0C0C0' || obj.fill === '#B0B0B0' || obj.fill === '#D0D0D0') && obj.selectable === false) return true;
+              if (obj.type === 'line' && obj.strokeDashArray && Array.isArray(obj.strokeDashArray) && obj.selectable === false) return true;
+              return false;
+            };
             parsed.objects = parsed.objects.filter((obj: any) => {
-              if (obj._isSafeZone || obj._isGuideLine || obj._isGuideText || obj._isSizeLabel) return false;
+              if (_isSystemObj(obj)) return false;
               if (obj.selectable === false && obj.evented === false && !obj._isBgImage && obj.name !== '__bgImage__') return false;
               if (obj.type === 'image' && obj.src && (obj.src.startsWith('blob:') || obj.src.startsWith('object:'))) return false;
               return true;
             });
             await canvas.loadFromJSON(parsed);
-            canvas.getObjects().forEach((o: any) => { if (o.name === '__bgImage__') { o._isBgImage = true; o.set({ selectable: false, evented: false }); } });
-            canvas.requestRenderAll();
-            canvas.getObjects().slice().forEach((o: any) => {
-              if (o._isSafeZone || o._isGuideLine || o._isGuideText || o._isSizeLabel || o._isBgPattern) canvas.remove(o);
+            // loadFromJSON 후 캔버스 설정 복원
+            canvas.selection = true;
+            // 배경 이미지 잠금 + 잔여 시스템 오브젝트 제거 + 사용자 오브젝트 편집 보장
+            const _toRemove: any[] = [];
+            canvas.getObjects().forEach((o: any) => {
+              if (o.name === '__bgImage__' || o._isBgImage) {
+                o._isBgImage = true; o.set({ selectable: false, evented: false });
+              } else if (_isSystemObj(o)) {
+                _toRemove.push(o);
+              } else {
+                o.set({ selectable: true, evented: true });
+              }
             });
+            _toRemove.forEach(o => canvas.remove(o));
+            canvas.requestRenderAll();
             addSafeZone();
             didRestore = true;
           }
@@ -1458,7 +1476,7 @@ export default function PanelEditor({
       document.addEventListener('keydown', keyHandler);canvas.renderAll();
       const wheelHandler = (opt:any) => { const e = opt.e as WheelEvent; if (e.ctrlKey||e.metaKey) { e.preventDefault(); e.stopPropagation(); const d = e.deltaY > 0 ? -10 : 10; applyZoom(Math.max(25,Math.min(400,zoomRef.current+d))); } };
       canvas.on('mouse:wheel', wheelHandler);
-      autoSaveRef.current = setInterval(() => { const c = fcRef.current; if (!c) return; try { const _safeObjs:any[]=[];c.getObjects().forEach((o:any)=>{if(o._isSafeZone||o._isGuideText||o._isSizeLabel){_safeObjs.push(o);c.remove(o);}}); localStorage.setItem('panelEditor_autoSave_'+panelId, JSON.stringify(c.toJSON(['_isBgImage','_isSafeZone','_isGuideLine','_isGuideText','_isSizeLabel','_isBgPattern','selectable','evented','name']))); _safeObjs.forEach(o=>c.add(o)); c.renderAll(); } catch {} }, 10000);
+      autoSaveRef.current = setInterval(() => { const c = fcRef.current; if (!c) return; try { const _safeObjs:any[]=[];c.getObjects().forEach((o:any)=>{if(o._isSafeZone||o._isGuideLine||o._isGuideText||o._isSizeLabel||o._isBgPattern){_safeObjs.push(o);c.remove(o);}}); localStorage.setItem('panelEditor_autoSave_'+panelId, JSON.stringify(c.toJSON(['_isBgImage','selectable','evented','name']))); _safeObjs.forEach(o=>c.add(o)); c.renderAll(); } catch {} }, 10000);
       // beforeunload disabled for smoother UX
       pasteHandlerRef.current = async (e: ClipboardEvent) => { const items = e.clipboardData?.items; if (!items) return; for (let i = 0; i < items.length; i++) { if (items[i].type.indexOf('image')!==-1) { e.preventDefault(); const blob = items[i].getAsFile(); if (!blob) continue; const reader = new FileReader(); reader.onload = async () => { const { FabricImage } = await import('fabric'); const img = await FabricImage.fromURL(reader.result as string); const c = fcRef.current; if (!c) return; const sc = Math.min(c.getWidth()*0.8/(img.width||1),c.getHeight()*0.8/(img.height||1),1); img.set({left:c.getWidth()/2,top:c.getHeight()/2,originX:'center',originY:'center',scaleX:sc,scaleY:sc}); c.add(img); c.setActiveObject(img); c.renderAll(); refreshLayers(); }; reader.readAsDataURL(blob); break; } } };
       wrapperRef.current?.addEventListener('paste', pasteHandlerRef.current);
@@ -1488,8 +1506,8 @@ export default function PanelEditor({
   }, []);
 
 
-  const undo = useCallback(() => { const c = fcRef.current; if (!c||historyIdxRef.current<=0) return; historyIdxRef.current--; loadingRef.current=true; c.loadFromJSON(JSON.parse(historyRef.current[historyIdxRef.current])).then(()=>{ c.getObjects().forEach((o:any)=>{if(o.name==='__bgImage__'){o._isBgImage=true;o.set({selectable:false,evented:false})}}); c.getObjects().slice().forEach((o:any)=>{if(o._isSafeZone||o._isGuideLine||o._isGuideText||o._isSizeLabel||o._isBgPattern)c.remove(o);}); c.renderAll(); loadingRef.current=false; addSafeZone(); refreshLayers(); setHistoryIdx(historyIdxRef.current); }); }, [refreshLayers, addSafeZone]);
-  const redo = useCallback(() => { const c = fcRef.current; if (!c||historyIdxRef.current>=historyRef.current.length-1) return; historyIdxRef.current++; loadingRef.current=true; c.loadFromJSON(JSON.parse(historyRef.current[historyIdxRef.current])).then(()=>{ c.getObjects().forEach((o:any)=>{if(o.name==='__bgImage__'){o._isBgImage=true;o.set({selectable:false,evented:false})}}); c.getObjects().slice().forEach((o:any)=>{if(o._isSafeZone||o._isGuideLine||o._isGuideText||o._isSizeLabel||o._isBgPattern)c.remove(o);}); c.renderAll(); loadingRef.current=false; addSafeZone(); refreshLayers(); setHistoryIdx(historyIdxRef.current); }); }, [refreshLayers, addSafeZone]);
+  const undo = useCallback(() => { const c = fcRef.current; if (!c||historyIdxRef.current<=0) return; historyIdxRef.current--; loadingRef.current=true; c.loadFromJSON(JSON.parse(historyRef.current[historyIdxRef.current])).then(()=>{ c.selection=true; c.getObjects().forEach((o:any)=>{if(o.name==='__bgImage__'||o._isBgImage){o._isBgImage=true;o.set({selectable:false,evented:false})}else{o.set({selectable:true,evented:true})}}); c.getObjects().slice().forEach((o:any)=>{if(o._isSafeZone||o._isGuideLine||o._isGuideText||o._isSizeLabel||o._isBgPattern)c.remove(o);}); c.renderAll(); loadingRef.current=false; addSafeZone(); refreshLayers(); setHistoryIdx(historyIdxRef.current); }); }, [refreshLayers, addSafeZone]);
+  const redo = useCallback(() => { const c = fcRef.current; if (!c||historyIdxRef.current>=historyRef.current.length-1) return; historyIdxRef.current++; loadingRef.current=true; c.loadFromJSON(JSON.parse(historyRef.current[historyIdxRef.current])).then(()=>{ c.selection=true; c.getObjects().forEach((o:any)=>{if(o.name==='__bgImage__'||o._isBgImage){o._isBgImage=true;o.set({selectable:false,evented:false})}else{o.set({selectable:true,evented:true})}}); c.getObjects().slice().forEach((o:any)=>{if(o._isSafeZone||o._isGuideLine||o._isGuideText||o._isSizeLabel||o._isBgPattern)c.remove(o);}); c.renderAll(); loadingRef.current=false; addSafeZone(); refreshLayers(); setHistoryIdx(historyIdxRef.current); }); }, [refreshLayers, addSafeZone]);
 
   const del = useCallback(() => { const c = fcRef.current; if (!c) return; const obj = c.getActiveObject(); if (obj && obj.selectable!==false) { if (obj.type==='activeselection') { const ch=(obj as any)._objects||[]; c.discardActiveObject(); ch.forEach((o:any)=>{if(o.selectable!==false)c.remove(o)}); c.renderAll(); refreshLayers(); } else { c.remove(obj); c.discardActiveObject(); c.renderAll(); } } }, []);
 
@@ -1767,6 +1785,21 @@ export default function PanelEditor({
       } else { const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u; a.download=panelId+"_design.json"; a.click(); URL.revokeObjectURL(u); }
     }, [panelId]);
 
+  // 유틸: 가이드/세이프존/칼선 오브젝트인지 판별 (커스텀 속성 + 시각적 패턴 모두 검사)
+  const isGuideOrSystemObject = useCallback((obj: any): boolean => {
+    // 커스텀 플래그 기반 판별
+    if (obj._isSafeZone || obj._isGuideLine || obj._isGuideText || obj._isSizeLabel || obj._isBgPattern) return true;
+    // 시각적 패턴 기반 판별 (커스텀 속성이 없는 레거시 JSON 대응)
+    // SafeZone rect: 파란 테두리 + 투명 배경
+    if (obj.type === 'rect' && obj.fill === 'transparent' &&
+      (obj.stroke === '#93B5F7' || obj.stroke === '#3B82F6' || obj.stroke === 'rgba(147,181,247,0.6)')) return true;
+    // 가이드 텍스트: 회색 선택불가 텍스트
+    if (obj.type === 'text' && (obj.fill === '#C0C0C0' || obj.fill === '#B0B0B0' || obj.fill === '#D0D0D0') && obj.selectable === false) return true;
+    // 가이드 라인: 대시 스트로크 라인
+    if (obj.type === 'line' && obj.strokeDashArray && Array.isArray(obj.strokeDashArray) && obj.selectable === false) return true;
+    return false;
+  }, []);
+
   const handleLoadDesign = useCallback(() => {
     const inp=document.createElement('input'); inp.type='file'; inp.accept='.json';
     inp.onchange = async (e:any) => {
@@ -1776,11 +1809,14 @@ export default function PanelEditor({
         try {
           const json=JSON.parse(reader.result as string);
           const c=fcRef.current; if(!c) return;
+          // 캔버스 크기 보존 (loadFromJSON이 오버라이드할 수 있음)
+          const prevW = c.getWidth();
+          const prevH = c.getHeight();
           // JSON 로드 전: 가이드/세이프존/칼선 오브젝트 필터링
           if (json && json.objects) {
             json.objects = json.objects.filter((obj: any) => {
-              // 가이드/세이프존/사이즈라벨 제거
-              if (obj._isSafeZone || obj._isGuideLine || obj._isGuideText || obj._isSizeLabel || obj._isBgPattern) return false;
+              // 커스텀 플래그 + 시각적 패턴 기반 제거
+              if (isGuideOrSystemObject(obj)) return false;
               // 배경 이미지가 아닌데 selectable:false, evented:false인 오브젝트 제거 (칼선 SVG 등)
               if (obj.selectable === false && obj.evented === false && !obj._isBgImage && obj.name !== '__bgImage__') return false;
               // blob/object URL 이미지 제거 (복원 불가)
@@ -1789,31 +1825,41 @@ export default function PanelEditor({
             });
           }
           await c.loadFromJSON(json);
-          // 로드 후: 배경 이미지는 잠금, 나머지 사용자 오브젝트는 편집 가능 상태로 복원
+          // loadFromJSON 후 캔버스 상태 강제 복원
+          c.selection = true;
+          if (typeof (c as any).interactive !== 'undefined') (c as any).interactive = true;
+          // 캔버스 크기가 달라졌으면 원래 크기로 복원
+          if (c.getWidth() !== prevW || c.getHeight() !== prevH) {
+            c.setDimensions({ width: prevW, height: prevH });
+          }
+          // 로드 후: 오브젝트 분류 및 속성 설정
+          const toRemove: any[] = [];
           c.getObjects().forEach((o: any) => {
+            // 배경 이미지: 잠금
             if (o.name === '__bgImage__' || o._isBgImage) {
               o._isBgImage = true;
               o.set({ selectable: false, evented: false });
-            } else {
-              // 사용자 디자인 오브젝트: 편집 가능 상태 보장
-              if (o.selectable === false && !o._isSafeZone && !o._isGuideLine && !o._isGuideText && !o._isSizeLabel) {
-                o.set({ selectable: true, evented: true });
-              }
+            }
+            // 가이드/시스템 오브젝트: 제거 목록에 추가
+            else if (isGuideOrSystemObject(o)) {
+              toRemove.push(o);
+            }
+            // 사용자 디자인 오브젝트: 편집 가능 상태 강제 보장
+            else {
+              o.set({ selectable: true, evented: true });
             }
           });
-          // 혹시 남아있는 가이드 오브젝트 제거
-          c.getObjects().slice().forEach((o: any) => {
-            if (o._isSafeZone || o._isGuideLine || o._isGuideText || o._isSizeLabel || o._isBgPattern) c.remove(o);
-          });
-          c.renderAll();
+          // 가이드 오브젝트 일괄 제거
+          toRemove.forEach(o => c.remove(o));
+          c.requestRenderAll();
           refreshLayers();
           pushHistory();
-        } catch { alert('Load failed'); }
+        } catch (err) { console.error('Load failed:', err); alert('Load failed'); }
       };
       reader.readAsText(file);
     };
     inp.click();
-  }, [refreshLayers]);
+  }, [refreshLayers, isGuideOrSystemObject]);
  
   const addTableToCanvas = useCallback(async () => {
     const cv = fcRef.current;
@@ -2568,7 +2614,7 @@ export default function PanelEditor({
             <div className="p-2">
               {historyRef.current.length<=1 && <p className="text-[11px] text-gray-600 text-center py-8">No history yet</p>}
               {historyRef.current.map((_,i)=>(
-                <button key={i} onClick={()=>{const c=fcRef.current;if(!c)return;historyIdxRef.current=i;loadingRef.current=true;c.loadFromJSON(JSON.parse(historyRef.current[i])).then(()=>{c.getObjects().forEach((o:any)=>{if(o.name==='__bgImage__'){o._isBgImage=true;o.set({selectable:false,evented:false})}});c.renderAll();loadingRef.current=false;refreshLayers();setHistoryIdx(i);});}}
+                <button key={i} onClick={()=>{const c=fcRef.current;if(!c)return;historyIdxRef.current=i;loadingRef.current=true;c.loadFromJSON(JSON.parse(historyRef.current[i])).then(()=>{c.selection=true;c.getObjects().forEach((o:any)=>{if(o.name==='__bgImage__'||o._isBgImage){o._isBgImage=true;o.set({selectable:false,evented:false})}else{o.set({selectable:true,evented:true})}});c.getObjects().slice().forEach((o:any)=>{if(o._isSafeZone||o._isGuideLine||o._isGuideText||o._isSizeLabel||o._isBgPattern)c.remove(o)});c.renderAll();loadingRef.current=false;refreshLayers();setHistoryIdx(i);});}}
                   className={`w-full text-left px-3 py-1.5 rounded-lg text-[10px] mb-0.5 transition-all ${i===historyIdx?'bg-blue-500/20 text-blue-300 font-medium':'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}>
                   Step #{i+1} {i===historyRef.current.length-1 && <span className="text-[8px] text-blue-500 ml-1">● current</span>}
                 </button>

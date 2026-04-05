@@ -677,7 +677,7 @@ export default function Box3DPreviewAdvanced({
 
   return (
     <div className="w-full bg-gradient-to-b from-gray-50 to-gray-100 rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col"
-      style={{ height: '480px' }}
+      style={{ height: '480px', position: 'relative', zIndex: 0 }}
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-gray-100">
@@ -733,7 +733,7 @@ export default function Box3DPreviewAdvanced({
               near: 0.01,
               far: 100,
             }}
-            style={{ width: '100%', height: '100%', background: 'transparent' }}
+            style={{ width: '100%', height: '100%', background: 'transparent', pointerEvents: 'auto' }}
           >
             <Scene
               L={L} W={W} D={D} T={T}
@@ -746,8 +746,8 @@ export default function Box3DPreviewAdvanced({
           </Canvas>
         </Suspense>
 
-        {/* Fold Progress Overlay */}
-        <div className="absolute top-2 left-2 text-[10px] px-2 py-1 rounded bg-black/50 text-white backdrop-blur-sm">
+        {/* Fold Progress Overlay – pointer-events:none so it doesn't block 3D interaction */}
+        <div className="absolute top-2 left-2 text-[10px] px-2 py-1 rounded bg-black/50 text-white backdrop-blur-sm pointer-events-none">
           {foldProgress < 0.1 ? '📄 Flat (Dieline)'
             : foldProgress < 0.5 ? '📐 Partially Folded'
             : foldProgress < 0.95 ? '📦 Almost Done'
