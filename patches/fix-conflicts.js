@@ -136,21 +136,15 @@ function fixNextConfig() {
     return;
   }
   
-  // 양쪽 설정 병합:
-  // - experimental.turbo: undefined (feature: turbopack 비활성화)
-  // - typescript.ignoreBuildErrors: true (양쪽 공통)
-  // - eslint.ignoreDuringBuilds: true (main에서 추가)
+  // Next.js 16 호환 설정:
+  // - experimental.turbo → Next 16에서 제거됨
+  // - eslint → Next 16에서 next.config에서 제거됨, CLI로 이동
+  // - typescript.ignoreBuildErrors: true (유지)
   const fixed = `import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  experimental: {
-    turbo: undefined,
-  },
   typescript: {
     ignoreBuildErrors: true,
-  },
-  eslint: {
-    ignoreDuringBuilds: true,
   },
 };
 
