@@ -30,21 +30,6 @@ const Box3DPreview = dynamic(
   }
 );
 
-const Box3DPreviewAdvanced = dynamic(
-  () => import("@/components/editor/box-3d-preview-advanced"),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="w-full h-[480px] bg-gray-50 rounded-xl border flex items-center justify-center text-gray-400 text-sm">
-        <div className="flex flex-col items-center gap-2">
-          <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-          Loading Advanced 3D Preview...
-        </div>
-      </div>
-    ),
-  }
-);
-
 interface PanelData {
   json: string | null;
   thumbnail: string | null;
@@ -654,48 +639,16 @@ function DesignPageInner() {
           alert('Invalid project file');
           return;
         }
-        // 시스템/가이드 오브젝트 판별 유틸
-        const _isSys = (obj: any) => {
-          if (obj._isSafeZone || obj._isGuideLine || obj._isGuideText || obj._isSizeLabel || obj._isBgPattern) return true;
-          if (obj.type === 'rect' && obj.fill === 'transparent' && (obj.stroke === '#93B5F7' || obj.stroke === '#3B82F6')) return true;
-          if (obj.type === 'text' && (obj.fill === '#C0C0C0' || obj.fill === '#B0B0B0') && obj.selectable === false) return true;
-          if (obj.type === 'line' && obj.strokeDashArray && Array.isArray(obj.strokeDashArray) && obj.selectable === false) return true;
-          return false;
-        };
-        // Restore all panels - 패널 JSON에서 시스템 오브젝트 필터링
+        // Restore all panels
         const restored: Record<string, PanelData> = {};
         allPanelIds.forEach((id) => {
           if (project.panels[id] && project.panels[id].designed) {
-            const pd = { ...project.panels[id] };
-            // 패널 JSON에서 가이드/시스템 오브젝트 제거 (레거시 프로젝트 호환)
-            if (pd.json) {
-              try {
-                const parsed = typeof pd.json === 'string' ? JSON.parse(pd.json) : pd.json;
-                if (parsed && parsed.objects) {
-                  const before = parsed.objects.length;
-                  parsed.objects = parsed.objects.filter((obj: any) => {
-                    if (_isSys(obj)) return false;
-                    if (obj.selectable === false && obj.evented === false && !obj._isBgImage && obj.name !== '__bgImage__') return false;
-                    if (obj.type === 'image' && obj.src && (obj.src.startsWith('blob:') || obj.src.startsWith('object:'))) return false;
-                    return true;
-                  });
-                  if (parsed.objects.length !== before) {
-                    console.log(`[loadProject] Panel ${id}: removed ${before - parsed.objects.length} system objects`);
-                  }
-                  pd.json = typeof project.panels[id].json === 'string' ? JSON.stringify(parsed) : parsed;
-                }
-              } catch { /* json 파싱 실패 시 원본 유지 */ }
-            }
-            restored[id] = pd;
+            restored[id] = project.panels[id];
           } else {
             restored[id] = { json: null, thumbnail: null, designed: false };
           }
         });
         setPanels(restored);
-        // localStorage auto-save 초기화 (이전 자동저장이 새 프로젝트를 방해하지 않도록)
-        allPanelIds.forEach(id => {
-          try { localStorage.removeItem('panelEditor_autoSave_' + id); } catch {}
-        });
       } catch (err) {
         console.error('Project load error:', err);
         alert('Failed to load project file');
@@ -819,13 +772,8 @@ function DesignPageInner() {
               </div>
             </div>
           </div>
-          <div data-export-3d style={{ position: 'relative', zIndex: 1 }}>
-            <Box3DPreviewAdvanced
-              L={L} W={W} D={D} T={T}
-              tuckH={tuckH} dustH={dustH} glueW={glueW}
-              bottomH={bottomH} bottomDustH={bottomDustH}
-              panels={panels}
-            />
+          <div data-export-3d>
+            <Box3DPreview L={L} W={W} D={D} panels={panels} />
           </div>
           <div>
             <h3 className="text-sm font-semibold text-gray-700 mb-3">{t("ov.mainBody")}</h3>

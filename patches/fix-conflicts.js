@@ -1,0 +1,212 @@
+#!/usr/bin/env node
+/**
+ * PACKIVE Patch Script - Fix remaining merge conflict markers
+ * 
+ * 사용법 (프로젝트 루트에서):
+ *   node patches/fix-conflicts.js
+ * 
+ * 수정 파일:
+ * 1. package.json - 충돌 마커 제거, 양쪽 패키지 모두 포함
+ * 2. next.config.ts - 충돌 마커 제거, 양쪽 설정 병합
+ * 3. package-lock.json - 삭제 후 npm install로 재생성
+ */
+
+const fs = require('fs');
+const path = require('path');
+
+const ROOT = path.resolve(__dirname, '..');
+
+function log(msg) { console.log(`[FIX] ${msg}`); }
+
+// ─────────────────────────────────────────────
+// FIX 1: package.json
+// ─────────────────────────────────────────────
+function fixPackageJson() {
+  const filePath = path.join(ROOT, 'package.json');
+  let src = fs.readFileSync(filePath, 'utf-8');
+  
+  if (!src.includes('<<<<<<< HEAD')) {
+    log('package.json: No conflict markers found, skipping');
+    return;
+  }
+  
+  // 올바른 병합 결과:
+  // - next: "16.1.6" (feature 브랜치 버전 유지 - 로컬 Node 22+ 환경)
+  // - opentype.js, pdfkit 유지 (feature 브랜치에서 추가)
+  // - openai 유지 (main 브랜치에서 추가)
+  const conflictBlock = /<<<<<<< HEAD\r?\n([\s\S]*?)=======\r?\n([\s\S]*?)>>>>>>> [^\n]+\r?\n/g;
+  
+  src = src.replace(conflictBlock, (match, head, theirs) => {
+    // HEAD (feature branch) has: next 16.1.6, opentype.js, pdfkit
+    // theirs (main) has: next 15.5.14, openai
+    // Merge: keep next 16.1.6 from feature, include all packages from both
+    const merged = 
+`    "next": "16.1.6",
+    "openai": "^6.21.0",
+    "opentype.js": "^1.3.4",
+    "pdfkit": "^0.17.2",
+`;
+    return merged;
+  });
+  
+  // Validate JSON
+  try {
+    JSON.parse(src);
+    fs.writeFileSync(filePath, src, 'utf-8');
+    log('package.json: FIXED - conflict markers removed, packages merged');
+  } catch (e) {
+    log('ERROR: package.json is still invalid JSON after fix: ' + e.message);
+    log('Attempting manual reconstruction...');
+    
+    // Fallback: reconstruct from scratch
+    const pkg = {
+      "name": "packive",
+      "version": "0.1.0",
+      "private": true,
+      "scripts": {
+        "dev": "next dev",
+        "build": "next build --webpack",
+        "start": "next start",
+        "lint": "eslint"
+      },
+      "dependencies": {
+        "@bwip-js/browser": "^4.8.0",
+        "@google/generative-ai": "^0.24.1",
+        "@react-three/drei": "^10.7.7",
+        "@react-three/fiber": "^9.5.0",
+        "@react-three/postprocessing": "^3.0.4",
+        "@stripe/stripe-js": "^8.7.0",
+        "@supabase/ssr": "^0.8.0",
+        "@supabase/supabase-js": "^2.95.3",
+        "blob-stream": "^0.1.3",
+        "bwip-js": "^4.8.0",
+        "class-variance-authority": "^0.7.1",
+        "clsx": "^2.1.1",
+        "fabric": "^7.1.0",
+        "js-clipper": "^1.0.1",
+        "jspdf": "^4.1.0",
+        "lucide-react": "^0.563.0",
+        "next": "16.1.6",
+        "openai": "^6.21.0",
+        "opentype.js": "^1.3.4",
+        "pdfkit": "^0.17.2",
+        "qrcode": "^1.5.4",
+        "radix-ui": "^1.4.3",
+        "react": "19.2.3",
+        "react-dom": "19.2.3",
+        "react-hot-toast": "^2.6.0",
+        "stripe": "^20.3.1",
+        "svg2pdf.js": "^2.7.0",
+        "tailwind-merge": "^3.4.0",
+        "three": "^0.182.0",
+        "zod": "^4.3.6",
+        "zustand": "^5.0.11"
+      },
+      "devDependencies": {
+        "@tailwindcss/postcss": "^4",
+        "@types/node": "^20",
+        "@types/opentype.js": "^1.3.9",
+        "@types/qrcode": "^1.5.6",
+        "@types/react": "^19",
+        "@types/react-dom": "^19",
+        "@types/three": "^0.182.0",
+        "eslint": "^9",
+        "eslint-config-next": "15.5.14",
+        "prisma": "^7.3.0",
+        "shadcn": "^3.8.4",
+        "tailwindcss": "^4",
+        "tw-animate-css": "^1.4.0",
+        "typescript": "^5"
+      }
+    };
+    fs.writeFileSync(filePath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8');
+    log('package.json: RECONSTRUCTED from scratch');
+  }
+}
+
+// ─────────────────────────────────────────────
+// FIX 2: next.config.ts
+// ─────────────────────────────────────────────
+function fixNextConfig() {
+  const filePath = path.join(ROOT, 'next.config.ts');
+  let src = fs.readFileSync(filePath, 'utf-8');
+  
+  if (!src.includes('<<<<<<< HEAD')) {
+    log('next.config.ts: No conflict markers found, skipping');
+    return;
+  }
+  
+  // 양쪽 설정 병합:
+  // - experimental.turbo: undefined (feature: turbopack 비활성화)
+  // - typescript.ignoreBuildErrors: true (양쪽 공통)
+  // - eslint.ignoreDuringBuilds: true (main에서 추가)
+  const fixed = `import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  experimental: {
+    turbo: undefined,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+};
+
+export default nextConfig;
+`;
+  
+  fs.writeFileSync(filePath, fixed, 'utf-8');
+  log('next.config.ts: FIXED - merged both configs');
+}
+
+// ─────────────────────────────────────────────
+// FIX 3: package-lock.json
+// ─────────────────────────────────────────────
+function fixPackageLock() {
+  const filePath = path.join(ROOT, 'package-lock.json');
+  
+  if (!fs.existsSync(filePath)) {
+    log('package-lock.json: Not found, will be regenerated by npm install');
+    return;
+  }
+  
+  let src;
+  try {
+    src = fs.readFileSync(filePath, 'utf-8');
+  } catch (e) {
+    log('package-lock.json: Could not read, deleting');
+    fs.unlinkSync(filePath);
+    return;
+  }
+  
+  if (src.includes('<<<<<<< HEAD')) {
+    log('package-lock.json: Has conflict markers, DELETING (npm install will regenerate)');
+    fs.unlinkSync(filePath);
+  } else {
+    log('package-lock.json: No conflicts');
+  }
+}
+
+// ─────────────────────────────────────────────
+// MAIN
+// ─────────────────────────────────────────────
+log('========================================');
+log('PACKIVE: Fix merge conflict markers');
+log('========================================');
+
+fixPackageJson();
+fixNextConfig();
+fixPackageLock();
+
+log('');
+log('========================================');
+log('DONE! Next steps:');
+log('========================================');
+log('');
+log('  1. npm install           (regenerate package-lock.json)');
+log('  2. npm run dev            (verify everything works)');
+log('  3. git add -A');
+log('  4. git commit -m "fix: resolve merge conflict markers in package.json, next.config.ts"');
+log('  5. git push origin feature/cmyk-icc-engine');
