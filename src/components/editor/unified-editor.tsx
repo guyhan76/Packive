@@ -80,8 +80,7 @@ function hexToCmyk(hex: string): [number,number,number,number] {
 function cmykToHex(c:number,m:number,y:number,k:number): string {
   if (c === 0 && m === 0 && y === 0 && k === 100) return "#000000"; if (c === 0 && m === 0 && y === 0 && k === 0) return "#ffffff"; if (isLUTReady()) return iccCmykToHex(c, m, y, k);
   const r = Math.round(255*(1-c/100)*(1-k/100)), g = Math.round(255*(1-m/100)*(1-k/100)), b = Math.round(255*(1-y/100)*(1-k/100));
-     a.download = `packive-3d-mockup-${L}x${W}x${D}.png`;
-
+  return "#" + [r,g,b].map(v => Math.max(0,Math.min(255,v)).toString(16).padStart(2,"0")).join("");
 }
 function hsvToHex(h:number,s:number,v:number): string {
   const c=v*s, x=c*(1-Math.abs((h/60)%2-1)), m=v-c;
@@ -126,7 +125,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [fontsLoaded, setFontsLoaded] = useState<Set<string>>(new Set());
   const [fontSearch, setFontSearch] = useState("");
   const [fontDropOpen, setFontDropOpen] = useState(false);
-  const [fontCategory, setFontCategory] = useState<"all"|"en"|"ko"|"ja">("all");
+  const [fontCategory, setFontCategory] = useState<"all"|"en"|"ko"|"ja"|"calli">("all");
   const fontSearchRef = useRef<HTMLInputElement>(null);
   const fontBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -411,7 +410,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
   const [showSizeConfirm, setShowSizeConfirm] = useState(false);
   const [uploadSizeW, setUploadSizeW] = useState(0);
   const [uploadSizeH, setUploadSizeH] = useState(0);
-  const pendingDielineRef = useRef<{group:any; origMmW:number; origMmH:number; svgOrigW:number; svgOrigH:number} | null>(null);
+  const pendingDielineRef = useRef<{group:any; origMmW:number; origMmH:number; svgOrigW:number; svgOrigH:number; infoObjs?: any[]} | null>(null);
   const [dielineVisible, setDielineVisible] = useState(true);
   const [dielineLocked, setDielineLocked] = useState(true);
   const [dielineUngrouped, setDielineUngrouped] = useState(false);
@@ -454,7 +453,9 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
 
   // ─── History ───
   const pushHistory = useCallback(() => {
-    const c = fcRef.current; if (!c || loadingRef.current) return;
+    const c = fcRef.current;
+    if (!c) { console.warn("[HIST] push skip — no canvas"); return; }
+    if (loadingRef.current) { console.log("[HIST] push skip — loading"); return; }
     const jsonObj = c.toJSON(["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","_isPanelOverlay","_panelId","_panelRole","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isTable","_tableConfig","_tableRole","_tableRow","_tableCol","_tableId"]);
     // Fabric toJSON may drop custom props on Image - inject manually
     const objs = c.getObjects();
@@ -472,6 +473,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
     h.push(json);
     if (h.length > 50) h.shift();
     historyIdxRef.current = h.length - 1;
+    console.log("[HIST] push ok — len=", h.length, "idx=", historyIdxRef.current, "size=", (json.length/1024).toFixed(1)+"KB");
   }, []);
 
   const restoreCustomProps = (canvas: any, snapshot: any) => {
@@ -507,8 +509,10 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
   };
 
   const undo = useCallback(async () => {
-    const c = fcRef.current; if (!c) return;
-    if (historyIdxRef.current <= 0) return;
+    const c = fcRef.current;
+    console.log("[UNDO] called — fc=", !!c, "idx=", historyIdxRef.current, "len=", historyRef.current.length);
+    if (!c) return;
+    if (historyIdxRef.current <= 0) { console.warn("[UNDO] at idx 0 — nothing to undo"); return; }
     historyIdxRef.current--;
     loadingRef.current = true;
     const snapshot = JSON.parse(historyRef.current[historyIdxRef.current]);
@@ -543,7 +547,24 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
   const fileSave = useCallback(() => {
     const c = fcRef.current; if (!c) return;
     try {
-      const json = JSON.stringify(c.toJSON(JSON_PROPS), null, 2);
+      // Fabric JSON + Packive 메타데이터 (dielineDims, model info 등) 결합
+      const fabricJson = c.toJSON(JSON_PROPS);
+      const payload = {
+        ...fabricJson,
+        packiveMeta: {
+          version: 2,
+          dielineDims: dielineDims || null,
+          dielineModelInfo: dielineModelInfo || null,
+          dielineSizes: dielineSizes || null,
+          dielineFileName: dielineFileName || "",
+          scaleXmmPerPx: scaleXRef.current || null,
+          scaleYmmPerPx: scaleYRef.current || null,
+          svgMmW: svgMmWRef.current || null,
+          svgMmH: svgMmHRef.current || null,
+          savedAt: new Date().toISOString(),
+        },
+      };
+      const json = JSON.stringify(payload, null, 2);
       const blob = new Blob([json], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const name = "packive-design-" + new Date().toISOString().slice(0,16).replace(/[T:]/g,"-") + ".pkv.json";
@@ -553,8 +574,8 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus(null), 2000);
       console.log("[SAVE] File saved:", name, (json.length/1024).toFixed(1), "KB");
-    } catch (e: any) { alert("Save failed: " + e.message); }
-  }, []);
+    } catch (e: any) { alert(t("alert.saveFailed").replace("{error}", e?.message || String(e))); }
+  }, [dielineDims, dielineModelInfo, dielineSizes, dielineFileName, t]);
 
   const fileLoadRef = useRef<HTMLInputElement>(null);
 
@@ -565,6 +586,81 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
       const json = JSON.parse(text);
       loadingRef.current = true;
       await c.loadFromJSON(json);
+
+      // ── Packive 메타데이터 복원 (dielineDims, scale, sizes 등) ──
+      const meta = json.packiveMeta;
+      if (meta?.dielineDims) setDielineDims(meta.dielineDims);
+      if (meta?.dielineModelInfo) setDielineModelInfo(meta.dielineModelInfo);
+      if (meta?.dielineSizes) setDielineSizes(meta.dielineSizes);
+      if (meta?.dielineFileName) setDielineFileName(meta.dielineFileName);
+      if (typeof meta?.scaleXmmPerPx === "number") scaleXRef.current = meta.scaleXmmPerPx;
+      if (typeof meta?.scaleYmmPerPx === "number") scaleYRef.current = meta.scaleYmmPerPx;
+      if (typeof meta?.svgMmW === "number") svgMmWRef.current = meta.svgMmW;
+      if (typeof meta?.svgMmH === "number") svgMmHRef.current = meta.svgMmH;
+
+      // ── 칼선/가이드 객체만 식별해서 evented/selectable 강제 ──
+      // 사용자 group(심볼/마크/도형 묶음)은 디자인으로 보존
+      const cutColors = ["#ed1c24", "#00a650", "#231f20", "#111111"];
+      const DIELINE_GROUP_MIN_CHILDREN = 30; // 이 이상이면 칼선 본체로 간주
+      const isDielineLike = (o: any): boolean => {
+        // 명시적 칼선/가이드 속성
+        if (o._isDieLine || o._isFoldLine || o._isGuideLayer || o._isPanelLabel || o._isDieline) return true;
+        // 칼선 색상 stroke
+        const stroke = (o.stroke || "").toLowerCase().replace(/\s/g, "");
+        if (cutColors.some(c => stroke === c)) return true;
+        // 칼선 group: children 매우 많음 OR 80% 이상이 칼선 색상
+        if (o.type === "group" && o._objects && o._objects.length > 0) {
+          if (o._objects.length >= DIELINE_GROUP_MIN_CHILDREN) return true;
+          const cutChildCount = o._objects.filter((ch: any) => {
+            const s = (ch.stroke || "").toLowerCase().replace(/\s/g, "");
+            return cutColors.some(c => s === c);
+          }).length;
+          if (cutChildCount >= o._objects.length * 0.8) return true;
+        }
+        return false;
+      };
+
+      c.getObjects().forEach((o: any) => {
+        const isGuide = isDielineLike(o);
+        if (isGuide) {
+          // 칼선: 클릭 선택 가능 (Delete로 지울 수 있게) + 이동/리사이즈 잠금
+          o.selectable = true;
+          o.evented = true;
+          o.hasControls = false;
+          o.hasBorders = true;
+          o.lockMovementX = true;
+          o.lockMovementY = true;
+          o.lockRotation = true;
+          o.lockScalingX = true;
+          o.lockScalingY = true;
+          o.perPixelTargetFind = true;  // 실제 선 위에서만 hit (빈 영역은 통과)
+          if (!o._isDieLine && !o._isGuideLayer && !o._isFoldLine) {
+            o._isGuideLayer = true;
+            o._isDieLine = true;  // handleOpen3DMockup + LAYERS 패널 Dieline 섹션 호환
+          }
+          if (o._objects) {
+            o._objects.forEach((child: any) => {
+              child.selectable = false;  // 자식은 직접 선택 불가, group으로만
+              child.evented = false;
+              child.hasControls = false;
+              child.hasBorders = false;
+            });
+          }
+          c.sendObjectToBack(o);
+        } else {
+          // 사용자 디자인 객체: 명시적으로 selectable/evented 보장 (loadFromJSON에서 누락된 경우 대비)
+          if (o.selectable !== false) o.selectable = true;
+          if (o.evented !== false) o.evented = true;
+        }
+      });
+      // ── 모든 객체에 unique __id 강제 부여 (React key 충돌 방지) ──
+      const ts = Date.now();
+      c.getObjects().forEach((o: any, i: number) => {
+        o.__id = `pk_${ts}_${i}`;
+      });
+
+      // 로드 직후 잔존 selection 해제 (이전 캔버스 active object dangling 방지)
+      try { c.discardActiveObject(); } catch {}
       c.requestRenderAll();
       loadingRef.current = false;
       pushHistory();
@@ -572,12 +668,20 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
         const objs = c.getObjects().filter((o:any) => o.selectable !== false && !o._isGuideLayer);
         setLayersList(objs.map((o:any,i:number) => ({ name: o.name || o.type || "Object", type: o.type, visible: o.visible !== false, idx: i })).reverse());
       } catch {}
+      // ── 포커스 해제: file input/load button에 포커스 머무르면 단축키 행이 막힐 수 있어 명시적으로 캔버스 영역으로 옮김
+      try {
+        if (document.activeElement && (document.activeElement as HTMLElement).blur) {
+          (document.activeElement as HTMLElement).blur();
+        }
+        const upper = (c as any).upperCanvasEl as HTMLElement | undefined;
+        if (upper) { upper.setAttribute("tabindex","-1"); upper.focus({ preventScroll: true }); }
+      } catch {}
       setSaveStatus("loaded");
       setTimeout(() => setSaveStatus(null), 2000);
       console.log("[SAVE] File loaded:", file.name);
     } catch (e: any) {
       loadingRef.current = false;
-      alert("Load failed: " + e.message);
+      alert(t("alert.loadFailed").replace("{error}", e?.message || String(e)));
     }
   }, [pushHistory]);
 
@@ -586,13 +690,13 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
    const refreshLayers = useCallback(() => {
     const c = fcRef.current; if (!c) return;
 
-    // ── Always bring dieline/guide objects to top so they are never hidden ──
+    // ── Always send dieline/guide objects to back so design objects are on top ──
     const allObjs = c.getObjects();
     const dieObjs = allObjs.filter((o: any) =>
       o._isDieLine || o._isFoldLine || o._isGuideLayer || o._isPanelLabel || o._isDieline
     );
     if (dieObjs.length > 0) {
-      dieObjs.forEach((o: any) => c.bringObjectToFront(o));
+      dieObjs.forEach((o: any) => c.sendObjectToBack(o));
     }
 
     // ── Build layer list (user objects only) ──
@@ -679,7 +783,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
   const clearAllGuides = useCallback(() => {
     const cv = fcRef.current; if (!cv) return;
     const guideObjs = cv.getObjects().filter((o: any) => o._isGuide);
-    guideObjs.forEach(o => cv.remove(o));
+    guideObjs.forEach((o: any) => cv.remove(o));
     cv.requestRenderAll();
     setGuides([]);
     console.log("[RULER] All guides cleared");
@@ -733,8 +837,8 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
     const c = fcRef.current;
     const F = fabricModRef.current;
     if (!c || !F || !svgContent) return;
-    F.loadSVGFromString(svgContent).then(({ objects, options }: { objects: fabric.Object[]; options: { width?: number; height?: number } }) => {
-      const filtered = objects.filter(Boolean) as fabric.Object[];
+    F.loadSVGFromString(svgContent).then(({ objects, options }: { objects: any[]; options: { width?: number; height?: number } }) => {
+      const filtered = objects.filter(Boolean) as any[];
       if (filtered.length === 0) return;
       const group = new F.Group(filtered, {
         left: (c.getWidth() / 2) - ((options.width || 200) / 4),
@@ -1290,7 +1394,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
         if (t && (t.type === "i-text" || t.type === "textbox") && t.fontSize && t.scaleX) {
           const rawSize = Math.round(t.fontSize * t.scaleX / scaleRef.current);
           const realSize = Math.max(24, rawSize);
-          setSelProps(prev => ({ ...prev, fontSize: realSize }));
+          setSelProps((prev: any) => ({ ...prev, fontSize: realSize }));
           setFSize(realSize);
         }
       });
@@ -1360,7 +1464,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
     return () => {
         document.removeEventListener("keydown", _onKeyDown!);
         document.removeEventListener("keyup", _onKeyUp!);
-      disposed = true; try { if (resizeTimer) clearTimeout(resizeTimer); resizeObserver.disconnect(); } catch(e) {}
+      disposed = true; try { const _rt = (window as any).__pkResizeTimer; if (_rt) clearTimeout(_rt); const _ro = (window as any).__pkResizeObserver; if (_ro) _ro.disconnect(); } catch(e) {}
       if (fcRef.current) {
         try { fcRef.current.dispose(); } catch {}
       setCanvasReady(false);
@@ -1370,16 +1474,61 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
   }, [L, W, D, material]);
 
   // ─── Keyboard shortcuts ───
-  useEffect(() => {
-    const handler = async (e: KeyboardEvent) => {
-      const tag = (document.activeElement?.tagName || "").toUpperCase();
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      const c = fcRef.current; if (!c) return;
+  // ★ 모든 콜백/state를 ref에 보관 → useEffect deps=[]로 mount시 1번만 등록, 절대 재등록 안 함
+  const shortcutHandlersRef = useRef<{ undo: any; redo: any; fileSave: any; pushHistory: any; refreshLayers: any; drawMode: boolean; measureMode: boolean; setDrawMode: any; setMeasureMode: any; setMeasureResult: any; setMeasurePts: any; setMeasureMouseMm: any }>({ undo, redo, fileSave, pushHistory, refreshLayers, drawMode, measureMode, setDrawMode, setMeasureMode, setMeasureResult, setMeasurePts, setMeasureMouseMm });
+  useEffect(() => { shortcutHandlersRef.current = { undo, redo, fileSave, pushHistory, refreshLayers, drawMode, measureMode, setDrawMode, setMeasureMode, setMeasureResult, setMeasurePts, setMeasureMouseMm }; });
 
-      if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); undo(); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "y") { e.preventDefault(); redo(); }
-      else if ((e.ctrlKey||e.metaKey) && e.key==="s") { e.preventDefault(); fileSave(); }
-      else if ((e.ctrlKey||e.metaKey) && e.key==="c") { console.log("[KEY] Ctrl+C → copy, canvas:", !!fcRef.current, "active:", fcRef.current?.getActiveObject()?.type);
+  // 단축키 부착 상태 — UI 인디케이터로 표시 + heartbeat로 자동 재부착
+  const [shortcutsAttached, setShortcutsAttached] = useState(false);
+  const lastShortcutFireRef = useRef<number>(Date.now());
+
+  useEffect(() => {
+    console.log("[SC] handler mount-once attached to window (capture)");
+    setShortcutsAttached(true);
+    const handler = async (e: KeyboardEvent) => {
+      lastShortcutFireRef.current = Date.now();
+      // ★ 키 정규화: 한국어 IME/Caps Lock/Shift 상태에서 e.key가 대문자로 오는 케이스 처리
+      //    "Z" / "z" 모두 "z"로, 한영 키와 무관하게 단축키 작동 보장
+      const k = (e.key || "").toLowerCase();
+      // ★ 모든 keydown 로그 (Ctrl 조합만 — 스팸 방지)
+      if (e.ctrlKey || e.metaKey) {
+        const _ae = document.activeElement as any;
+        console.log("[SC]", e.key, "→k=", k, "ctrl=", e.ctrlKey, "meta=", e.metaKey, "ae=", _ae?.tagName, "type=", _ae?.type, "fc=", !!fcRef.current);
+      }
+      const c = fcRef.current; if (!c) { if (e.ctrlKey || e.metaKey) console.warn("[SC] no canvas — bail"); return; }
+      // 핸들러 ref에서 최신 콜백/state 꺼냄 (stale closure 방지)
+      const { undo, redo, fileSave, pushHistory, refreshLayers, drawMode, measureMode, setDrawMode, setMeasureMode, setMeasureResult, setMeasurePts, setMeasureMouseMm } = shortcutHandlersRef.current;
+      // 1) IText/textbox 편집 모드: fabric 자체 처리 → 무시
+      const activeObj = c.getActiveObject() as any;
+      const isTextEditing = activeObj && (activeObj.type === "i-text" || activeObj.type === "textbox") && activeObj.isEditing;
+      if (isTextEditing) return;
+      // 2) React UI 텍스트 입력에 포커스: 클립보드/select-all 키만 무시 (input 자체 처리), 그 외 단축키(undo/redo/save/delete/arrow)는 정상 처리
+      //    file/checkbox/radio/button/range/color 등 비-텍스트 input은 단축키 차단 대상이 아님 (파일 로드 직후 hidden file input/load button에 포커스 머물러도 단축키 작동해야 함)
+      const ae = document.activeElement as HTMLElement | null;
+      const tag = (ae?.tagName || "").toUpperCase();
+      const inputType = (tag === "INPUT" ? ((ae as HTMLInputElement)?.type || "text").toLowerCase() : "");
+      const TEXT_INPUT_TYPES = new Set(["text","search","url","email","password","tel","number","textarea"]);
+      const isContentEditable = (ae as any)?.isContentEditable === true;
+      const isInsideCanvasContainer = !!ae?.closest?.(".canvas-container, .upper-canvas");
+      const isTextInput = !isInsideCanvasContainer && (
+        (tag === "INPUT" && TEXT_INPUT_TYPES.has(inputType)) ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        isContentEditable
+      );
+      const isClipboardKey = (e.ctrlKey || e.metaKey) && (k === "c" || k === "v" || k === "x" || k === "a");
+      if (isTextInput && isClipboardKey) return;
+      // 3) 칼선 group이 active일 때 copy/cut만 차단 (큰 group clone으로 단축키 행 방지). Delete는 허용 — 아래 Delete 분기에서 confirm 처리.
+      const isDielineActive = activeObj && (
+        activeObj._isDieLine || activeObj._isDieline || activeObj._isFoldLine || activeObj._isPanelLabel ||
+        (activeObj._isGuideLayer && activeObj.type === "group")
+      );
+      if (isDielineActive && (k === "c" || k === "x")) return;
+
+      if ((e.ctrlKey || e.metaKey) && k === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+      else if ((e.ctrlKey || e.metaKey) && (k === "y" || (k === "z" && e.shiftKey))) { e.preventDefault(); redo(); }
+      else if ((e.ctrlKey||e.metaKey) && k==="s") { e.preventDefault(); fileSave(); }
+      else if ((e.ctrlKey||e.metaKey) && k==="c") { console.log("[KEY] Ctrl+C → copy, canvas:", !!fcRef.current, "active:", fcRef.current?.getActiveObject()?.type);
         e.preventDefault();
         const cv=fcRef.current; if(!cv) return;
         const o=cv.getActiveObject(); if(!o) return;
@@ -1410,7 +1559,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
           (window as any).__pkClip = { type: "object", obj: cloned };
         }
       }
-      else if ((e.ctrlKey||e.metaKey) && e.key==="v") {
+      else if ((e.ctrlKey||e.metaKey) && k==="v") {
         e.preventDefault();
         const cv=fcRef.current; if(!cv) return;
         const clip = (window as any).__pkClip; if(!clip) return;
@@ -1481,7 +1630,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
           cv.requestRenderAll(); pushHistory(); refreshLayers();
         }
       }
-      else if ((e.ctrlKey||e.metaKey) && e.key==="x") {
+      else if ((e.ctrlKey||e.metaKey) && k==="x") {
         e.preventDefault();
         const cv=fcRef.current; if(!cv) return;
         const o=cv.getActiveObject(); if(!o) return;
@@ -1504,25 +1653,50 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
         cv.discardActiveObject(); cv.requestRenderAll();
         pushHistory(); refreshLayers();
       }
-      else if (e.key === "Delete" || e.key === "Backspace") {
+      else if (k === "delete" || k === "backspace") {
         const active = c.getActiveObjects();
         if (active.length > 0) {
+          // 칼선 포함 여부 검사 — 칼선 삭제는 확인창
+          const dielineInSelection = active.some((o: any) =>
+            o._isDieLine || o._isDieline || o._isFoldLine || o._isPanelLabel ||
+            (o._isGuideLayer && o.type === "group")
+          );
+          if (dielineInSelection) {
+            const designCount = active.filter((o: any) => !(
+              o._isDieLine || o._isDieline || o._isFoldLine || o._isPanelLabel ||
+              (o._isGuideLayer && o.type === "group")
+            )).length;
+            const msg = designCount > 0
+              ? t("confirm.deleteDielineWithObjects").replace("{count}", String(designCount))
+              : t("confirm.deleteDielineOnly");
+            if (!window.confirm(msg)) return;
+          }
           const toRemove: any[] = [];
           active.forEach((o: any) => {
             if (o._tableId) {
-              // Table object: remove ALL objects with same tableId
               c.getObjects().forEach((obj: any) => {
                 if (obj._tableId === o._tableId && !toRemove.includes(obj)) toRemove.push(obj);
               });
-            } else if (o.selectable !== false) {
+            } else {
+              // selectable=false 차단 제거 — 칼선도 명시적 선택시 삭제 가능
               toRemove.push(o);
             }
           });
           toRemove.forEach((o: any) => c.remove(o));
+          // 칼선 삭제됐으면 관련 state도 정리
+          if (dielineInSelection) {
+            const stillHasDieline = c.getObjects().some((o: any) =>
+              o._isDieLine || o._isDieline || o._isFoldLine || o._isPanelLabel ||
+              (o._isGuideLayer && o.type === "group")
+            );
+            if (!stillHasDieline) {
+              setDielineFileName(""); setDielineSizes(null); setDielineModelInfo(""); setDielineDims(null);
+            }
+          }
           c.discardActiveObject(); c.requestRenderAll(); pushHistory(); refreshLayers();
         }
       }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "a") {
+      else if ((e.ctrlKey || e.metaKey) && k === "a") {
         e.preventDefault();
         const sel = c.getObjects().filter((o: any) => o.selectable !== false);
         if (sel.length > 0) {
@@ -1531,22 +1705,38 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
           c.setActiveObject(as); c.requestRenderAll();
         }
       }
-            else if (e.key === "Escape") { if (drawMode) { const cv = fcRef.current; if (cv) { cv.isDrawingMode = false; } setDrawMode(false); } if (measureMode) { const cv = fcRef.current; if(cv){cv.selection=true;cv.forEachObject((o:any)=>{o.selectable=o._prevSelectable!==undefined?o._prevSelectable:true;o.evented=o._prevEvented!==undefined?o._prevEvented:true;delete o._prevSelectable;delete o._prevEvented;});cv.requestRenderAll();} setMeasureMode(false);setMeasureResult("");setMeasurePts([]);setMeasureMouseMm(null); } }
+            else if (k === "escape") { if (drawMode) { const cv = fcRef.current; if (cv) { cv.isDrawingMode = false; } setDrawMode(false); } if (measureMode) { const cv = fcRef.current; if(cv){cv.selection=true;cv.forEachObject((o:any)=>{o.selectable=o._prevSelectable!==undefined?o._prevSelectable:true;o.evented=o._prevEvented!==undefined?o._prevEvented:true;delete o._prevSelectable;delete o._prevEvented;});cv.requestRenderAll();} setMeasureMode(false);setMeasureResult("");setMeasurePts([]);setMeasureMouseMm(null); } }
 
-      else if (e.key.startsWith("Arrow")) {
+      else if (k.startsWith("arrow")) {
         const obj = c.getActiveObject(); if (!obj) return;
         e.preventDefault();
         const step = e.ctrlKey ? 1 : 10;
-        if (e.key === "ArrowUp") obj.set("top", (obj.top || 0) - step);
-        else if (e.key === "ArrowDown") obj.set("top", (obj.top || 0) + step);
-        else if (e.key === "ArrowLeft") obj.set("left", (obj.left || 0) - step);
-        else if (e.key === "ArrowRight") obj.set("left", (obj.left || 0) + step);
+        if (k === "arrowup") obj.set("top", (obj.top || 0) - step);
+        else if (k === "arrowdown") obj.set("top", (obj.top || 0) + step);
+        else if (k === "arrowleft") obj.set("left", (obj.left || 0) - step);
+        else if (k === "arrowright") obj.set("left", (obj.left || 0) + step);
         obj.setCoords(); c.requestRenderAll(); pushHistory();
       }
     };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-        }, [undo, redo, pushHistory, refreshLayers, drawMode, measureMode]);
+    // ★ window capture phase에 mount 시 등록. deps=[] → unmount까지 detach 안 함
+    // ★ 안전망: heartbeat 4초마다 remove+add로 강제 재부착 (HMR/외부 라이브러리가 떼어가도 복구)
+    //   동일 (target, type, listener, capture) 조합은 중복 등록 무시되므로 중복 발화 위험 X
+    window.addEventListener("keydown", handler, true);
+    setShortcutsAttached(true);
+    const hb = window.setInterval(() => {
+      try {
+        window.removeEventListener("keydown", handler, true);
+        window.addEventListener("keydown", handler, true);
+        setShortcutsAttached(true);
+      } catch {}
+    }, 4000);
+    return () => {
+      console.log("[SC] handler detached (unmount)");
+      window.clearInterval(hb);
+      window.removeEventListener("keydown", handler, true);
+      setShortcutsAttached(false);
+    };
+        }, []);
 
 
 
@@ -1904,7 +2094,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
 
 
   // ─── Export ───
-  const handleExport = useCallback(async (type: "png" | "pdf" | "dieline") => {
+  const handleExport = useCallback(async (type: "png" | "pdf" | "dieline" | "boxFaces") => {
     const c = fcRef.current; if (!c) return;
     setExporting(type);
     try {
@@ -1935,10 +2125,417 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
           includeDieline: true,
           dielineOnly: true
         });
+      } else if (type === "boxFaces") {
+        // 6면 추출 → ZIP 다운로드 (Blender 3D 목업 매핑용)
+        if (!dielineDims) { alert(t("alert.dielineRequired")); throw new Error("no dieline"); }
+        const g: any = c.getObjects().find((o: any) => o._isDieLine || o._isDieline);
+        if (!g) { alert(t("alert.dielineNotFound")); throw new Error("no dieline group"); }
+
+        // 칼선 일시 숨김 (디자인만 캡처)
+        const origVisible = g.visible;
+        g.visible = false;
+        c.requestRenderAll();
+        // 다음 프레임 보장
+        await new Promise(r => setTimeout(r, 80));
+
+        try {
+          const gs = g.scaleX || 1;
+          const gW = g.width * gs;
+          const gH = g.height * gs;
+          const gLeft = g.originX === "center" ? g.left - gW / 2 : g.left;
+          const gTop = g.originY === "center" ? g.top - gH / 2 : g.top;
+          const folds = (g._objects || []).filter((p: any) => p.type === "path" && (p.stroke || "").includes("0,166,80"));
+          const vertFolds: number[] = [];
+          const horzFolds: number[] = [];
+          folds.forEach((p: any) => {
+            const b = p.getBoundingRect();
+            if (b.width < 5 && b.height > 50) vertFolds.push(b.left);
+            if (b.height < 5 && b.width > 50) horzFolds.push(b.top);
+          });
+          vertFolds.sort((a, b) => a - b);
+          horzFolds.sort((a, b) => a - b);
+
+          if (vertFolds.length < 3) {
+            alert(t("alert.foldDetectFailed"));
+            throw new Error("not enough vert folds");
+          }
+
+          const topFoldY = horzFolds.length > 0 ? horzFolds[0] : gTop;
+          const botFoldY = horzFolds.length > 1 ? horzFolds[horzFolds.length - 1] : (gTop + gH);
+          const topEdge = gTop;
+          const botEdge = gTop + gH;
+
+          const srcCanvas = c.getElement() as HTMLCanvasElement;
+          const vp = c.viewportTransform || [1, 0, 0, 1, 0, 0];
+          const dpr = srcCanvas.width / c.getWidth();
+
+          const cropFace = (x1: number, y1: number, x2: number, y2: number): string | null => {
+            if (x1 >= x2 || y1 >= y2) return null;
+            const sx = (x1 * vp[0] + vp[4]) * dpr;
+            const sy = (y1 * vp[3] + vp[5]) * dpr;
+            const sw = (x2 - x1) * vp[0] * dpr;
+            const sh = (y2 - y1) * vp[3] * dpr;
+            const tmp = document.createElement("canvas");
+            tmp.width = Math.round(sw);
+            tmp.height = Math.round(sh);
+            const ctx = tmp.getContext("2d");
+            if (!ctx) return null;
+            ctx.drawImage(srcCanvas, Math.round(sx), Math.round(sy), Math.round(sw), Math.round(sh), 0, 0, tmp.width, tmp.height);
+            return tmp.toDataURL("image/png");
+          };
+
+          const faces: { face: string; dataUrl: string | null }[] = [];
+          const sideMap = [
+            { face: "front", x1: vertFolds[0], x2: vertFolds[1] },
+            { face: "right", x1: vertFolds[1], x2: vertFolds[2] },
+            { face: "back",  x1: vertFolds[2], x2: vertFolds[3] || (gLeft + gW) },
+            { face: "left",  x1: vertFolds[3] || vertFolds[2], x2: vertFolds[4] || (gLeft + gW) },
+          ];
+          sideMap.forEach(s => {
+            const url = cropFace(s.x1, topFoldY, s.x2, botFoldY);
+            if (url) faces.push({ face: s.face, dataUrl: url });
+          });
+
+          // Top: front-top flap + back-top flap 합성 (실제 박스 윗면 = 두 outer flap이 만나서 형성)
+          const ftX1 = vertFolds[0], ftX2 = vertFolds[1];
+          const btX1 = vertFolds[2], btX2 = vertFolds[3] || (gLeft + gW);
+          const flapH = topFoldY - topEdge;
+          if (flapH > 2) {
+            const fw = Math.round((ftX2 - ftX1) * vp[0] * dpr);
+            const fh = Math.round(flapH * vp[3] * dpr);
+            const bw = Math.round((btX2 - btX1) * vp[0] * dpr);
+            const finalW = Math.max(fw, bw);
+            const topCv = document.createElement("canvas");
+            topCv.width = finalW;
+            topCv.height = fh * 2;
+            const tc = topCv.getContext("2d");
+            if (tc) {
+              // Front-top flap → 위쪽 절반
+              const fsx = (ftX1 * vp[0] + vp[4]) * dpr;
+              const fsy = (topEdge * vp[3] + vp[5]) * dpr;
+              tc.drawImage(srcCanvas, Math.round(fsx), Math.round(fsy), fw, fh, 0, 0, finalW, fh);
+              // Back-top flap → 아래쪽 절반, 180도 회전 (박스 닫힐 때 방향 일치)
+              const bsx = (btX1 * vp[0] + vp[4]) * dpr;
+              const bsy = (topEdge * vp[3] + vp[5]) * dpr;
+              tc.save();
+              tc.translate(finalW, fh * 2);
+              tc.scale(-1, -1);
+              tc.drawImage(srcCanvas, Math.round(bsx), Math.round(bsy), bw, fh, 0, 0, finalW, fh);
+              tc.restore();
+              faces.push({ face: "top", dataUrl: topCv.toDataURL("image/png") });
+            }
+          }
+          // Bottom: front-bottom flap + back-bottom flap 합성
+          const bflapH = botEdge - botFoldY;
+          if (bflapH > 2) {
+            const fw = Math.round((ftX2 - ftX1) * vp[0] * dpr);
+            const fh = Math.round(bflapH * vp[3] * dpr);
+            const bw = Math.round((btX2 - btX1) * vp[0] * dpr);
+            const finalW = Math.max(fw, bw);
+            const botCv = document.createElement("canvas");
+            botCv.width = finalW;
+            botCv.height = fh * 2;
+            const bc = botCv.getContext("2d");
+            if (bc) {
+              const fsx = (ftX1 * vp[0] + vp[4]) * dpr;
+              const fsy = (botFoldY * vp[3] + vp[5]) * dpr;
+              bc.drawImage(srcCanvas, Math.round(fsx), Math.round(fsy), fw, fh, 0, 0, finalW, fh);
+              const bsx = (btX1 * vp[0] + vp[4]) * dpr;
+              const bsy = (botFoldY * vp[3] + vp[5]) * dpr;
+              bc.save();
+              bc.translate(finalW, fh * 2);
+              bc.scale(-1, -1);
+              bc.drawImage(srcCanvas, Math.round(bsx), Math.round(bsy), bw, fh, 0, 0, finalW, fh);
+              bc.restore();
+              faces.push({ face: "bottom", dataUrl: botCv.toDataURL("image/png") });
+            }
+          }
+
+          if (faces.length === 0) {
+            alert(t("alert.foldDetectFailed"));
+            throw new Error("no faces extracted");
+          }
+
+          // ZIP 묶기
+          const JSZipMod: any = await import("jszip");
+          const JSZip = JSZipMod.default || JSZipMod;
+          const zip = new JSZip();
+          for (const f of faces) {
+            if (!f.dataUrl) continue;
+            const b64 = f.dataUrl.split(",")[1];
+            zip.file(`${f.face}.png`, b64, { base64: true });
+          }
+          // 매핑 메타데이터 (Blender 스크립트용)
+          const meta = {
+            generated: new Date().toISOString(),
+            dielineDims: dielineDims,
+            faces: faces.map(f => f.face),
+            note: "PNG faces correspond to FEFCO 0201 box panels for Blender UV mapping",
+          };
+          zip.file("meta.json", JSON.stringify(meta, null, 2));
+          const blob: Blob = await zip.generateAsync({ type: "blob" });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = `packive-box-faces-${Date.now()}.zip`;
+          link.click();
+          URL.revokeObjectURL(url);
+        } finally {
+          g.visible = origVisible;
+          c.requestRenderAll();
+        }
       }
-    } catch (e: any) { alert("Export failed: " + e.message); }
+    } catch (e: any) { if (e?.message && !["no dieline", "no dieline group", "no faces extracted", "not enough vert folds"].includes(e.message)) alert("Export failed: " + e.message); }
     setExporting(null); setShowExport(false);
-  }, [])
+  }, [dielineDims])
+
+  // ─── 3D Mockup (Blender) — 사용자 디자인을 R3F 박스에 매핑 ───
+  // 6면 추출 → POST /api/generate-3d-mockup → 새 탭 (design hash 전달, fold 슬라이더 on-demand 작동)
+  const [generating3D, setGenerating3D] = useState(false);
+  const [generating3DStep, setGenerating3DStep] = useState<string>("");  // overlay에 표시할 진행 단계 (영문)
+  const handleOpen3DMockup = useCallback(async () => {
+    console.log("[3D] click — start");
+    const c = fcRef.current; if (!c) { console.error("[3D] no canvas"); return; }
+    // 칼선 group 식별: _isDieLine/_isDieline/_isFoldLine/_isPanelLabel 또는
+    //  _isGuideLayer && type=group (fileLoad에서 강제 라벨된 케이스)
+    const g: any = c.getObjects().find((o: any) =>
+      o._isDieLine || o._isDieline || o._isFoldLine || o._isPanelLabel ||
+      (o._isGuideLayer && o.type === "group")
+    );
+    if (!g) { alert(t("alert.dielineRequired")); return; }
+
+    // dielineDims 결정: state에 없으면 fold-line "비율"만으로 추정 (scaleXRef 무관, 옛날 파일에도 안전)
+    // - 핵심: fold lines 위치 차이로 W:D:L 비율 산출 → 가장 큰 차원을 200mm로 정규화 → 나머지 비율 유지
+    // - 절대 px→mm 변환 의존 X (옛날 파일은 scaleXRef=1이라 px가 mm로 둔갑하는 사고 방지)
+    let dims = dielineDims;
+    if (!dims) {
+      const groupBbox = g.getBoundingRect();
+      // fold 검출 임계값을 그룹 크기 대비 상대값으로 (작거나 큰 dieline 모두 안전)
+      const minLineLen = Math.max(10, Math.min(groupBbox.width, groupBbox.height) * 0.15);
+      const maxThick = Math.max(2, Math.min(groupBbox.width, groupBbox.height) * 0.01);
+
+      const foldsForDims = (g._objects || []).filter((p: any) =>
+        p.type === "path" && (p.stroke || "").includes("0,166,80")
+      );
+      const vX: number[] = [], hY: number[] = [];
+      foldsForDims.forEach((p: any) => {
+        const b = p.getBoundingRect();
+        if (b.width < maxThick && b.height > minLineLen) vX.push(b.left);
+        if (b.height < maxThick && b.width > minLineLen) hY.push(b.top);
+      });
+      vX.sort((a,b) => a-b); hY.sort((a,b) => a-b);
+      console.log("[3D] fold detect: vX=", vX.length, "hY=", hY.length, "minLen=", minLineLen.toFixed(1));
+
+      // 비율 (단위 무관 — px여도 OK)
+      let wRatio = 0, dRatio = 0, lRatio = 0;
+      if (vX.length >= 3) {
+        wRatio = vX[1] - vX[0];
+        dRatio = vX[2] - vX[1];
+      } else {
+        // vX 부족 → bbox에서 W,D 비율 추정 (FEFCO 0201: bboxW ≈ 2W+2D, W≈D 기본 가정)
+        wRatio = groupBbox.width * 0.25;
+        dRatio = groupBbox.width * 0.20;
+      }
+      if (hY.length >= 2) {
+        lRatio = hY[1] - hY[0];
+      } else {
+        // hY 부족 → bbox H에서 L 추정 (FEFCO 0201: bboxH ≈ L+2D)
+        lRatio = Math.max(20, groupBbox.height - 2 * dRatio);
+      }
+
+      // ★ 정규화: 가장 큰 차원을 200mm로, 나머지는 비율 유지 (실제 mm가 아니어도 보기에 합리적인 박스)
+      const maxRatio = Math.max(wRatio, dRatio, lRatio, 1);
+      const TARGET_MAX_MM = 200;
+      const scale = TARGET_MAX_MM / maxRatio;
+      let L = Math.round(lRatio * scale);
+      let W = Math.round(wRatio * scale);
+      let D = Math.round(dRatio * scale);
+
+      // 안전 clamp: 각 차원 30~500mm (10mm같은 망가진 박스 방지)
+      const clampDim = (n: number) => Math.max(30, Math.min(500, isFinite(n) && n > 0 ? n : 100));
+      dims = { L: clampDim(L), W: clampDim(W), D: clampDim(D), Th: 1.5 };
+      console.log("[3D] auto-estimated dims:", dims, "(ratios L:W:D =", lRatio.toFixed(0), ":", wRatio.toFixed(0), ":", dRatio.toFixed(0), ")");
+      setDielineDims(dims);
+    }
+    console.log("[3D] dielineDims", dims, "dieline group found:", g.type, "kids:", g._objects?.length);
+    console.log("[3D] dielineDims", dielineDims, "dieline group found:", g.type, "kids:", g._objects?.length);
+
+    setGenerating3D(true);
+    setGenerating3DStep("Preparing canvas...");
+    const origVisible = (g.visible !== false);
+
+    // ★ 두 단계 복원 패턴 (overlay 멈춤 버그 수정)
+    // - restoreVisibility(): 칼선 visibility만 복원 — 여러 번 호출 안전, overlay는 유지
+    // - finalizeRestore(): 최종 정리 — 한 번만 setGenerating3D(false), overlay 닫힘
+    const restoreVisibility = () => {
+      try {
+        if (c.getObjects().includes(g)) {
+          g.visible = origVisible;
+          c.requestRenderAll();
+        }
+      } catch {}
+    };
+    let finalized = false;
+    const finalizeRestore = () => {
+      if (finalized) return;
+      finalized = true;
+      restoreVisibility();
+      setGenerating3D(false);
+      setGenerating3DStep("");
+    };
+
+    g.visible = false;
+    c.requestRenderAll();
+    await new Promise(r => setTimeout(r, 80));
+    setGenerating3DStep("Capturing 6 faces from dieline...");
+
+    try {
+      const gs = g.scaleX || 1;
+      const gW = g.width * gs;
+      const gH = g.height * gs;
+      const gLeft = g.originX === "center" ? g.left - gW / 2 : g.left;
+      const gTop = g.originY === "center" ? g.top - gH / 2 : g.top;
+      const folds = (g._objects || []).filter((p: any) => p.type === "path" && (p.stroke || "").includes("0,166,80"));
+      const vertFolds: number[] = [];
+      const horzFolds: number[] = [];
+      folds.forEach((p: any) => {
+        const b = p.getBoundingRect();
+        if (b.width < 5 && b.height > 50) vertFolds.push(b.left);
+        if (b.height < 5 && b.width > 50) horzFolds.push(b.top);
+      });
+      vertFolds.sort((a, b) => a - b);
+      horzFolds.sort((a, b) => a - b);
+      if (vertFolds.length < 3) { finalizeRestore(); alert(t("alert.foldDetectFailed")); return; }
+
+      const topFoldY = horzFolds.length > 0 ? horzFolds[0] : gTop;
+      const botFoldY = horzFolds.length > 1 ? horzFolds[horzFolds.length - 1] : (gTop + gH);
+      const topEdge = gTop, botEdge = gTop + gH;
+
+      const srcCanvas = c.getElement() as HTMLCanvasElement;
+      const vp = c.viewportTransform || [1, 0, 0, 1, 0, 0];
+      const dpr = srcCanvas.width / c.getWidth();
+      const cropFace = (x1: number, y1: number, x2: number, y2: number): string | null => {
+        if (x1 >= x2 || y1 >= y2) return null;
+        const sx = (x1 * vp[0] + vp[4]) * dpr;
+        const sy = (y1 * vp[3] + vp[5]) * dpr;
+        const sw = (x2 - x1) * vp[0] * dpr;
+        const sh = (y2 - y1) * vp[3] * dpr;
+        const tmp = document.createElement("canvas");
+        tmp.width = Math.round(sw); tmp.height = Math.round(sh);
+        const ctx = tmp.getContext("2d"); if (!ctx) return null;
+        ctx.drawImage(srcCanvas, Math.round(sx), Math.round(sy), Math.round(sw), Math.round(sh), 0, 0, tmp.width, tmp.height);
+        return tmp.toDataURL("image/png");
+      };
+      // ★ 90° 회전 캡처 — width-direction inner flap의 dieline orientation을 Blender plane orientation에 맞춤
+      // dieline: W wide × flap_h tall → 90° CW 회전 → flap_h wide × W tall (Blender plane sx=L/2, sy=W에 자연스럽게 매핑)
+      const cropFaceRotated90 = (x1: number, y1: number, x2: number, y2: number, cw: boolean = true): string | null => {
+        if (x1 >= x2 || y1 >= y2) return null;
+        const sx = (x1 * vp[0] + vp[4]) * dpr;
+        const sy = (y1 * vp[3] + vp[5]) * dpr;
+        const sw = Math.round((x2 - x1) * vp[0] * dpr);
+        const sh = Math.round((y2 - y1) * vp[3] * dpr);
+        if (sw <= 0 || sh <= 0) return null;
+        const tmp = document.createElement("canvas");
+        tmp.width = sh; tmp.height = sw;  // 회전으로 차원 swap
+        const ctx = tmp.getContext("2d"); if (!ctx) return null;
+        ctx.translate(tmp.width / 2, tmp.height / 2);
+        ctx.rotate((cw ? 90 : -90) * Math.PI / 180);
+        ctx.drawImage(srcCanvas, Math.round(sx), Math.round(sy), sw, sh, -sw / 2, -sh / 2, sw, sh);
+        return tmp.toDataURL("image/png");
+      };
+      const facesObj: Record<string, string> = {};
+      const sideMap = [
+        { face: "front", x1: vertFolds[0], x2: vertFolds[1] },
+        { face: "right", x1: vertFolds[1], x2: vertFolds[2] },
+        { face: "back",  x1: vertFolds[2], x2: vertFolds[3] || (gLeft + gW) },
+        { face: "left",  x1: vertFolds[3] || vertFolds[2], x2: vertFolds[4] || (gLeft + gW) },
+      ];
+      for (const s of sideMap) {
+        const url = cropFace(s.x1, topFoldY, s.x2, botFoldY);
+        if (url) facesObj[s.face] = url;
+      }
+      const ftX1 = vertFolds[0], ftX2 = vertFolds[1];
+      const btX1 = vertFolds[2], btX2 = vertFolds[3] || (gLeft + gW);
+      // ★ NEW: 4개 inner flap (width-direction) 좌표 — Right wall 위/아래 flap, Left wall 위/아래 flap
+      // FEFCO 0201 dieline에서 각 측면 패널 위/아래로 flap이 직접 배치됨
+      const rtX1 = vertFolds[1], rtX2 = vertFolds[2];                       // Right wall 위치
+      const ltX1 = vertFolds[3] || vertFolds[2];                            // Left wall 시작
+      const ltX2 = vertFolds[4] || (gLeft + gW);                            // Left wall 끝
+      const flapH = topFoldY - topEdge;
+      const buildSplitCanvas = (sourceY: number, h: number): string | null => {
+        if (h <= 2) return null;
+        const fw = Math.round((ftX2 - ftX1) * vp[0] * dpr);
+        const fh = Math.round(h * vp[3] * dpr);
+        const bw = Math.round((btX2 - btX1) * vp[0] * dpr);
+        const finalW = Math.max(fw, bw);
+        const cv = document.createElement("canvas"); cv.width = finalW; cv.height = fh * 2;
+        const ctx = cv.getContext("2d"); if (!ctx) return null;
+        ctx.drawImage(srcCanvas, Math.round((ftX1 * vp[0] + vp[4]) * dpr), Math.round((sourceY * vp[3] + vp[5]) * dpr), fw, fh, 0, 0, finalW, fh);
+        ctx.save(); ctx.translate(finalW, fh * 2); ctx.scale(-1, -1);
+        ctx.drawImage(srcCanvas, Math.round((btX1 * vp[0] + vp[4]) * dpr), Math.round((sourceY * vp[3] + vp[5]) * dpr), bw, fh, 0, 0, finalW, fh);
+        ctx.restore();
+        return cv.toDataURL("image/png");
+      };
+      const topUrl = buildSplitCanvas(topEdge, flapH);
+      if (topUrl) facesObj.top = topUrl;
+      const bottomUrl = buildSplitCanvas(botFoldY, botEdge - botFoldY);
+      if (bottomUrl) facesObj.bottom = bottomUrl;
+
+      // ★ NEW: 12-panel FEFCO 0201 — 8개 flap을 개별 캡처 (4 top + 4 bot)
+      // - top_front/top_back, bot_front/bot_back: outer (length-direction) flap. 회전 없이 그대로 사용 (plane orientation과 일치).
+      // - top_left/top_right, bot_left/bot_right: inner (width-direction) flap. 90° CW 회전해서 Blender inner flap plane (sx=L/2, sy=W) 방향에 매칭.
+      const botFlapH = botEdge - botFoldY;
+      if (flapH > 2) {
+        const u1 = cropFace(ftX1, topEdge, ftX2, topFoldY); if (u1) facesObj.top_front = u1;
+        const u2 = cropFaceRotated90(rtX1, topEdge, rtX2, topFoldY, true);  if (u2) facesObj.top_right = u2;
+        const u3 = cropFace(btX1, topEdge, btX2, topFoldY); if (u3) facesObj.top_back = u3;
+        const u4 = cropFaceRotated90(ltX1, topEdge, ltX2, topFoldY, false); if (u4) facesObj.top_left = u4;
+      }
+      if (botFlapH > 2) {
+        const b1 = cropFace(ftX1, botFoldY, ftX2, botEdge); if (b1) facesObj.bot_front = b1;
+        const b2 = cropFaceRotated90(rtX1, botFoldY, rtX2, botEdge, true);  if (b2) facesObj.bot_right = b2;
+        const b3 = cropFace(btX1, botFoldY, btX2, botEdge); if (b3) facesObj.bot_back = b3;
+        const b4 = cropFaceRotated90(ltX1, botFoldY, ltX2, botEdge, false); if (b4) facesObj.bot_left = b4;
+      }
+
+      const totalBytes = Object.values(facesObj).reduce((s, u) => s + u.length, 0);
+      console.log("[3D] faces extracted:", Object.keys(facesObj), `total ${(totalBytes/1024).toFixed(0)}KB`);
+      // 면 캡처 끝났으니 칼선 visibility 즉시 복원 (overlay는 유지 → 사용자는 Blender 작업 진행 인지)
+      restoreVisibility();
+
+      // ★ Blender API 호출 (정확한 12-panel FEFCO 0201 박스 + 정확한 치수 복원)
+      // faces + L/W/D 보내고 designHash + glbUrl 받음. fold=20 첫 GLB만 받고 나머지는 3D 페이지가 병렬 prefetch.
+      setGenerating3DStep("Rendering 3D box (~20-40s)...");
+      console.log("[3D] POST /api/generate-3d-mockup ...");
+      const t0 = performance.now();
+      const res = await fetch("/api/generate-3d-mockup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          L: dims.L, W: dims.W, D: dims.D,
+          variant: "fefco0201", foldAngle: 20, outerGap: 2,
+          faces: facesObj,
+        }),
+      });
+      console.log(`[3D] response in ${((performance.now()-t0)/1000).toFixed(1)}s, status=${res.status}`);
+      const data = await res.json();
+      if (!res.ok || !data.glbUrl) throw new Error(data.error || `API ${res.status}`);
+
+      setGenerating3DStep("Opening 3D preview...");
+      const params = new URLSearchParams({
+        design: data.designHash,
+        glb: data.glbUrl,
+        label: `${dims.L}×${dims.W}×${dims.D}mm`,
+      });
+      const win = window.open(`/test/blender-box?${params.toString()}`, "_blank");
+      if (!win) alert(t("alert.popupBlocked"));
+    } catch (e: any) {
+      alert(t("alert.threedFailed").replace("{error}", e?.message || String(e)));
+    } finally {
+      // ★ overlay 무조건 닫힘 보장 — 어떤 경로로 들어왔든 finalizeRestore 호출
+      finalizeRestore();
+    }
+  }, [dielineDims, t]);
 
   // ─── Selected object properties ───
   const getSelectedProps = useCallback(() => {
@@ -2061,7 +2658,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
         c.requestRenderAll();
         const dSize = Math.max(24, Math.round(newFS / scaleRef.current));
         setFSize(dSize);
-        setSelProps(prev => prev ? { ...prev, fontSize: dSize } : prev);
+        setSelProps((prev: any) => prev ? { ...prev, fontSize:dSize } : prev);
       }
       update();
       if (!loadingRef.current) { pushHistory(); refreshLayers(); }
@@ -2071,7 +2668,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
       if (t && (t.type === "i-text" || t.type === "textbox") && t.fontSize && t.scaleX) {
         const rawSize = Math.round(t.fontSize * t.scaleX / scaleRef.current);
         const realSize = Math.max(24, rawSize);
-        setSelProps(prev => prev ? { ...prev, fontSize: realSize } : prev);
+        setSelProps((prev: any) => prev ? { ...prev, fontSize:realSize } : prev);
         setFSize(realSize);
       } else { update(); }
     });
@@ -2170,6 +2767,25 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
   // ─── RENDER ───
   return (
     <div className="h-screen flex flex-col bg-gray-50 overflow-hidden select-none">
+      {/* ★ 3D 생성 진행 OVERLAY — 전체화면 차단, 사용자가 버튼 다시 못 누르도록 */}
+      {generating3D && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm" style={{ pointerEvents: "all" }}>
+          <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-5 min-w-[380px]">
+            {/* Spinner */}
+            <svg className="animate-spin h-12 w-12 text-violet-600" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.2" strokeWidth="3" />
+              <path d="M12 2 a 10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+            </svg>
+            <div className="text-center">
+              <div className="text-base font-semibold text-gray-800 mb-1">Rendering 3D Mockup</div>
+              <div className="text-sm text-gray-500">{generating3DStep || "Working..."}</div>
+            </div>
+            <div className="text-[11px] text-gray-400 text-center max-w-[320px] leading-relaxed">
+              The 3D engine is rendering your box from the dieline. This takes 20-40 seconds. Please don't close this tab.
+            </div>
+          </div>
+        </div>
+      )}
       {/* TOP BAR */}
       <div className="h-11 bg-white border-b border-gray-200 flex items-center pl-3 pr-2 shrink-0 z-20">
 
@@ -2186,7 +2802,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
         {/* CENTER: Dieline tools (icon buttons) */}
         <div className="flex items-center gap-1">
           {/* New */}
-          <button onClick={() => { if (!window.confirm("Start a completely new blank canvas?\nAll current work will be removed.")) return; const c = fcRef.current; if(!c) return; c.getObjects().slice().forEach((o:any) => c.remove(o)); c.requestRenderAll(); setDielineFileName(""); setDielineSizes(null); setDielineModelInfo(""); pushHistory(); refreshLayers(); }}
+          <button onClick={() => { if (!window.confirm(t("confirm.newCanvas"))) return; const c = fcRef.current; if(!c) return; c.getObjects().slice().forEach((o:any) => c.remove(o)); c.requestRenderAll(); setDielineFileName(""); setDielineSizes(null); setDielineModelInfo(""); setDielineDims(null); pushHistory(); refreshLayers(); }}
             className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 transition-colors" title="New Canvas">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
           </button>
@@ -2214,7 +2830,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
           </button>
 
           {/* Lock */}
-          <button onClick={() => { const c = fcRef.current; if (!c) return; const nl = !dielineLocked; setDielineLocked(nl); c.getObjects().forEach((o: any) => { if (o._isGuideLayer || o._isDieLine || o._isFoldLine) { o.selectable = !nl; o.evented = !nl; } }); c.requestRenderAll(); }}
+          <button onClick={() => { const c = fcRef.current; if (!c) return; const nl = !dielineLocked; setDielineLocked(nl); c.getObjects().forEach((o: any) => { if (o._isGuideLayer || o._isDieLine || o._isFoldLine) { o.selectable = true; o.evented = true; o.lockMovementX = nl; o.lockMovementY = nl; o.lockRotation = nl; o.lockScalingX = nl; o.lockScalingY = nl; o.hasControls = !nl; } }); c.requestRenderAll(); }}
             className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${dielineLocked ? "bg-blue-50 text-blue-600" : "text-gray-400 hover:bg-gray-100"}`}
             title={dielineLocked ? "Unlock Dieline" : "Lock Dieline"}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{dielineLocked ? <><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></> : <><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></>}</svg>
@@ -2321,7 +2937,8 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
 
 
 
-            group.set({ _isDieLine: true, _isGuideLayer: true, selectable: !dielineLocked, evented: !dielineLocked, name: "__dieline_upload__" });
+            // 칼선: 항상 클릭 선택 가능 (Delete로 지울 수 있게). 잠금 시에는 이동/리사이즈만 차단.
+            group.set({ _isDieLine: true, _isGuideLayer: true, selectable: true, evented: true, hasControls: !dielineLocked, hasBorders: true, lockMovementX: dielineLocked, lockMovementY: dielineLocked, lockRotation: dielineLocked, lockScalingX: dielineLocked, lockScalingY: dielineLocked, perPixelTargetFind: true, name: "__dieline_upload__" });
 
             // Tag info children for uploaded dieline
             if (group._objects) {
@@ -2382,7 +2999,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
           } catch (err: any) { alert("Failed to load dieline: " + err.message); }
           e.target.value = "";
         }} />
-        <input ref={fileLoadRef} type="file" accept=".json,.pkv.json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) { if (window.confirm("Loading will replace current canvas. Continue?")) { fileLoad(f); } } e.target.value = ""; }} />
+        <input ref={fileLoadRef} type="file" accept=".json,.pkv.json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; const inp = e.target; if (f) { if (window.confirm(t("confirm.loadReplace"))) { fileLoad(f); } } inp.value = ""; try { inp.blur(); } catch {} }} />
       </div>
 
       <div className="flex flex-1 overflow-hidden">
@@ -2439,7 +3056,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
             <div className="absolute left-14 top-8 z-50 bg-white rounded-xl shadow-xl border p-3 w-52">
               <div className="text-xs font-semibold text-gray-700 mb-2">Add Text</div>
               {["heading", "subheading", "body"].map(p => (
-                <button key={p} onClick={() => addText(p)}
+                <button key={p} onClick={() => addText()}
                   className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 text-sm capitalize mb-1">{p}</button>
               ))}
               <button onClick={() => addText()} className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-50 text-sm text-gray-500">Custom text...</button>
@@ -2710,7 +3327,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
               <div className="grid grid-cols-4 gap-2">
                 {PACKAGING_SYMBOLS
                   .filter(s => symbolCategory === "all" || s.category === symbolCategory)
-                  .filter(s => !symbolSearch || s.name.toLowerCase().includes(symbolSearch.toLowerCase()) || s.nameKo.includes(symbolSearch))
+                  .filter(s => !symbolSearch || s.name.toLowerCase().includes(symbolSearch.toLowerCase()) || ((s as any).nameKo || "").includes(symbolSearch))
                   .map(sym => (
                   <button key={sym.id} onClick={() => {
                     const c = fcRef.current; if (!c) return;
@@ -2875,7 +3492,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
         <label className="text-[10px] text-gray-500 font-medium block mb-1">Color</label>
         <div className="flex items-center gap-2 mb-2">
           <div className="w-9 h-9 rounded-md border border-gray-200 shadow-inner flex-shrink-0"
-            style={{backgroundColor: cmykToHex(...customMarkCmyk)}} />
+            style={{backgroundColor: cmykToHex((customMarkCmyk as [number,number,number,number])[0],(customMarkCmyk as [number,number,number,number])[1],(customMarkCmyk as [number,number,number,number])[2],(customMarkCmyk as [number,number,number,number])[3])}} />
           <div className="flex-1">
             <div className="text-[10px] text-gray-700 font-medium">{customMarkName || "Select a color"}</div>
             <div className="text-[8px] text-gray-400 font-mono">C{customMarkCmyk[0]} M{customMarkCmyk[1]} Y{customMarkCmyk[2]} K{customMarkCmyk[3]}</div>
@@ -2910,10 +3527,10 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
               }}
                 title={`${c.name}\nC${(c.cmyk||[0,0,0,0])[0]} M${(c.cmyk||[0,0,0,0])[1]} Y${(c.cmyk||[0,0,0,0])[2]} K${(c.cmyk||[0,0,0,0])[3]}`}
                 className={`w-6 h-6 rounded-sm border transition-all hover:scale-125 hover:z-10 hover:shadow-md ${
-                  cmykToHex(...customMarkCmyk) === (c.hex || cmykToHex(...(c.cmyk || [0,0,0,0])))
+                  cmykToHex((customMarkCmyk as [number,number,number,number])[0],(customMarkCmyk as [number,number,number,number])[1],(customMarkCmyk as [number,number,number,number])[2],(customMarkCmyk as [number,number,number,number])[3]) === (c.hex || cmykToHex((c.cmyk||[0,0,0,0])[0],(c.cmyk||[0,0,0,0])[1],(c.cmyk||[0,0,0,0])[2],(c.cmyk||[0,0,0,0])[3]))
                   ? "ring-2 ring-blue-500 border-blue-500" : "border-gray-200"
                 }`}
-                style={{backgroundColor: c.hex || cmykToHex(...(c.cmyk || [0,0,0,0]))}} />
+                style={{backgroundColor: c.hex || cmykToHex((c.cmyk||[0,0,0,0])[0],(c.cmyk||[0,0,0,0])[1],(c.cmyk||[0,0,0,0])[2],(c.cmyk||[0,0,0,0])[3])}} />
             ))}
           </div>
         </div>
@@ -2946,7 +3563,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
         const c = fcRef.current; if (!c) return;
         const obj = c.getActiveObject(); if (!obj) { alert("Select an object on canvas first"); return; }
         const name = customMarkName.trim(); if (!name) { alert("Enter a swatch name"); return; }
-        const hex = cmykToHex(...customMarkCmyk);
+        const hex = cmykToHex((customMarkCmyk as [number,number,number,number])[0],(customMarkCmyk as [number,number,number,number])[1],(customMarkCmyk as [number,number,number,number])[2],(customMarkCmyk as [number,number,number,number])[3]);
         (obj as any)._markType = markMode;
         (obj as any)._markMemo = name;
         (obj as any)._markCmyk = [...customMarkCmyk];
@@ -3113,12 +3730,12 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
                       <option value="all">All Types</option>
                       <optgroup label="FEFCO">
                         {BOX_CATEGORIES.filter(c => c.standard === 'FEFCO').map(cat => (
-                          <option key={cat.id} value={cat.id}>{cat.name} · {cat.description}</option>
+                          <option key={cat.id} value={cat.id}>{(cat as any).name || (cat as any).label || cat.id}{(cat as any).description ? ` · ${(cat as any).description}` : ""}</option>
                         ))}
                       </optgroup>
                       <optgroup label="ECMA">
                         {BOX_CATEGORIES.filter(c => c.standard === 'ECMA').map(cat => (
-                          <option key={cat.id} value={cat.id}>{cat.name} · {cat.description}</option>
+                          <option key={cat.id} value={cat.id}>{(cat as any).name || (cat as any).label || cat.id}{(cat as any).description ? ` · ${(cat as any).description}` : ""}</option>
                         ))}
                       </optgroup>
                     </select>
@@ -3512,7 +4129,8 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
           
           console.log(`[Dieline] Exact mm scale: ${svgMmW.toFixed(1)}x${svgMmH.toFixed(1)}mm, scaleX=${exactScaleX.toFixed(4)}, sX=${sX.toFixed(3)}`);
           
-          group.set({ scaleX: exactScaleX, scaleY: exactScaleY, left: finalCW / 2, top: finalCH / 2, selectable: false, evented: false });
+          // 칼선: 클릭 선택 가능 (Delete로 지울 수 있게) + 이동/리사이즈 잠금
+          group.set({ scaleX: exactScaleX, scaleY: exactScaleY, left: finalCW / 2, top: finalCH / 2, selectable: true, evented: true, hasControls: false, hasBorders: true, lockMovementX: true, lockMovementY: true, lockRotation: true, lockScalingX: true, lockScalingY: true, perPixelTargetFind: true });
 
                     if (autoZoom < 100) {
             const z = autoZoom / 100;
@@ -3659,139 +4277,26 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
                 <button onClick={() => { setSnapEnabled(p => { if(p) setSnapLines([]); return !p; }); }} className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${snapEnabled ? "bg-blue-100 text-blue-700" : "text-gray-400 hover:text-gray-600"}`}>
                   {snapEnabled ? "Snap ON" : "Snap OFF"}
                 </button>
-                                <button onClick={() => {
-                  const cv = fcRef.current;
-                  if (!cv || !dielineDims) { alert('Please load a dieline first.'); return; }
-                  const g = cv.getObjects().find((o: any) => o._isDieLine || o._isDieline);
-                  if (!g) { alert('No dieline found.'); return; }
-                  const origVisible = g.visible;
-                  g.visible = false;
-                  cv.requestRenderAll();
-                  setTimeout(() => {
-                    try {
-                      const gs = g.scaleX || 1;
-                      const gW = g.width * gs;
-                      const gH = g.height * gs;
-                      const gLeft = g.originX === 'center' ? g.left - gW / 2 : g.left;
-                      const gTop = g.originY === 'center' ? g.top - gH / 2 : g.top;
-                      const folds = (g._objects || []).filter((p: any) => p.type === 'path' && (p.stroke || '').includes('0,166,80'));
-                      const vertFolds: number[] = [];
-                      const horzFolds: number[] = [];
-                      folds.forEach((p: any) => {
-                        const b = p.getBoundingRect();
-                        if (b.width < 5 && b.height > 50) vertFolds.push(b.left);
-                        if (b.height < 5 && b.width > 50) horzFolds.push(b.top);
-                      });
-                      vertFolds.sort((a: number, b: number) => a - b);
-                      horzFolds.sort((a: number, b: number) => a - b);
-
-                      const topFoldY = horzFolds.length > 0 ? horzFolds[0] : gTop;
-                      const botFoldY = horzFolds.length > 1 ? horzFolds[horzFolds.length - 1] : (gTop + gH);
-                      const topEdge = gTop;
-                      const botEdge = gTop + gH;
-
-                      const faces: {face:string; dataUrl:string|null}[] = [];
-                      const srcCanvas = cv.getElement() as HTMLCanvasElement;
-                      const vp = cv.viewportTransform || [1,0,0,1,0,0];
-                      const dpr = srcCanvas.width / cv.getWidth();
-
-                      const cropFace = (x1: number, y1: number, x2: number, y2: number): string | null => {
-                        if (x1 >= x2 || y1 >= y2) return null;
-                        const sx = (x1 * vp[0] + vp[4]) * dpr;
-                        const sy = (y1 * vp[3] + vp[5]) * dpr;
-                        const sw = (x2 - x1) * vp[0] * dpr;
-                        const sh = (y2 - y1) * vp[3] * dpr;
-                        const tmp = document.createElement('canvas');
-                        tmp.width = Math.round(sw);
-                        tmp.height = Math.round(sh);
-                        const ctx = tmp.getContext('2d');
-                        if (!ctx) return null;
-                        ctx.drawImage(srcCanvas, Math.round(sx), Math.round(sy), Math.round(sw), Math.round(sh), 0, 0, tmp.width, tmp.height);
-                        return tmp.toDataURL('image/png');
-                      };
-
-                      if (vertFolds.length >= 3) {
-                        // 4 main sides
-                        const sideMap = [
-                          { face: 'front', x1: vertFolds[0], x2: vertFolds[1] },
-                          { face: 'right', x1: vertFolds[1], x2: vertFolds[2] },
-                          { face: 'back',  x1: vertFolds[2], x2: vertFolds[3] || (gLeft + gW) },
-                          { face: 'left',  x1: vertFolds[3] || vertFolds[2], x2: vertFolds[4] || (gLeft + gW) },
-                        ];
-                        sideMap.forEach(s => {
-                          const url = cropFace(s.x1, topFoldY, s.x2, botFoldY);
-                          if (url) faces.push({ face: s.face, dataUrl: url });
-                        });
-
-                        // Top face: front top-flap + back top-flap combined
-                        const ftX1 = vertFolds[0], ftX2 = vertFolds[1];
-                        const btX1 = vertFolds[2], btX2 = vertFolds[3] || (gLeft + gW);
-                        const flapH = topFoldY - topEdge;
-                        if (flapH > 2) {
-                          const fw = Math.round((ftX2 - ftX1) * vp[0] * dpr);
-                          const fh = Math.round(flapH * vp[3] * dpr);
-                          const bw = Math.round((btX2 - btX1) * vp[0] * dpr);
-                          const topCv = document.createElement('canvas');
-                          const finalW = Math.max(fw, bw);
-                          topCv.width = finalW;
-                          topCv.height = fh * 2;
-                          const tc = topCv.getContext('2d');
-                          if (tc) {
-                            // Front flap: draw at top
-                            const fsx = (ftX1 * vp[0] + vp[4]) * dpr;
-                            const fsy = (topEdge * vp[3] + vp[5]) * dpr;
-                            tc.drawImage(srcCanvas, Math.round(fsx), Math.round(fsy), fw, fh, 0, 0, finalW, fh);
-                            // Back flap: draw at bottom, rotated 180 degrees
-                            const bsx = (btX1 * vp[0] + vp[4]) * dpr;
-                            const bsy = (topEdge * vp[3] + vp[5]) * dpr;
-                            tc.save();
-                            tc.translate(finalW, fh * 2);
-                            tc.scale(-1, -1);
-                            tc.drawImage(srcCanvas, Math.round(bsx), Math.round(bsy), bw, fh, 0, 0, finalW, fh);
-                            tc.restore();
-                            faces.push({ face: 'top', dataUrl: topCv.toDataURL('image/png') });
-                          }
-                        }
-
-                        // Bottom face: front bottom-flap + back bottom-flap combined
-                        const bflapH = botEdge - botFoldY;
-                        if (bflapH > 2) {
-                          const fw = Math.round((ftX2 - ftX1) * vp[0] * dpr);
-                          const fh = Math.round(bflapH * vp[3] * dpr);
-                          const bw = Math.round((btX2 - btX1) * vp[0] * dpr);
-                          const botCv = document.createElement('canvas');
-                          const finalW = Math.max(fw, bw);
-                          botCv.width = finalW;
-                          botCv.height = fh * 2;
-                          const bc = botCv.getContext('2d');
-                          if (bc) {
-                            // Front flap: draw at top
-                            const fsx = (ftX1 * vp[0] + vp[4]) * dpr;
-                            const fsy = (botFoldY * vp[3] + vp[5]) * dpr;
-                            bc.drawImage(srcCanvas, Math.round(fsx), Math.round(fsy), fw, fh, 0, 0, finalW, fh);
-                            // Back flap: draw at bottom, rotated 180 degrees
-                            const bsx = (btX1 * vp[0] + vp[4]) * dpr;
-                            const bsy = (botFoldY * vp[3] + vp[5]) * dpr;
-                            bc.save();
-                            bc.translate(finalW, fh * 2);
-                            bc.scale(-1, -1);
-                            bc.drawImage(srcCanvas, Math.round(bsx), Math.round(bsy), bw, fh, 0, 0, finalW, fh);
-                            bc.restore();
-                            faces.push({ face: 'bottom', dataUrl: botCv.toDataURL('image/png') });
-                          }
-                        }
-                      }
-                      setMockupFaces(faces);
-                      setShow3DMockup(true);
-                    } finally {
-                      g.visible = origVisible;
-                      cv.requestRenderAll();
-                    }
-                  }, 100);
-                }} className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${dielineDims ? 'text-violet-500 hover:text-violet-700 hover:bg-violet-50' : 'text-gray-300 cursor-not-allowed'}`} disabled={!dielineDims}>
-                  3D Mockup
+                {/* 단축키 상태 인디케이터 — 녹색=정상, 빨강=떨어짐. 클릭하면 새로고침 안내 */}
+                <span
+                  title={shortcutsAttached ? t("shortcut.statusActive") : t("shortcut.statusInactive")}
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${shortcutsAttached ? "text-emerald-600" : "text-red-600 cursor-pointer animate-pulse"}`}
+                  onClick={() => { if (!shortcutsAttached) window.location.reload(); }}
+                >
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${shortcutsAttached ? "bg-emerald-500" : "bg-red-500"}`}></span>
+                  {shortcutsAttached ? "⌨" : "⌨!"}
+                </span>
+                <button
+                  onClick={handleOpen3DMockup}
+                  disabled={generating3D}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                    generating3D ? 'text-amber-500 animate-pulse cursor-wait' :
+                    'text-violet-500 hover:text-violet-700 hover:bg-violet-50'
+                  }`}
+                >
+                  {generating3D ? "Generating 3D..." : "3D Mockup"}
                 </button>
-                            
+
                 <button onClick={() => {
                   const cv = fcRef.current; if (!cv) return;
                   const result = runPreflight(cv, { scale: scaleRef.current });
@@ -4083,7 +4588,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
                               onBlur={e => updateAndRebuild("text", e.target.value)}
                               className="w-full border rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500 resize-none" />
                             {tableCmykOpen && createPortal(
-                              <div className="fixed bg-white border border-gray-300 rounded-lg shadow-xl p-3 w-64 z-[9999]" style={{top: "80px", right: "16px"}} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}>
+                              <div className="fixed bg-white border border-gray-300 rounded-lg shadow-xl p-3 w-64 z-[9999]" style={{top: "80px", right: "16px"}} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}>
                                 <div className="flex items-center justify-between mb-2">
                                   <span className="text-[10px] font-medium text-gray-600">{tableCmykOpen === "bg" ? "BG" : tableCmykOpen === "text" ? "Text" : "Border"} Color</span>
                                   <button onClick={() => setTableCmykOpen(null)} className="text-gray-400 hover:text-gray-600 text-sm leading-none">✕</button>
@@ -4918,7 +5423,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
 
                             </div>
                           )}
-                                                                                                 {colorMode === "gradient" && (
+                                                                                                 {(colorMode as string) === "gradient" && (
                             <div className="space-y-2 mt-2 p-2 bg-gray-50 rounded-lg">
                               <div className="text-[10px] font-semibold text-gray-500">Direction</div>
                               <div className="grid grid-cols-3 gap-1">
@@ -5198,7 +5703,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
                         <div className="flex gap-1">
                           <button onClick={()=>{
                             const c=fcRef.current; const F=fabricModRef.current; if(!c||!F||!aiBgResult) return;
-                            F.Image.fromURL(aiBgResult, {crossOrigin:"anonymous"}).then((img: fabric.Image)=>{
+                            F.Image.fromURL(aiBgResult, {crossOrigin:"anonymous"}).then((img: any)=>{
                               img.scaleToWidth(Math.min(300, c.getWidth()/2));
                               img.set({left:c.getWidth()/2-(img.getScaledWidth()/2), top:c.getHeight()/2-(img.getScaledHeight()/2)});
                               c.add(img); c.setActiveObject(img); c.renderAll();
@@ -5364,7 +5869,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
         setDielineLocked(nl);
         cv2.getObjects().forEach((o: any) => {
           if (o._isDieLine || o._isDieline || o._isFoldLine) {
-            o.set({ selectable: !nl, evented: !nl, lockMovementX: nl, lockMovementY: nl, lockScalingX: nl, lockScalingY: nl, lockRotation: nl, hasControls: !nl, hasBorders: !nl });
+            o.set({ selectable: true, evented: true, lockMovementX: nl, lockMovementY: nl, lockScalingX: nl, lockScalingY: nl, lockRotation: nl, hasControls: !nl, hasBorders: true });
           }
         });
         cv2.requestRenderAll();
@@ -5378,12 +5883,17 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
                 {layersList.length === 0 ? (
                   <div className="text-xs text-gray-400 text-center py-6">No objects yet</div>
                 ) : layersList.map((layer, i) => (
-                  <div key={layer.id + i}
+                  <div key={layer.id + "_" + i}
                     className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer text-xs"
                     onClick={() => {
-                      const c = fcRef.current; if (!c) return;
-                      const obj = c.getObjects().filter((o: any) => o.selectable !== false && !o._isGuideLayer).reverse()[i];
-                      if (obj) { c.setActiveObject(obj); c.requestRenderAll(); }
+                      try {
+                        const c = fcRef.current; if (!c) return;
+                        const obj = c.getObjects().filter((o: any) => o.selectable !== false && !o._isGuideLayer).reverse()[i];
+                        if (obj) { c.setActiveObject(obj); c.requestRenderAll(); }
+                        else console.warn("[LAYER-CLICK] obj not found at index", i);
+                      } catch (err: any) {
+                        console.error("[LAYER-CLICK] error:", err?.message || err, err);
+                      }
                     }}>
                     <button onClick={(e) => { e.stopPropagation(); const c=fcRef.current; if(!c)return; const obj=c.getObjects().filter((o:any)=>o.selectable!==false&&!o._isGuideLayer).reverse()[i]; if(obj){obj.visible=!obj.visible; c.requestRenderAll(); refreshLayers();} }}
                       className="text-gray-400 hover:text-gray-700">{layer.visible ? "👁" : "👁‍🗨"}</button>
@@ -5463,7 +5973,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
               {[
                 { type: "pdf" as const, label: "PDF (CMYK Print-Ready)", desc: "Vector CMYK PDF with dieline", icon: "📄" },
                 { type: "png" as const, label: "PNG (High-Res)", desc: "Full net image at 4x resolution", icon: "🖼" },
-                
+                { type: "boxFaces" as const, label: "Box Faces (6 PNG ZIP)", desc: "front/right/back/left/top/bottom for 3D UV mapping", icon: "📦" },
                 { type: "dieline" as const, label: "Dieline Only", desc: "Cut & fold lines PDF", icon: "✂" },
               ].map(opt => (
                 <button key={opt.type} onClick={() => handleExport(opt.type)} disabled={!!exporting}

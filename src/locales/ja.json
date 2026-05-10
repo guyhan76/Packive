@@ -464,5 +464,20 @@
   "ed.prev": "前へ",
   "ed.next": "次へ",
   "ed.undo": "元に戻す",
-  "ed.redo": "やり直し"
+  "ed.redo": "やり直し",
+  "confirm.newCanvas": "新しい空白キャンバスで開始しますか？\n現在の作業はすべて削除されます。",
+  "confirm.loadReplace": "ファイルを読み込むと現在のキャンバスが置き換えられます。続行しますか？",
+  "confirm.deleteDielineOnly": "ダイラインを削除しますか？",
+  "confirm.deleteDielineWithObjects": "ダイラインとデザインオブジェクト{count}個を一緒に削除しますか？",
+  "alert.dielineRequired": "先にダイラインを読み込んでください。",
+  "alert.dielineNotFound": "キャンバスにダイラインが見つかりません。",
+  "alert.threedFailed": "3D生成失敗: {error}",
+  "alert.popupBlocked": "ポップアップがブロックされました — 新しいタブが開きません。このサイトのポップアップを許可してください。",
+  "alert.foldDetectFailed": "ダイラインから4側面を認識できませんでした。",
+  "alert.loadFailed": "読み込み失敗: {error}",
+  "alert.saveFailed": "保存失敗: {error}",
+  "alert.no3dSession": "以前の3Dモックアップがありません。先に生成してください。",
+  "btn.reopen3d": "最近の3Dを再度開く",
+  "shortcut.statusActive": "ショートカットON",
+  "shortcut.statusInactive": "ショートカットOFF — クリックで再接続"
 }
