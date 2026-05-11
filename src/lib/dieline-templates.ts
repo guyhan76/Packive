@@ -27,6 +27,7 @@ export interface BoxCategory {
   label: string;
   labelKo: string;
   standard: 'FEFCO' | 'ECMA' | 'ALL';
+  description: string;       // English subtitle shown under the category label
   color: string;
 }
 

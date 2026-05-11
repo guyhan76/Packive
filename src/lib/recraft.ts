@@ -152,7 +152,8 @@ export async function vectorizeImage(
   fileName: string
 ): Promise<string> {
   const formData = new FormData();
-  const blob = new Blob([imageBuffer], { type: "image/png" });
+  // Node Buffer를 BlobPart로 캐스팅 (SharedArrayBuffer 호환성 우회)
+  const blob = new Blob([new Uint8Array(imageBuffer)], { type: "image/png" });
   formData.append("file", blob, fileName);
 
   const resp = await fetch(`${RECRAFT_BASE}/images/vectorize`, {
@@ -177,7 +178,8 @@ export async function removeBackground(
   fileName: string
 ): Promise<string> {
   const formData = new FormData();
-  const blob = new Blob([imageBuffer], { type: "image/png" });
+  // Node Buffer를 BlobPart로 캐스팅 (SharedArrayBuffer 호환성 우회)
+  const blob = new Blob([new Uint8Array(imageBuffer)], { type: "image/png" });
   formData.append("file", blob, fileName);
 
   const resp = await fetch(`${RECRAFT_BASE}/images/removeBackground`, {

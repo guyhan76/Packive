@@ -2503,8 +2503,13 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
       // 면 캡처 끝났으니 칼선 visibility 즉시 복원 (overlay는 유지 → 사용자는 Blender 작업 진행 인지)
       restoreVisibility();
 
-      // ★ Blender API 호출 (정확한 12-panel FEFCO 0201 박스 + 정확한 치수 복원)
+      // ★ Blender API 호출 (PANEL_DEFS 기반 박스 + 정확한 치수 복원)
       // faces + L/W/D 보내고 designHash + glbUrl 받음. fold=20 첫 GLB만 받고 나머지는 3D 페이지가 병렬 prefetch.
+      // variant는 dielineModelInfo("FEFCO 0203" 등)에서 도출 → "fefco0203". 미지원 모델은 fefco0201 fallback.
+      const SUPPORTED_VARIANTS = ["fefco0201", "fefco0203"];
+      const rawModel = (dielineModelInfo || "").toLowerCase().replace(/[\s_-]+/g, "");
+      const variant = SUPPORTED_VARIANTS.includes(rawModel) ? rawModel : "fefco0201";
+      console.log(`[3D] variant=${variant} (from modelInfo="${dielineModelInfo}")`);
       setGenerating3DStep("Rendering 3D box (~20-40s)...");
       console.log("[3D] POST /api/generate-3d-mockup ...");
       const t0 = performance.now();
@@ -2513,7 +2518,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           L: dims.L, W: dims.W, D: dims.D,
-          variant: "fefco0201", foldAngle: 20, outerGap: 2,
+          variant, foldAngle: 20, outerGap: 2,
           faces: facesObj,
         }),
       });
@@ -2526,6 +2531,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
         design: data.designHash,
         glb: data.glbUrl,
         label: `${dims.L}×${dims.W}×${dims.D}mm`,
+        variant,
       });
       const win = window.open(`/test/blender-box?${params.toString()}`, "_blank");
       if (!win) alert(t("alert.popupBlocked"));
@@ -2535,7 +2541,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
       // ★ overlay 무조건 닫힘 보장 — 어떤 경로로 들어왔든 finalizeRestore 호출
       finalizeRestore();
     }
-  }, [dielineDims, t]);
+  }, [dielineDims, dielineModelInfo, t]);
 
   // ─── Selected object properties ───
   const getSelectedProps = useCallback(() => {

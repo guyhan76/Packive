@@ -17,9 +17,10 @@ export async function POST(req: NextRequest) {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
       model: 'gemini-3.1-flash-image-preview',
+      // responseModalities는 image-preview 모델 전용 옵션이라 SDK 타입에 아직 없음 — cast
       generationConfig: {
         responseModalities: ['image', 'text'],
-      },
+      } as any,
     });
 
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');

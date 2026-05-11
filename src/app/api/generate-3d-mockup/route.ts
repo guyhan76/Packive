@@ -27,7 +27,7 @@ interface FullRequestBody {
   W: number;
   D: number;
   faces: Partial<Record<FaceName, string>>;
-  variant?: "simple" | "fefco0201";
+  variant?: "simple" | "fefco0201" | "fefco0203";
   foldAngle?: number;
   outerGap?: number;
 }
@@ -35,7 +35,7 @@ interface FullRequestBody {
 interface RefoldRequestBody {
   designHash: string;
   foldAngle: number;
-  variant?: "simple" | "fefco0201";
+  variant?: "simple" | "fefco0201" | "fefco0203";
   outerGap?: number;
 }
 

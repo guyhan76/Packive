@@ -346,7 +346,8 @@ export async function exportCmykPdf(
           ctx.putImageData(imgData, 0, 0);
           console.log("[PDF] Image CMYK-simulated: " + natW + "x" + natH);
         }
-        origSrcs.set(imgObj, el.src || "");
+        // src는 HTMLImageElement에만 존재. canvas는 undefined로 처리.
+        origSrcs.set(imgObj, (el instanceof HTMLImageElement ? el.src : "") || "");
         const dataUrl = tempCanvas.toDataURL("image/png");
         await new Promise<void>((resolve) => {
           const newImg = new Image();

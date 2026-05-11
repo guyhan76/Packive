@@ -1,7 +1,8 @@
 import Stripe from 'stripe';
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: '2026-01-28.clover',
+    // Stripe SDK 버전마다 expected apiVersion 문자열이 달라 cast로 유연성 확보
+    apiVersion: '2026-01-28.clover' as Stripe.LatestApiVersion,
 });
 
 export const PLANS = {

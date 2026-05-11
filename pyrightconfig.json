@@ -1,0 +1,15 @@
+{
+  "exclude": [
+    "lib/blender_mockup.py",
+    "lib/**/blender_*.py",
+    "backups/**",
+    "scripts/**/*.py",
+    ".next/**",
+    "node_modules/**"
+  ],
+  "reportMissingImports": "none",
+  "reportAttributeAccessIssue": "none",
+  "pythonVersion": "3.11",
+  "venvPath": ".",
+  "venv": ""
+}

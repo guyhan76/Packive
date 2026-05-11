@@ -34,6 +34,7 @@ export default function BlenderBoxTestPage() {
   const designHash = search?.get("design") || null;
   const initialGlb = search?.get("glb") || null;
   const dimsLabel = search?.get("label") || null;
+  const variant = search?.get("variant") || "fefco0201";
 
   const isDesignMode = !!designHash;
 
@@ -71,7 +72,7 @@ export default function BlenderBoxTestPage() {
           const res = await fetch("/api/generate-3d-mockup", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ designHash, foldAngle: f, variant: "fefco0201", outerGap: 2 }),
+            body: JSON.stringify({ designHash, foldAngle: f, variant, outerGap: 2 }),
           });
           if (cancelled) return;
           const data = await res.json();
