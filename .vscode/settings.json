@@ -1,0 +1,35 @@
+{
+  "python.analysis.typeCheckingMode": "off",
+  "python.analysis.diagnosticMode": "openFilesOnly",
+  "python.analysis.ignore": [
+    "lib/blender_mockup.py",
+    "lib/**/blender_*.py",
+    "backups/**",
+    "scripts/**"
+  ],
+  "python.analysis.exclude": [
+    "lib/blender_mockup.py",
+    "lib/**/blender_*.py",
+    "backups/**"
+  ],
+  "python.linting.enabled": false,
+  "python.linting.pylintEnabled": false,
+  "python.linting.flake8Enabled": false,
+  "python.linting.mypyEnabled": false,
+  "pylint.enabled": false,
+  "flake8.enabled": false,
+  "ruff.enable": false,
+  "mypy-type-checker.enable": false,
+  "files.watcherExclude": {
+    "**/backups/**": true,
+    "**/.next/**": true,
+    "**/node_modules/**": true,
+    "**/public/models/generated/**": true
+  },
+  "search.exclude": {
+    "**/backups/**": true,
+    "**/.next/**": true,
+    "**/public/models/generated/**": true,
+    "**/public/dielines/cache/**": true
+  }
+}
