@@ -29,7 +29,7 @@ function PackiveBox({ autoRotate, rotateSpeed, url }: { autoRotate: boolean; rot
   return <PackiveBoxModel key={url} autoRotate={autoRotate} rotateSpeed={rotateSpeed} url={url} />;
 }
 
-export default function BlenderBoxTestPage() {
+function BlenderBoxTestInner() {
   const search = useSearchParams();
   const designHash = search?.get("design") || null;
   const initialGlb = search?.get("glb") || null;
@@ -246,6 +246,14 @@ export default function BlenderBoxTestPage() {
         />
       </Canvas>
     </div>
+  );
+}
+
+export default function BlenderBoxTestPage() {
+  return (
+    <Suspense fallback={<div style={{padding:20}}>Loading...</div>}>
+      <BlenderBoxTestInner />
+    </Suspense>
   );
 }
 
