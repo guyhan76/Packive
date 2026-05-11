@@ -1,0 +1,9 @@
+allowBuilds:
+  '@prisma/engines': true
+  canvas: true
+  core-js: true
+  ffmpeg-static: set this to true or false
+  msw: true
+  prisma: true
+  sharp: true
+  unrs-resolver: true

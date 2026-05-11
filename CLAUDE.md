@@ -1,4 +1,75 @@
 ﻿
+# Packive — AI Packaging Design Platform
+
+## Project Overview
+Packive는 고객이 패키지 박스 형태를 선택하고, 전개도(dieline) 위에 디자인(텍스트·로고·이미지)을 배치한 뒤,
+AI 강화 3D 목업을 확인하고, 인쇄용 파일(CMYK PDF)을 내보내는 웹 기반 플랫폼이다.
+
+## Tech Stack
+- **Framework**: Next.js 14 (App Router)
+- **Language**: TypeScript (strict mode)
+- **Canvas Editor**: Fabric.js 6.x (unified-editor.tsx 중심)
+- **3D Mockup**: Three.js + React-Three-Fiber + @react-three/drei
+- **State**: Zustand
+- **Styling**: Tailwind CSS + shadcn/ui
+- **Database**: Supabase (PostgreSQL + Auth + Storage)
+- **Deploy**: Vercel
+- **Package Manager**: pnpm
+
+## Architecture
+```
+src/
+├── app/                 # Next.js App Router pages
+├── components/
+│   ├── editor/          # Fabric.js 에디터 (unified-editor.tsx 핵심)
+│   ├── 3d/              # Three.js 3D 목업 (box-3d-mockup-modal.tsx)
+│   └── ui/              # shadcn/ui 컴포넌트
+├── lib/
+│   ├── supabase/        # Supabase 클라이언트·쿼리
+│   └── utils/           # 유틸리티 함수
+├── stores/              # Zustand 스토어
+└── types/               # TypeScript 타입 정의
+```
+
+## Coding Conventions
+- 함수형 컴포넌트 + hooks만 사용. class 컴포넌트 금지.
+- 파일명은 kebab-case (예: `box-3d-mockup-modal.tsx`).
+- 타입은 별도 `types/` 폴더 또는 컴포넌트 파일 상단에 정의.
+- `any` 타입 사용 금지. 반드시 구체적 타입 사용.
+- import 순서: React → next → third-party → local (절대경로 `@/`).
+- 한국어 주석 허용. 코드 자체는 영문.
+
+## Critical Gotchas
+1. **Fabric.js 커스텀 속성**: `toObject()`/`toJSON()`에 커스텀 속성이 누락됨.
+   반드시 `fabric.Object.prototype.toObject` 오버라이드 또는 `propertiesToInclude`에 추가.
+2. **Three.js 텍스처**: `CanvasTexture`는 `needsUpdate = true` 필수.
+   Fabric.js 캔버스 변경 후 텍스처를 수동 업데이트해야 3D에 반영.
+3. **전개도(Dieline) 좌표**: Fabric.js 캔버스 좌표 ↔ 3D UV 좌표 변환 시
+   Y축 반전 필요 (`uv.y = 1 - canvasY / canvasHeight`).
+4. **CMYK 내보내기**: 브라우저에서 직접 CMYK 변환 불가.
+   서버 사이드 (Sharp / Ghostscript) 또는 ICC 프로파일 임베딩 필요.
+5. **Supabase RLS**: 모든 테이블에 Row Level Security 정책 확인 필수.
+
+## Current Focus Areas
+- [ ] 3D 목업 품질 개선 (Blender MCP → glTF/glb 파이프라인 구축)
+- [ ] 에디터 버그 수정 (칼선 클릭 통과, 오브젝트 선택, JSON 로드 시 dielineDims 복원)
+- [ ] AI Enhanced Mockup (Three.js 렌더 → Blender PBR 환경에서 고품질 이미지 생성)
+- [ ] 다중 박스 형태 지원 (FEFCO 0201, 역맞뚜껑, 슬리브, 필로우 박스)
+
+## Commands
+```bash
+pnpm dev          # 개발 서버 (localhost:3000)
+pnpm build        # 프로덕션 빌드
+pnpm lint         # ESLint 검사
+pnpm type-check   # TypeScript 타입 검사
+```
+
+## Blender MCP Integration (준비 중)
+- Blender 4.4+ 설치 필요 (서버 사이드)
+- Claude Code → Blender Python API (bpy) → glTF(.glb) 내보내기
+- React-Three-Fiber `useGLTF`로 웹 로딩
+- 파라메트릭 스크립트: L/W/D 입력 → 자동 박스 생성
+
 ---
 
 ## 2026-02-27 작업 기록
