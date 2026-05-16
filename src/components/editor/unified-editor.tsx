@@ -2384,6 +2384,8 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
       setGenerating3DStep("");
     };
 
+    // ★ 객체 선택 해제 — fabric.js 바운딩박스/핸들이 텍스처에 캡처되는 것 방지
+    c.discardActiveObject();
     g.visible = false;
     c.requestRenderAll();
     await new Promise(r => setTimeout(r, 80));
@@ -2506,7 +2508,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
       // ★ Blender API 호출 (PANEL_DEFS 기반 박스 + 정확한 치수 복원)
       // faces + L/W/D 보내고 designHash + glbUrl 받음. fold=20 첫 GLB만 받고 나머지는 3D 페이지가 병렬 prefetch.
       // variant는 dielineModelInfo("FEFCO 0203" 등)에서 도출 → "fefco0203". 미지원 모델은 fefco0201 fallback.
-      const SUPPORTED_VARIANTS = ["fefco0201", "fefco0203"];
+      const SUPPORTED_VARIANTS = ["fefco0201", "fefco0203", "fefco0216"];
       const rawModel = (dielineModelInfo || "").toLowerCase().replace(/[\s_-]+/g, "");
       const variant = SUPPORTED_VARIANTS.includes(rawModel) ? rawModel : "fefco0201";
       console.log(`[3D] variant=${variant} (from modelInfo="${dielineModelInfo}")`);
