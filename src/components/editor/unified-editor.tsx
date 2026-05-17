@@ -2635,7 +2635,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
       // ★ Blender API 호출 (PANEL_DEFS 기반 박스 + 정확한 치수 복원)
       // faces + L/W/D 보내고 designHash + glbUrl 받음. fold=20 첫 GLB만 받고 나머지는 3D 페이지가 병렬 prefetch.
       // variant는 dielineModelInfo("FEFCO 0203" 등)에서 도출 → "fefco0203". 미지원 모델은 fefco0201 fallback.
-      const SUPPORTED_VARIANTS = ["fefco0201", "fefco0203", "fefco0216"];
+      const SUPPORTED_VARIANTS = ["fefco0201", "fefco0203", "fefco0215", "fefco0216"];
       const rawModel = (dielineModelInfo || "").toLowerCase().replace(/[\s_-]+/g, "");
       const variant = SUPPORTED_VARIANTS.includes(rawModel) ? rawModel : "fefco0201";
       console.log(`[3D] variant=${variant} (from modelInfo="${dielineModelInfo}")`);
@@ -4599,7 +4599,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
                                   className="w-16 border rounded px-1.5 py-0.5 text-[10px]" />
                                 <span className="text-[8px] text-gray-400 leading-tight flex-1">{t("paper.bleedHint")}</span>
                               </div>
-                              {/* 4 preset buttons */}
+                              {/* 4 preset buttons — Custom: paper bg 활성화 + Color 패널 열어 시각 picker 사용 */}
                               <div className="grid grid-cols-4 gap-1">
                                 <button onClick={() => { setPaperCustomMode(false); removePaperBg(); }}
                                   className={`text-[10px] px-2 py-1.5 border rounded transition-colors ${currentPreset === "none" ? "bg-gray-200 border-gray-400 font-semibold" : "bg-white hover:bg-gray-50"}`}>{t("paper.none")}</button>
@@ -4607,41 +4607,40 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
                                   className={`text-[10px] px-2 py-1.5 border rounded transition-colors ${currentPreset === "white" ? "bg-gray-200 border-gray-400 font-semibold" : "bg-white hover:bg-gray-50"}`}>{t("paper.white")}</button>
                                 <button onClick={() => { setPaperCustomMode(false); applyPaperBg("kraft"); }}
                                   className={`text-[10px] px-2 py-1.5 border rounded transition-colors ${currentPreset === "kraft" ? "bg-amber-200 border-amber-400 font-semibold" : "bg-white hover:bg-gray-50"}`}>{t("paper.kraft")}</button>
-                                <button onClick={() => setPaperCustomMode(v => !v)}
-                                  className={`text-[10px] px-2 py-1.5 border rounded transition-colors ${currentPreset === "custom" || paperCustomMode ? "bg-blue-100 border-blue-400 font-semibold" : "bg-white hover:bg-gray-50"}`}>{t("paper.custom")}</button>
+                                <button onClick={() => {
+                                  // Custom: paper bg 활성화 + Color picker 자동 오픈 (CMYK 모드)
+                                  const c0 = fcRef.current; if (!c0) return;
+                                  let pb = findPaperBg(c0);
+                                  // paper bg가 없으면 white로 우선 생성
+                                  if (!pb) {
+                                    applyPaperBg("white");
+                                    // 새로 생성된 rect 가져오기 (적용 후 즉시)
+                                    setTimeout(() => {
+                                      const c1 = fcRef.current; if (!c1) return;
+                                      const p1 = findPaperBg(c1);
+                                      if (p1) {
+                                        (p1 as any)._paperPreset = "custom";
+                                        c1.setActiveObject(p1 as any);
+                                        c1.requestRenderAll();
+                                      }
+                                      setColorMode("cmyk");
+                                      setAccOpen(prev => ({ ...prev, color: true, paperBg: false }));
+                                    }, 30);
+                                  } else {
+                                    (pb as any)._paperPreset = "custom";
+                                    c0.setActiveObject(pb as any);
+                                    c0.requestRenderAll();
+                                    setColorMode("cmyk");
+                                    setAccOpen(prev => ({ ...prev, color: true, paperBg: false }));
+                                  }
+                                  setPaperCustomMode(true);
+                                }}
+                                  className={`text-[10px] px-2 py-1.5 border rounded transition-colors ${currentPreset === "custom" ? "bg-blue-100 border-blue-400 font-semibold" : "bg-white hover:bg-gray-50"}`}>{t("paper.custom")}</button>
                               </div>
-                              {/* Custom CMYK / Spot color input */}
-                              {paperCustomMode && (
-                                <div className="p-2 bg-gray-50 rounded border space-y-1.5">
-                                  <div className="text-[9px] text-gray-600 font-semibold">{t("paper.cmykPercent")}</div>
-                                  <div className="grid grid-cols-4 gap-1">
-                                    {(["C","M","Y","K"] as const).map((label, i) => (
-                                      <label key={label} className="text-[9px] text-gray-500">
-                                        {label}
-                                        <input type="number" min={0} max={100} value={paperCustomCmyk[i]}
-                                          onChange={e => {
-                                            const v = Math.max(0, Math.min(100, Number(e.target.value) || 0));
-                                            setPaperCustomCmyk(prev => { const next = [...prev] as [number,number,number,number]; next[i] = v; return next; });
-                                          }}
-                                          className="w-full border rounded px-1.5 py-0.5 text-[10px] mt-0.5" />
-                                      </label>
-                                    ))}
-                                  </div>
-                                  <div className="text-[9px] text-gray-600 font-semibold mt-1">{t("paper.spotName")}</div>
-                                  <input type="text" value={paperCustomSpotName}
-                                    onChange={e => setPaperCustomSpotName(e.target.value)}
-                                    placeholder={t("paper.spotPlaceholder")}
-                                    className="w-full border rounded px-2 py-1 text-[10px]" />
-                                  <button onClick={() => {
-                                    const hex = cmykToHex(paperCustomCmyk[0], paperCustomCmyk[1], paperCustomCmyk[2], paperCustomCmyk[3]);
-                                    applyPaperBg("custom", {
-                                      hex,
-                                      cmyk: paperCustomCmyk,
-                                      spotName: paperCustomSpotName.trim() || undefined,
-                                    });
-                                    setPaperCustomMode(false);
-                                  }}
-                                    className="w-full text-[10px] px-2 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded font-semibold transition-colors">{t("paper.apply")}</button>
+                              {/* Custom 모드: Color picker 사용 안내 */}
+                              {currentPreset === "custom" && (
+                                <div className="p-2 bg-blue-50 border border-blue-200 rounded text-[9px] text-blue-700 leading-tight">
+                                  {t("paper.customHint")}
                                 </div>
                               )}
                               <div className="text-[8px] text-gray-400 leading-tight">

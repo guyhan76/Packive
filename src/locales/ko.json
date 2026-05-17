@@ -492,5 +492,7 @@
   "paper.apply": "적용",
   "paper.bleed": "여백 (mm)",
   "paper.bleedHint": "칼선 외곽 여유 (한국 인쇄 표준: 5mm)",
-  "paper.note": "칼선전개도 전체에 적용. CMYK/별색은 PDF 출력에 그대로 반영됩니다."
+  "paper.note": "칼선전개도 전체에 적용. CMYK/별색은 PDF 출력에 그대로 반영됩니다.",
+  "paper.customHint": "아래 Color 패널에서 시각적으로 색상을 선택하세요 — CMYK/별색/그라데이션 선택기가 자동 열립니다.",
+  "paper.customButton": "색상 선택기 열기"
 }

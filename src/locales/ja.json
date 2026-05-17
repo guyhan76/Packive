@@ -492,5 +492,7 @@
   "paper.apply": "適用",
   "paper.bleed": "余白 (mm)",
   "paper.bleedHint": "ダイライン外側の余裕 (韓国印刷標準: 5mm)",
-  "paper.note": "ダイラインの全体に適用。CMYK/特色はPDF出力に反映されます。"
+  "paper.note": "ダイラインの全体に適用。CMYK/特色はPDF出力に反映されます。",
+  "paper.customHint": "下のColorパネルで視覚的に色を選んでください — CMYK/特色/グラデーション選択器が自動展開されます。",
+  "paper.customButton": "カラーピッカーを開く"
 }

@@ -492,5 +492,7 @@
   "paper.apply": "Apply",
   "paper.bleed": "Bleed (mm)",
   "paper.bleedHint": "Margin outside the dieline (Korean print standard: 5mm)",
-  "paper.note": "Applied to full dieline. CMYK/Spot color is reflected in PDF output."
+  "paper.note": "Applied to full dieline. CMYK/Spot color is reflected in PDF output.",
+  "paper.customHint": "Pick a color visually below — Color panel auto-opened with CMYK/SPOT/Gradient picker.",
+  "paper.customButton": "Open Color Picker"
 }
