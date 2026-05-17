@@ -39,7 +39,7 @@ function BlenderBoxTestInner() {
   const isDesignMode = !!designHash;
 
   const [autoRotate, setAutoRotate] = useState(false);
-  const [rotateSpeed, setRotateSpeed] = useState(1.0);
+  const [rotateSpeed, setRotateSpeed] = useState(0.5);
   const [foldAngle, setFoldAngle] = useState(20);
   const [designGlbsByFold, setDesignGlbsByFold] = useState<Record<number, string>>(initialGlb ? { 20: initialGlb } : {});
   const [refoldError, setRefoldError] = useState<string | null>(null);
