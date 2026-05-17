@@ -1,0 +1,1422 @@
+﻿
+# Packive — AI Packaging Design Platform
+
+## Project Overview
+Packive는 고객이 패키지 박스 형태를 선택하고, 전개도(dieline) 위에 디자인(텍스트·로고·이미지)을 배치한 뒤,
+AI 강화 3D 목업을 확인하고, 인쇄용 파일(CMYK PDF)을 내보내는 웹 기반 플랫폼이다.
+
+## Tech Stack
+- **Framework**: Next.js 14 (App Router)
+- **Language**: TypeScript (strict mode)
+- **Canvas Editor**: Fabric.js 6.x (unified-editor.tsx 중심)
+- **3D Mockup**: Three.js + React-Three-Fiber + @react-three/drei
+- **State**: Zustand
+- **Styling**: Tailwind CSS + shadcn/ui
+- **Database**: Supabase (PostgreSQL + Auth + Storage)
+- **Deploy**: Vercel
+- **Package Manager**: pnpm
+
+## Architecture
+```
+src/
+├── app/                 # Next.js App Router pages
+├── components/
+│   ├── editor/          # Fabric.js 에디터 (unified-editor.tsx 핵심)
+│   ├── 3d/              # Three.js 3D 목업 (box-3d-mockup-modal.tsx)
+│   └── ui/              # shadcn/ui 컴포넌트
+├── lib/
+│   ├── supabase/        # Supabase 클라이언트·쿼리
+│   └── utils/           # 유틸리티 함수
+├── stores/              # Zustand 스토어
+└── types/               # TypeScript 타입 정의
+```
+
+## Coding Conventions
+- 함수형 컴포넌트 + hooks만 사용. class 컴포넌트 금지.
+- 파일명은 kebab-case (예: `box-3d-mockup-modal.tsx`).
+- 타입은 별도 `types/` 폴더 또는 컴포넌트 파일 상단에 정의.
+- `any` 타입 사용 금지. 반드시 구체적 타입 사용.
+- import 순서: React → next → third-party → local (절대경로 `@/`).
+- 한국어 주석 허용. 코드 자체는 영문.
+
+## Critical Gotchas
+1. **Fabric.js 커스텀 속성**: `toObject()`/`toJSON()`에 커스텀 속성이 누락됨.
+   반드시 `fabric.Object.prototype.toObject` 오버라이드 또는 `propertiesToInclude`에 추가.
+2. **Three.js 텍스처**: `CanvasTexture`는 `needsUpdate = true` 필수.
+   Fabric.js 캔버스 변경 후 텍스처를 수동 업데이트해야 3D에 반영.
+3. **전개도(Dieline) 좌표**: Fabric.js 캔버스 좌표 ↔ 3D UV 좌표 변환 시
+   Y축 반전 필요 (`uv.y = 1 - canvasY / canvasHeight`).
+4. **CMYK 내보내기**: 브라우저에서 직접 CMYK 변환 불가.
+   서버 사이드 (Sharp / Ghostscript) 또는 ICC 프로파일 임베딩 필요.
+5. **Supabase RLS**: 모든 테이블에 Row Level Security 정책 확인 필수.
+
+## Current Focus Areas
+- [ ] 3D 목업 품질 개선 (Blender MCP → glTF/glb 파이프라인 구축)
+- [ ] 에디터 버그 수정 (칼선 클릭 통과, 오브젝트 선택, JSON 로드 시 dielineDims 복원)
+- [ ] AI Enhanced Mockup (Three.js 렌더 → Blender PBR 환경에서 고품질 이미지 생성)
+- [ ] 다중 박스 형태 지원 (FEFCO 0201, 역맞뚜껑, 슬리브, 필로우 박스)
+
+## Commands
+```bash
+pnpm dev          # 개발 서버 (localhost:3000)
+pnpm build        # 프로덕션 빌드
+pnpm lint         # ESLint 검사
+pnpm type-check   # TypeScript 타입 검사
+```
+
+## Blender MCP Integration (준비 중)
+- Blender 4.4+ 설치 필요 (서버 사이드)
+- Claude Code → Blender Python API (bpy) → glTF(.glb) 내보내기
+- React-Three-Fiber `useGLTF`로 웹 로딩
+- 파라메트릭 스크립트: L/W/D 입력 → 자동 박스 생성
+
+---
+
+## 2026-02-27 작업 기록
+
+### 1. CMYK Fill/Stroke 수동 입력 수정 ✅
+- **파일**: `src/components/editor/unified-editor.tsx`
+- **위치**: Fill CMYK (line ~2028), Stroke CMYK (line ~2047)
+- **내용**: `<input type="number">` 필드에서 직접 타이핑 불가 → 수동 입력 가능하도록 수정
+- **동작**: 숫자 입력 후 Tab/Enter → 색상 즉시 반영
+
+### 2. Measure 도구 → Adobe Illustrator 스타일 리디자인 ✅
+- **파일**: `src/components/editor/unified-editor.tsx`
+- **수정 함수**: `drawMeasure`, `removeMeasureObjects`, `toggleMeasure`, Measure 버튼 SVG
+- **변경 사항**:
+  - 측정선: 주황색(#E65100) 두꺼운 선 → 검정(#333) 가는 선 + 양끝 삼각형 화살표
+  - 시작점: 주황 dot → 십자형(+) 크로스헤어
+  - 거리 라벨: 모노스페이스 폰트, 반투명 배경
+  - 보조선: 수평/수직 회색 점선 + ΔX/ΔY mm 값
+  - 각도 표시: 각도값(°) + 호(arc) 표시
+  - 색상 팔레트: #333333, #666666, #999999
+  - 아이콘: 대각선+화살표+십자 SVG로 교체
+- **`_isMeasure` 플래그**: 모든 측정 객체에 부여, 제거 시 필터링에 사용
+
+### 3. 측정 단위 변환 버그 수정 ✅
+- **파일**: `src/components/editor/unified-editor.tsx`
+- **수정 함수**: `calcDistance`, `drawMeasure` (dxMM, dyMM)
+
+#### 3-1. 이중 곱셈 제거
+- **변경 전**: `distPx / scale * 0.3528`
+- **변경 후**: `distPx / scale`
+- **원인**: `scaleRef`가 이미 px/mm 비율이므로 0.3528 추가 곱셈은 이중 변환
+
+#### 3-2. SVG 96 DPI 대응
+- Inkscape SVG: 96 DPI 기준 (1 user unit = 0.2646 mm)
+- **변경**: `unitFactor = useEngineRef.current ? 1 : 0.2646`
+- 엔진 모드: mm 단위이므로 unitFactor = 1
+- SVG 모드: 96 DPI이므로 unitFactor = 0.2646
+
+#### 3-3. scaleRef 정확도 개선
+- `loadDielineOnCanvas` 내에서 `fitScale`을 `scaleRef.current`에 저장
+- SVG 업로드 핸들러에서도 그룹 스케일을 `scaleRef`에 반영
+- **최종 정밀도**: ±2% (마우스 클릭 정밀도 한계)
+
+### 4. SVG 이중 로드 버그 수정 ✅
+- **파일**: `src/components/editor/unified-editor.tsx`
+- **원인**: SVG 업로드 핸들러가 직접 캔버스에 그룹 추가 + `setDielineSVG`로 캔버스 재생성 → `ReloadDieline` useEffect가 다시 로드
+- **해결**:
+  - 업로드 핸들러에서 직접 캔버스 추가 코드 제거
+  - `setDielineSVG`만 설정 → 캔버스 초기화 useEffect에서 1회만 `loadDielineOnCanvas` 호출
+  - `ReloadDieline` useEffect 중복 호출 비활성화
+  - `loadDielineOnCanvas` 호출 횟수: 2회 → 1회
+
+### 5. 첫 업로드 시 칼선 미표시 버그 수정 ✅
+- **파일**: `src/components/editor/unified-editor.tsx`
+- **원인**: `svgLoadedByUploadRef` 플래그가 캔버스 재생성 후 `loadDielineOnCanvas` 호출을 차단
+- **해결**: 로드 흐름을 단일 경로로 통일 (캔버스 초기화 useEffect → loadDielineOnCanvas)
+
+### 6. 업로드 안내 모달 추가 ✅
+- **파일**: `src/components/editor/unified-editor.tsx`
+- **추가 상태**: `showUploadGuide` (useState)
+- **동작**: Upload Dieline 버튼 클릭 → 안내 모달 표시 → "파일 선택" 클릭 → 파일 다이얼로그
+- **모달 내용**:
+  - 지원 형식: SVG, EPS, AI, PDF, PS
+  - 칼선 색상 규칙: 빨간색=절단선, 초록색=접힘선(오시선)
+  - 파일 준비 가이드라인 6개 항목
+  - 교체 경고 문구
+  - 취소 / 파일 선택 버튼
+
+### 7. 모달 한글 번역 ✅
+- **파일**: `src/components/editor/unified-editor.tsx`
+- **번역 항목** (총 11개):
+  - Upload Dieline File → 칼선 전개도 업로드
+  - Supported formats → 지원 형식
+  - Guidelines → 안내사항
+  - red strokes (cut lines) → 빨간색 선 (칼선/절단선)
+  - green strokes (fold/crease) → 초록색 선 (접힘선/오시선)
+  - 가이드라인 4개 항목 한글화
+  - 경고 문구 한글화
+  - Cancel → 취소, Choose File → 파일 선택
+
+---
+
+### 핵심 기술 메모
+
+| 항목 | 값 |
+|---|---|
+| SVG 단위 변환 (Inkscape 96 DPI) | 1 user unit = 0.2646 mm |
+| SVG 단위 변환 (72 DPI, 참고용) | 1 pt = 0.3528 mm |
+| 엔진 모드 단위 | mm (unitFactor = 1) |
+| 측정 객체 식별 플래그 | `_isMeasure: true` |
+| 칼선 그룹 식별 | `name: '__dieline_group__'`, `_isDieLine: true` |
+| scaleRef | `loadDielineOnCanvas`의 fitScale 값 저장 |
+| useEngineRef | 엔진 모드 여부 (true=mm, false=SVG pt) |
+| 측정 정밀도 | ±2% (마우스 클릭 한계) |
+
+### 남은 과제
+- [ ] 다국어 전환 (한/영)
+- [ ] Spot Color 지원
+- [ ] Bleed Guide (재단선 가이드)
+- [ ] AI/PDF 디자인 편집 지원
+
+---
+
+## 2026-02-28 Packive 전체 법적 검토 보고서
+
+### 검토 목적
+Packive 플랫폼의 모든 기능, 라이브러리, 리소스에 대해 저작권, 상표권, 특허, 라이선스 위반 여부를 사전 검토하여 법적 리스크를 제거한다.
+
+---
+
+### A. 핵심 프레임워크 및 라이브러리
+
+| 패키지 | 라이선스 | 상업적 사용 | 의무사항 | 판정 |
+|---|---|---|---|---|
+| Next.js 16 | MIT | ✅ 가능 | 저작권 고지 유지 | ✅ 안전 |
+| React 19 | MIT | ✅ 가능 | 저작권 고지 유지 | ✅ 안전 |
+| Fabric.js 7 | MIT | ✅ 가능 | 저작권 고지 유지 | ✅ 안전 |
+| Three.js | MIT | ✅ 가능 | 저작권 고지 유지 | ✅ 안전 |
+| @react-three/fiber | MIT | ✅ 가능 | 저작권 고지 유지 | ✅ 안전 |
+| @react-three/drei | MIT | ✅ 가능 | 저작권 고지 유지 | ✅ 안전 |
+| jsPDF | MIT | ✅ 가능 | 저작권 고지 유지 | ✅ 안전 |
+| Zustand | MIT | ✅ 가능 | 저작권 고지 유지 | ✅ 안전 |
+| Zod | MIT | ✅ 가능 | 저작권 고지 유지 | ✅ 안전 |
+| Tailwind CSS 4 | MIT | ✅ 가능 | 저작권 고지 유지 | ✅ 안전 |
+| Radix UI | MIT | ✅ 가능 | 저작권 고지 유지 | ✅ 안전 |
+| clsx / tailwind-merge | MIT | ✅ 가능 | 저작권 고지 유지 | ✅ 안전 |
+| class-variance-authority | Apache 2.0 | ✅ 가능 | 저작권 고지 + NOTICE 파일 | ✅ 안전 |
+| lucide-react | ISC | ✅ 가능 | 저작권 고지 유지 | ✅ 안전 |
+| react-hot-toast | MIT | ✅ 가능 | 저작권 고지 유지 | ✅ 안전 |
+| bwip-js (바코드) | MIT | ✅ 가능 | 저작권 고지 유지 | ✅ 안전 |
+| qrcode | MIT | ✅ 가능 | 저작권 고지 유지 | ✅ 안전 |
+
+**의무 조치:** `/about` 또는 `/licenses` 페이지에 모든 MIT/ISC/Apache 라이선스 고지문을 포함해야 함.
+
+---
+
+### B. 결제/인프라 서비스
+
+| 서비스 | 라이선스/약관 | 상업적 사용 | 판정 |
+|---|---|---|---|
+| Stripe (@stripe/stripe-js) | Stripe 서비스 약관 | ✅ 사업자 가입 후 사용 가능 | ✅ 안전 |
+| Supabase (@supabase/supabase-js) | Apache 2.0 + Supabase 서비스 약관 | ✅ Free/Pro 플랜 사용 가능 | ✅ 안전 |
+| Prisma | Apache 2.0 | ✅ 가능 | ✅ 안전 |
+| shadcn/ui | MIT | ✅ 가능 (컴포넌트 복사 방식) | ✅ 안전 |
+
+---
+
+### C. ⚠️ 폰트 (FONTS) — 주의 필요
+
+현재 사용 중인 폰트 목록:
+
+#### ✅ 안전한 폰트 (Google Fonts — SIL OFL / Apache 2.0)
+| 폰트 | 라이선스 | 상업적 사용 | 판정 |
+|---|---|---|---|
+| Noto Sans KR | SIL OFL | ✅ 가능 | ✅ 안전 |
+| Noto Serif KR | SIL OFL | ✅ 가능 | ✅ 안전 |
+| Black Han Sans | SIL OFL | ✅ 가능 | ✅ 안전 |
+| Jua | SIL OFL | ✅ 가능 | ✅ 안전 |
+| Gothic A1 | SIL OFL | ✅ 가능 | ✅ 안전 |
+| Noto Sans JP | SIL OFL | ✅ 가능 | ✅ 안전 |
+| Noto Serif JP | SIL OFL | ✅ 가능 | ✅ 안전 |
+| Inter | SIL OFL | ✅ 가능 | ✅ 안전 |
+| Montserrat | SIL OFL | ✅ 가능 | ✅ 안전 |
+| Poppins | SIL OFL | ✅ 가능 | ✅ 안전 |
+| Lato | SIL OFL | ✅ 가능 | ✅ 안전 |
+| Open Sans | SIL OFL | ✅ 가능 | ✅ 안전 |
+| Roboto | Apache 2.0 | ✅ 가능 | ✅ 안전 |
+| Playfair Display | SIL OFL | ✅ 가능 | ✅ 안전 |
+| Lora | SIL OFL | ✅ 가능 | ✅ 안전 |
+| Merriweather | SIL OFL | ✅ 가능 | ✅ 안전 |
+| Bebas Neue | SIL OFL | ✅ 가능 | ✅ 안전 |
+| Anton | SIL OFL | ✅ 가능 | ✅ 안전 |
+| Oswald | SIL OFL | ✅ 가능 | ✅ 안전 |
+| Pacifico | SIL OFL | ✅ 가능 | ✅ 안전 |
+| Dancing Script | SIL OFL | ✅ 가능 | ✅ 안전 |
+
+#### ⚠️ 주의 필요 폰트
+| 폰트 | 라이선스 | 문제 | 조치 |
+|---|---|---|---|
+| Arial | Microsoft 독점 | 웹에서 CSS 시스템 폰트로 참조는 OK, 폰트 파일 번들 배포 금지 | ⚠️ CSS fallback으로만 사용, 파일 포함 금지 |
+| Georgia | Microsoft 독점 | 동일 | ⚠️ CSS fallback으로만 사용 |
+| Courier New | Microsoft 독점 | 동일 | ⚠️ CSS fallback으로만 사용 |
+
+**조치:** Arial, Georgia, Courier New는 CSS `font-family` 스택에서 시스템 폰트 fallback으로 참조하는 것은 합법. 그러나 Packive가 이 폰트 파일(.ttf/.woff)을 서버에서 호스팅하거나 번들에 포함해서는 안 됨. 사용자 PC에 설치된 폰트를 참조하는 것일 뿐임. **현재 코드의 `"Arial, sans-serif"` 형태는 안전함.**
+
+향후 폰트 추가 시 반드시 SIL OFL 또는 Apache 2.0 라이선스 확인 필요. 상용 폰트(Helvetica, Futura, Avenir 등) 절대 포함 금지.
+
+---
+
+### D. ⚠️ Spot Color / Pantone — 주의 필요
+
+**상세 분석: 이전 섹션(2026-02-28 Spot Color 법적 검토) 참조**
+
+요약:
+- "PANTONE" 상표를 색상 이름에 사용: ❌ 금지 (라이선스 없이)
+- Pantone 번호→HEX 자동 변환 데이터베이스 내장: ❌ 금지
+- 사용자가 텍스트로 "Pantone 185 C" 입력 (인쇄 지시용): ✅ Nominative Fair Use
+- CIELAB HLC 색상 시스템 사용: ✅ CC 라이선스, 완전 안전
+- 자체 명명 색상 라이브러리 (PKV-xxxx): ✅ 자체 창작물
+
+---
+
+### E. FEFCO / ECMA 박스 표준 코드
+
+| 항목 | 상태 | 설명 |
+|---|---|---|
+| FEFCO 코드 번호 (0201, 0215 등) | ✅ 안전 | 업계 표준 분류 번호로 자유롭게 참조 가능. Esko, packQ, Pacdora 등 모든 패키지 소프트웨어가 사용 중 |
+| FEFCO 공식 도면 이미지 복제 | ⚠️ 주의 | FEFCO 공식 PDF 도면의 직접 복제는 저작권 이슈 가능. 자체 생성한 SVG 다이라인은 안전 |
+| ECMA 코드 번호 | ✅ 안전 | FEFCO와 동일하게 업계 표준 분류 체계 |
+| 자체 생성 다이라인 SVG | ✅ 안전 | Packive가 자체 제작한 파라메트릭 다이라인 |
+
+**조치:** FEFCO 코드 번호 참조는 합법. 단, FEFCO 공식 발행물(PDF, 이미지)을 직접 복제하지 말 것. Packive가 자체 생성한 SVG 다이라인은 완전 안전.
+
+---
+
+### F. OpenAI API (AI 리뷰 기능)
+
+| 항목 | 상태 | 설명 |
+|---|---|---|
+| OpenAI API 상업적 사용 | ✅ 가능 | OpenAI Terms: "you own the Output" |
+| AI 생성 디자인 리뷰 텍스트 | ✅ 가능 | 출력물 저작권은 사용자에게 귀속 |
+| AI 생성 이미지 사용 | ✅ 가능 | 상업적 사용 허용 (OpenAI TOS 확인) |
+| API 비용 | 사용량 기반 과금 | Packive 사업 비용으로 반영 필요 |
+
+**조치:** OpenAI API 사용약관 준수. AI 생성 콘텐츠에 "AI-assisted" 표시 권장 (법적 의무는 아니지만 투명성 확보).
+
+---
+
+### G. SVG 형식 / 내보내기 기능
+
+| 항목 | 상태 | 설명 |
+|---|---|---|
+| SVG 형식 자체 | ✅ 안전 | W3C 오픈 표준, 특허 로열티 프리 |
+| PNG 내보내기 | ✅ 안전 | PNG는 특허 프리 형식 |
+| PDF 내보내기 (jsPDF) | ✅ 안전 | jsPDF는 MIT 라이선스 |
+| 사용자 업로드 SVG/EPS/PDF | ✅ 안전 | 사용자 콘텐츠 — 사용자 책임 |
+
+---
+
+### H. 바코드/QR코드
+
+| 항목 | 상태 | 설명 |
+|---|---|---|
+| bwip-js (바코드 생성) | ✅ MIT | 상업적 사용 가능 |
+| qrcode (QR코드 생성) | ✅ MIT | 상업적 사용 가능 |
+| 바코드 표준 (EAN, UPC, Code128 등) | ✅ 안전 | 국제 표준 — 자유 사용 |
+| QR코드 표준 | ✅ 안전 | ISO/IEC 18004 — 특허 만료, 자유 사용 |
+
+---
+
+### I. 필수 법적 조치 체크리스트
+
+#### 즉시 필요
+- [ ] `/licenses` 페이지 생성: 모든 오픈소스 라이선스 고지문 표시
+- [ ] 이용약관(Terms of Service): 사용자 콘텐츠 책임 면책 조항
+- [ ] 색상 면책 문구: "화면 색상은 근사치이며 인쇄 결과와 다를 수 있음"
+- [ ] Pantone 상표 면책: "Pantone®은 Pantone LLC의 등록 상표입니다"
+- [ ] 폰트 파일 번들 확인: Arial/Georgia/Courier New .ttf/.woff 파일이 프로젝트에 포함되어 있지 않은지 확인
+
+#### 향후 기능 추가 시 체크
+- [ ] 새 폰트 추가: SIL OFL 또는 Apache 2.0 라이선스만 허용
+- [ ] 새 아이콘 추가: MIT/ISC/Apache 라이선스만 허용
+- [ ] 색상 시스템 추가: Pantone 데이터 내장 금지, CIELAB HLC(CC) 또는 자체 라이브러리만
+- [ ] 이미지/템플릿 추가: 저작권 확인 필수
+- [ ] 제3자 API 추가: 약관에서 상업적 사용 및 출력물 소유권 확인
+
+---
+
+### J. 요약: 리스크 등급
+
+| 등급 | 항목 |
+|---|---|
+| ✅ 안전 (24개) | Next.js, React, Fabric.js, Three.js, jsPDF, Zustand, Zod, Tailwind, Radix, lucide, 모든 Google Fonts(21개), bwip-js, qrcode, Stripe, Supabase, Prisma, shadcn, OpenAI API, SVG/PNG/PDF 형식, FEFCO/ECMA 코드 번호, 바코드/QR표준 |
+| ⚠️ 주의 (4개) | Arial/Georgia/Courier New (시스템 폰트 참조만 가능), Pantone (사용자 텍스트 입력만 가능, 데이터베이스 내장 금지), FEFCO 공식 도면 (자체 생성 SVG만 사용) |
+| ❌ 금지 (0개) | 현재 코드에 금지 항목 없음 |
+
+**결론: 현재 Packive 코드베이스는 법적으로 안전함. 위 ⚠️ 주의 항목의 경계선만 지키면 문제 없음.**
+
+---
+
+## 핵심 원칙: 모든 기능 추가 시 법적 검토 우선 (2026-02-28 확정)
+
+### 원칙 선언
+> Packive에 추가되는 모든 기능, 라이브러리, 리소스, 데이터는 구현 착수 전에 반드시 법적 검토를 완료해야 한다.
+> 법적 검토 없이 구현된 기능은 배포 전 반드시 사후 검토를 수행한다.
+
+### 필수 검토 5대 항목
+
+| 번호 | 검토 항목 | 확인 내용 | 예시 |
+|:---:|---|---|---|
+| 1 | 저작권 (Copyright) | 외부 리소스의 저작권 상태 | 폰트 파일 번들링 금지 |
+| 2 | 상표권 (Trademark) | 제3자 브랜드명 사용 시 Fair Use 3요건 충족 | Pantone 상표 사용 규칙 |
+| 3 | 특허 (Patent) | 알고리즘, UI 패턴의 특허 침해 여부 | QR코드 특허 만료 확인 |
+| 4 | 라이선스 (License) | 오픈소스 라이선스 조건 준수 | fabric.js MIT 고지 의무 |
+| 5 | 개인정보 (Privacy) | 사용자 데이터 수집 시 개인정보보호법 준수 | Supabase 데이터 처리 |
+
+### Nominative Fair Use (상표 공정 이용) 3요건
+제3자 상표를 참조할 때 아래 3가지를 모두 충족해야 한다:
+1. 필요성: 해당 상표 없이는 제품/서비스를 식별할 수 없음
+2. 최소 사용: 필요한 만큼만 텍스트로 사용 (로고/디자인 요소 사용 금지)
+3. 비후원: 후원/보증/제휴를 암시하지 않음 + 면책 문구 표기
+
+### 법적 검토 프로세스 (기능 추가 시 필수)
+기능 기획 -> 법적 리스크 식별 -> 외부 리소스 라이선스 확인 -> 상표 사용 여부 확인 -> 검토 결과 본 파일에 기록 -> 구현 착수 -> 배포 전 최종 확인
+
+### 현재 법적 상태 요약 (2026-02-28 기준)
+- 안전(24개): Next.js, React, Fabric.js, Three.js, jsPDF, Zustand, Zod, Tailwind, Radix, lucide-react, Google Fonts(21개), bwip-js, qrcode, Stripe, Supabase, Prisma, shadcn, OpenAI API, SVG/PNG/PDF 형식, FEFCO/ECMA 코드, 바코드/QR 표준
+- 주의(4개): 시스템 폰트(번들링 금지), Pantone DB(자동매핑 금지), FEFCO 공식 도면(자체 SVG만)
+- 금지(0개): 현재 코드에 금지 항목 없음
+
+### 금지 행위 목록
+1. Pantone 색상 번호를 HEX로 자동 변환하는 데이터베이스 내장 (저작권 침해)
+2. Pantone 색상 이름을 Packive 자체 색상명으로 사용 (상표권 침해)
+3. 상용 폰트 파일(Helvetica, Futura, Avenir, Arial .ttf 등) 서버 호스팅/번들 포함
+4. FEFCO/ECMA 공식 발행물(PDF, 이미지) 직접 복제
+5. 제3자 로고/아이콘을 무단 사용
+6. 라이선스 미확인 오픈소스 라이브러리 도입
+
+### 허용 행위 목록
+1. 사용자가 텍스트로 Pantone 185 C 등 참조 입력 (Nominative Fair Use)
+2. CIELAB HLC 색상 시스템 사용 (CC BY 4.0 - 출처 표기 필수)
+3. Packive 자체 명명 색상 라이브러리 (PKV-xxxx)
+4. Google Fonts (SIL OFL/Apache 2.0) 사용 및 호스팅
+5. FEFCO/ECMA 코드 번호 참조 + 자체 생성 SVG 다이라인
+6. MIT/ISC/Apache 라이선스 라이브러리 사용 (고지 의무 준수)
+
+### 필수 면책 문구 (UI에 표시)
+색상 면책: 화면에 표시되는 색상은 모니터 설정에 따라 실제 인쇄 결과와 다를 수 있습니다. 정확한 색상 재현을 위해 인쇄 교정쇄(proof)를 확인하시기 바랍니다. Pantone은 Pantone LLC의 등록 상표입니다. Packive는 Pantone LLC와 제휴 관계가 없습니다.
+
+---
+
+## 2026-02-28 Spot Color 구현 계획
+
+### 작업 순서 (확정)
+| 우선순위 | 작업 | 상태 |
+|:---:|---|:---:|
+| 1 | Spot Color 지원 (Level 1->2->3) | 진행 중 |
+| 2 | SVG/PNG 내보내기 | 대기 |
+| 3 | Bleed 설정 상태 추가 | 대기 |
+| 4 | 다국어 전환 (한/영) - 모든 기능 완료 후 맨 마지막 | 대기 |
+
+### Spot Color 3단계 하이브리드 구조
+
+#### Level 1: Packive 자체 Spot Color 라이브러리 (약 100개)
+- 파일: src/data/packive-spot-colors.ts
+- 명명 규칙: PKV- 접두사 (예: PKV-R001 Packive Red)
+- 데이터: id, name, nameKo, hex, cmyk[4], category
+- 카테고리: Red, Orange, Yellow, Green, Blue, Purple, Pink, Brown, Neutral, Metallic, Pastel
+- 법적 상태: 안전 - 자체 창작물
+- 주의: Pantone 공식 HEX 값 복사 금지, 독립적으로 색상 선정
+
+#### Level 2: CIELAB HLC 확장 라이브러리 (약 2040개)
+- 파일: src/data/cielab-hlc-colors.ts
+- 출처: freieFarbe e.V. (freiefarbe.de)
+- 라이선스: CC BY 4.0 - 출처 표기 필수
+- 법적 상태: 안전 (출처 표기 조건)
+- UI: 가상 스크롤 적용 (2040개 성능 최적화)
+- 출처 표기: Color data: CIELAB HLC Colour Atlas freieFarbe e.V., CC BY 4.0
+
+#### Level 3: 사용자 커스텀 Spot Color
+- 저장: localStorage (추후 Supabase 연동)
+- 입력 필드: 색상 이름 + HEX 값 + 참조 색상명(선택, 예: Pantone 185 C)
+- 법적 상태: 안전 (사용자 입력 - 사용자 책임)
+- Pantone 참조: 텍스트만 저장, 자동 변환 없음 (Nominative Fair Use)
+- 면책 문구 표시 필수
+
+### UI 변경 사항
+- colorMode 타입: rgb | cmyk -> rgb | cmyk | spot
+- 속성 패널에 [RGB] [CMYK] [SPOT] 3개 탭
+- SPOT 탭: 검색, 카테고리 필터, 색상 그리드, Fill/Stroke 전환, 커스텀 입력
+- fabric.js 커스텀 속성: _spotFill, _spotFillName, _spotStroke, _spotStrokeName, _pantoneRef
+- toObject 오버라이드: 커스텀 속성 직렬화 보장
+
+### 수정 파일 목록
+| 파일 | 변경 내용 |
+|---|---|
+| src/data/packive-spot-colors.ts | 신규 생성 - Level 1 색상 데이터 |
+| src/data/cielab-hlc-colors.ts | 신규 생성 - Level 2 HLC 데이터 |
+| src/components/editor/unified-editor.tsx | colorMode 확장, SPOT 탭 UI, 핸들러, selProps 확장, toObject 오버라이드 |
+| PACKIVE DEV RULES.md | 본 계획 기록 |
+
+
+---
+
+## Canvas Size Rules - DO NOT CHANGE (2026-03-01)
+
+pxPerUnit min: Math.max(fitScale, 2.0)
+availW: cw - 20
+availH: ch - 60
+canvasW limit: Math.min(Math.round(netW * pxPerUnit), cw - 20)
+canvasH limit: Math.min(Math.round(netH * pxPerUnit), ch - 60)
+wrapper: pb-7 class for vertical centering
+
+Reference canvas (FEFCO-0215 120x60x160): wrapper ~744x674, canvas ~704x537+
+Canvas must be centered horizontally and vertically in center panel.
+Status bar (28px) must not overlap canvas bottom.
+
+---
+
+## 필수 백업 규칙 (2026-03-02 확정) - MUST READ EVERY SESSION
+
+### 원칙
+> 모든 파일 수정 스크립트는 반드시 백업+검증 패턴을 포함해야 한다.
+> 이 규칙은 채팅이 압축되더라도 반드시 지켜야 한다.
+> RULES.MD를 읽지 않고 파일을 수정하는 것은 금지한다.
+
+### 필수 패턴 1: 수정 전 백업
+- backups 폴더에 타임스탬프 파일명으로 복사
+- 경로: C:\Users\user\Desktop\dev\packive\backups\
+- 형식: 파일명_YYYYMMDD_HHMMSS.확장자
+
+### 필수 패턴 2: 수정 후 검증
+- 수정 후 라인수가 백업 대비 50% 이하로 줄면 자동 복원
+- export default function, fcRef, useEffect, return ( 키워드 존재 확인
+- 키워드 누락시 자동 복원
+
+### 금지 사항
+1. 백업 없이 WriteAllLines/WriteAllText 호출 금지
+2. 백업 없이 파일 내용 교체 스크립트 실행 금지
+3. 검증 없이 스크립트 종료 금지
+
+### 복구 방법
+- backups 폴더에서 최신 타임스탬프 파일을 원본 위치로 복사
+
+---
+
+## 핵심 요구사항 7가지 (2026-03-02 확정) - MOST IMPORTANT
+
+### 1. 칼선 생성
+- BoxMaker API로 FEFCO/ECMA 칼선 전개도 생성
+- EPS 파일 직접 업로드 지원
+
+### 2. 모든 요소 벡터 처리
+- 칼선, 텍스트, 이미지, 도형, 테이블 모두 벡터
+- 텍스트 아웃라인(outline) 처리 필수
+
+### 3. CMYK + 별색(Spot Color)
+- CMYK 4원색 지원
+- 별색(PKV, HLC, Custom) 지원
+
+### 4. 특수 인쇄 레이어
+- 형압(embossing), 박인쇄(foil stamping), 실크인쇄(silk printing)
+- 레이어별 색상 구분
+
+### 5. PDF 벡터 내보내기
+- 모든 요소 벡터 PDF, 텍스트 아웃라인, 인쇄용 300DPI+
+
+### 6. Adobe Illustrator 호환 (매우 중요)
+- PDF를 AI에서 편집 가능, 벡터/레이어/CMYK 유지
+
+### 7. ICC 기반 CMYK 색상 (매우 중요)
+- RGB가 아닌 CMYK ICC 프로파일 기반 색상 표시
+- FOGRA39 또는 Japan Color 2001 ICC 프로파일 사용
+- CMYK 값이 원본, RGB는 화면 표시용 파생값
+- 모든 오브젝트에 CMYK 값 원본 저장
+
+---
+
+## Dieline Upload Rules - DO NOT CHANGE (2026-03-03)
+
+### Upload Priority (EPS/AI/PDF)
+1. **Primary**: /api/convert-file (Ghostscript + Inkscape pipeline) — full fidelity, preserves all lines/text/curves
+2. **Fallback (EPS only)**: /api/convert-eps (CorelDRAW native parser) — used only if Ghostscript+Inkscape fails
+
+### Required Software
+- Ghostscript: C:\Program Files\gs\gs10.06.0\bin\gswin64c.exe
+- Inkscape: C:\Program Files\Inkscape\bin\inkscape.com
+
+### Stroke Rules
+- **SVG upload**: preserve original colors (red cut lines, green fold lines)
+- **EPS/AI/PDF upload**: force all strokes to #111111 (solid dark black), min strokeWidth 1.5, remove dashArray, opacity 1
+- Customer EPS/AI/PDF files already have cut/fold distinction from CorelDraw CAD — do NOT re-classify
+
+### Upload Behavior
+- Before loading new dieline, remove ALL existing dieline objects (_isDieLine, _isGuideLayer, _isFoldLine, _isPanelLabel)
+- Uploaded dieline group properties: _isDieLine: true, _isGuideLayer: true, name: "__dieline_upload__"
+- Scale to 90% of canvas, centered
+- sendObjectToBack after adding
+
+### Canvas Size Rules Update (2026-03-03)
+- Blank mode (L=0, W=0, D=0): canvasW = cw-20, canvasH = ch-60, scale = 1
+- Normal mode: original formula (pxPerMM = max(fitScale, 2.0))
+- availW = cw-20, availH = ch-60 declared before mode branch
+- Single canvas variable shared across both modes
+- drawGuideLayer skipped in blank mode
+
+
+---
+
+## Backup Rules – DO NOT CHANGE (2026-03-03)
+
+### Triple Backup Policy (3중 백업 정책)
+
+Every time work is completed, the following THREE backups MUST be performed:
+
+#### 1. Local Backup
+- Path: `C:\Users\user\Desktop\dev\packive\backups\`
+- Format: `full_backup_YYYYMMDD_HHMMSS\` folder with key files copied
+- Key files to backup:
+  - `src/components/editor/unified-editor.tsx`
+  - `src/app/api/convert-eps/route.ts`
+  - `src/app/api/convert-file/route.ts`
+  - `PACKIVE DEV RULES.md`
+  - `package.json`
+
+#### 2. Git Commit
+- Branch: `feature/cmyk-icc-engine` (or current working branch)
+- **NEVER commit to or merge into `main` branch** — main has production deployment
+- Commit message must include date and summary of changes
+
+#### 3. Working File (Original)
+- `src/components/editor/unified-editor.tsx` and other source files remain as latest version in working directory
+
+### Per-Edit Backup
+- Before EVERY script modification, create an individual timestamped backup:
+  - Format: `unified-editor_YYYYMMDD_HHMMSS.tsx`
+  - Path: `C:\Users\user\Desktop\dev\packive\backups\`
+- If safety checks fail after edit, RESTORE from this backup immediately
+
+### Recovery
+- If files are lost or corrupted, restore from:
+  1. Latest Git commit: `git checkout feature/cmyk-icc-engine`
+  2. Local backup folder: `backups\full_backup_YYYYMMDD_HHMMSS\`
+  3. Individual file backups: `backups\unified-editor_YYYYMMDD_HHMMSS.tsx`
+
+
+
+---
+
+## Product Vision and Core Values - DO NOT CHANGE (2026-03-03)
+
+### Core Values
+- Simpler: CAD, Adobe Illustrator 없이 몇 가지 동작만으로 패키지 디자인 완성
+- Faster: 복잡한 프로세스 없이 즉시 결과물 생성
+- Cheaper: 전문 디자이너 없이도 전문가 수준의 패키지 디자인 가능
+
+### Target Users
+- 소규모 브랜드, 스타트업, 해외 셀러
+- 전문 디자이너 (빠른 작업 도구로 활용)
+- 패키지 디자인 경험이 없는 초보자
+
+### User Flow
+
+Step 1: 박스형태 선택 (FEFCO 표준 등)
+Step 2: 박스치수 입력 (L x W x D mm)
+Step 3: 업종 선택 (2단계)
+  - 대분류 (8-10개): 식품, 화장품/뷰티, 건강기능식품, 음료, 생활용품, 전자기기, 의류/패션, 기타
+  - 세부 카테고리: 대분류 선택 후 표시
+Step 4: 디자인 방법 선택
+  4-1. 직접 디자인 (Direct)
+    - 생성된 칼선전개도 위에 에디터로 직접 디자인
+    - 대상: 전문 디자이너, 디자인 경험자
+  4-2. 템플릿 선택 (Template)
+    - 업종에 맞는 추천 템플릿 중 선택
+    - 선택 후 에디터에서 텍스트/이미지/색상 수정
+    - 대상: 일반 사용자
+  4-3. AI 자동 디자인 (AI Generate)
+    - 입력 정보: 업종, 회사명, 상품명, 입수량, 중량, 제조국 등
+    - AI가 3-4개 시안 자동 생성
+    - 마음에 드는 시안 선택 후 에디터에서 미세 수정
+    - 대상: 완전 초보자, 시간이 없는 사용자
+
+### Design Method Switching
+- 4-1, 4-2, 4-3 선택 후에도 언제든 다른 방식으로 전환 가능
+- 템플릿 선택 후 직접 수정 모드 전환 가능
+- AI 생성 결과를 에디터에서 자유롭게 편집 가능
+- 세 방법이 단절되지 않고 하나의 에디터 안에서 연결
+
+### Competitive Advantage
+- Canva: 범용 디자인 도구, 패키지 전문 아님
+- 기존 업체: CAD + Illustrator 조합, 높은 비용과 긴 작업 시간
+- Packive: 패키지 전용 + 칼선 자동생성 + AI 디자인을 하나로 통합
+- 원스톱 패키지 디자인 플랫폼
+
+### Future AI Features Roadmap
+1. 단기: AI 템플릿 추천, 텍스트 자동 배치, 브랜드 컬러 추출
+2. 중기: AI 이미지/패턴 생성, 인쇄 품질 자동 검사, 다국어 레이아웃 자동 변환
+3. 장기: 자연어 디자인 생성, 시장 트렌드 분석, 3D 목업 자동 생성
+
+---
+
+## Panel Map System Design (2026-03-05) - NEXT MAJOR FEATURE
+
+### Overview
+Panel Map은 칼선 전개도의 각 면(앞면, 뒷면, 옆면, 윗날개, 아래날개, 플랩 등)을
+개별 영역(Zone)으로 정의하는 데이터 구조이다.
+이 시스템이 완성되면 면별 색상 채우기, 이미지 클리핑, 템플릿 적용, AI 디자인이 모두 가능해진다.
+
+### Why Panel Map is Critical
+- 템플릿 시스템(4-2)의 전제 조건: 면 상대좌표로 요소 배치, 치수 변경 시 자동 재배치
+- AI 디자인(4-3)의 전제 조건: AI에게 면 단위 디자인 지시 가능
+- 면별 색상/이미지 채우기: SVG clipPath로 복잡한 면 형태 안에만 정확히 채움
+- Packive의 핵심 기술 차별점이자 경쟁사 진입 장벽
+
+### Technical Approach: Method A - Parametric Generation
+- 각 박스형태(FEFCO/ECMA)마다 치수(L,W,D,T) 입력시 모든 면 경로를 수학 공식으로 자동 계산
+- 면 경로는 SVG Path 형식 (직선=LineTo, 곡선=CurveTo/Arc)
+- 복잡한 면(둥근 날개, 사다리꼴 플랩, 손잡이 구멍) 모두 표현 가능
+- 구멍: Compound Path (외곽 시계방향 + 구멍 반시계방향, fill-rule evenodd)
+
+### Panel Data Structure
+- id: front, back, left, right, top_flap_front 등
+- label/labelEn: 앞면/Front, 뒷면/Back 등
+- type: main, flap, tab, glue
+- path: SVG Path data (M, L, C, A, Z commands)
+- holes: 구멍 경로 배열 (손잡이, 홀)
+- designable: boolean (접착 플랩은 false)
+- bounds: x, y, w, h (바운딩 박스)
+
+### Color/Image Fill via clipPath
+- 면 선택시 path를 Fabric.js clipPath로 변환
+- 색상: 면 path 영역에 Rect + clipPath
+- 이미지: Image에 clipPath 적용하면 면 형태대로 자동 클리핑
+- 패턴: Pattern fill + clipPath로 면 내부에만 반복
+
+### Development Priority (박스형태별)
+- 1순위 (5종): 맞뚜껑(A식), 조립박스(B식), 택배박스(FEFCO-0201), 슬리브, 싸바리
+- 2순위 (5종): 디스플레이, 파우치, 필로우, 육각형, 서랍형
+- 3순위: 나머지 FEFCO/ECMA 확장
+
+### Prerequisites
+- 에디터 UI/UX 개선 및 기능 추가 완료 후 착수
+- 대표자의 박스 제조 도메인 지식으로 면 경로 수학 공식 정의 필수
+
+### Status: BLOCKED - Editor UI/UX completion first
+
+
+---
+
+## PDF CMYK Export - ICC 색상 문제 해결 기록 (2026-03-06)
+
+### 최종 작동 방식 (절대 변경 금지)
+1. `pdf-cmyk-export.ts`의 `rgbToCmyk`는 **단순 수학 변환** (fallback용)
+2. `iccRgbToCmyk`는 **ICC FOGRA39 프로파일** 기반 변환 (동적 import)
+3. `buildColorMap`으로 색상 수집 → ICC 엔진으로 업그레이드 (단, `_cmykFill` 사용자 지정 색상은 건너뜀)
+4. `replacePdfColorsInString`에서 **colorMap에 있는 색상만 CMYK 변환**, 없는 색상은 **RGB 유지**
+5. 순수 검정(`#000000`) → `C0 M0 Y0 K100`, 순수 흰색(`#ffffff`) → `C0 M0 Y0 K0` 특수 처리
+
+### 절대 하면 안 되는 것
+- `replacePdfColorsInString`에서 colorMap에 없는 색상을 강제 CMYK 변환하면 **색상 불일치 발생**
+- `cmyk-engine.ts`를 정적 import하면 **Turbopack RangeError: Invalid count value: -1** 발생
+- `text-to-outlines.ts` (opentype.js)를 정적 import하면 **동일 RangeError** 발생
+- `iccRgbToCmyk` 결과값을 clamp(0-100) 하지 않으면 **음수 CMYK값** 발생
+
+### 반드시 동적 import 해야 하는 모듈
+- `cmyk-engine.ts` → `await import("./cmyk-engine")`
+- `text-to-outlines.ts` → `await import("./text-to-outlines")`  
+- `pdf-cmyk-export.ts` → unified-editor.tsx에서 `await import("@/lib/pdf-cmyk-export")`
+- `jspdf` → `await import("jspdf")`
+- `svg2pdf.js` → `await import("svg2pdf.js")`
+
+### 칼선(Dieline) PDF 출력 규칙
+- Fabric 객체 속성: `_isDieLine` (대문자 L), `_isFoldLine`, `_isGuideLayer`, `_isPanelLabel`
+- **오타 주의**: `_isDieline` (소문자 l) 사용 금지 → 칼선 필터 실패
+- `_isGuideLayer: true`인 객체 중 `_isDieLine`도 true인 경우 → `includeDieline` 옵션에 따라 표시
+- `dielineOnly` 모드: 칼선 객체만 visible, 나머지 전부 hidden
+
+### 파일별 역할
+- `src/lib/pdf-cmyk-export.ts` - PDF 벡터 내보내기 (SVG → svg2pdf.js → jsPDF → CMYK 후처리)
+- `src/lib/cmyk-engine.ts` - ICC FOGRA39 LUT 로드, srgbToCmyk/cmykToSrgb 변환
+- `src/lib/text-to-outlines.ts` - opentype.js로 텍스트 → 벡터 경로 변환
+- `src/lib/font-locale.ts` - 로케일별 폰트 매핑
+
+### 복원 방법
+- 색상 불일치 발생 시: `replacePdfColorsInString`에서 colorMap 매칭 안 된 색상이 강제 변환되고 있는지 확인
+- RangeError 발생 시: 정적 import를 동적 import로 변경
+- 칼선 안 나올 시: `_isDieLine` 오타 확인 + `_isGuideLayer` 필터가 칼선까지 숨기는지 확인
+
+---
+
+## Design File Save/Load (2026-03-06)
+
+### 구현 방식
+- **파일 시스템 기반**: `.pkv.json` 파일로 로컬 폴더에 저장/불러오기
+- localStorage 방식 폐기 → 용량 제한 없음, 무제한 파일 저장 가능
+- Fabric.js `toJSON`/`loadFromJSON` 사용 → 모든 캔버스 데이터 완벽 보존
+
+### 저장되는 데이터
+- 도형 위치, 크기, 회전, 색상, 투명도
+- 텍스트 내용, 폰트, 스타일 (bold/italic/align)
+- 이미지 (Base64 내장)
+- 칼선/접선 속성 (`_isDieLine`, `_isFoldLine`, `_isGuideLayer`, `_isPanelLabel`)
+- CMYK/Spot Color 속성 (`_cmykFill`, `_cmykStroke`, `_spotFillName` 등)
+- 배경색, 캔버스 크기
+
+### UI
+- 💾 Save 버튼 / Ctrl+S: 파일 다운로드 (`packive-design-YYYY-MM-DD-HH-mm.pkv.json`)
+- 📂 Load 버튼: 파일 선택 다이얼로그 → 확인 팝업 → 캔버스 복원
+- JSON_PROPS 배열: pushHistory와 동일한 속성 목록 유지 필수
+
+### 주의사항
+- `fileLoad` 함수에서 `refreshLayers`를 의존성으로 사용하면 **초기화 순서 에러** 발생
+- 해결: inline으로 `setLayersList` 직접 호출, deps는 `[pushHistory]`만
+- 이미지가 많으면 파일 크기 증가 (Base64 인코딩)
+- 향후 Supabase 연동 시 서버 저장으로 확장 가능
+
+---
+
+## Table Feature Redesign (Next Development Task)
+
+### 현재 문제
+- 기존 표 기능: 사용 어렵고, 색깔 흐리고, 셀 병합 안됨
+- 기존 표 코드 삭제 후 완전히 새로 구현
+
+### 구현 방식: Split into Grid 기반 + 셀 편집
+- 어도비 일러스트레이터의 Object > Path > Split into Grid 방식 참고
+- 각 셀이 독립 Rect + IText로 구성 → 개별 조작 가능
+- 전체 표는 Fabric.js Group으로 묶어 이동/리사이즈
+
+### 핵심 기능
+1. **표 생성**: 행/열 수 입력 → 셀 배열 자동 생성
+2. **셀 배경색**: 셀 클릭 → 배경색 변경 (CMYK/Spot Color 지원)
+3. **셀 텍스트**: 더블클릭 → IText 편집 모드 (폰트, 크기, 정렬)
+4. **셀 병합/분할**: 셀 선택 → 병합 (rowSpan/colSpan) / 분할
+5. **행/열 추가/삭제**: 우클릭 컨텍스트 메뉴 또는 패널 버튼
+6. **선 스타일**: 굵기, 색상, 점선 (셀별 또는 전체)
+7. **표 리사이즈**: Group 리사이즈 시 셀 비율 유지
+
+### 데이터 구조
+- 셀: `{ row, col, rowSpan, colSpan, text, bgColor, textStyle, borderStyle }`
+- 표: `{ rows, cols, cellWidth, cellHeight, cells[], borderColor, borderWidth }`
+
+### 패키지 디자인 실사용 사례
+- 영양성분표, 성분표, 사용법 표, 제품 스펙표
+- 단순하지만 예쁘게, 인쇄 품질 필수
+
+### 구현 순서
+1. 기존 Table 코드 제거 (addTable, table-engine.ts)
+2. 새 TableGroup 클래스 설계 (Fabric.js Group 확장)
+3. 표 생성 UI (행/열 입력 팝업)
+4. 셀 편집 (배경색, 텍스트, 테두리)
+5. 셀 병합/분할
+6. 행/열 추가/삭제
+7. PDF 내보내기 호환 확인
+
+
+---
+
+## Development Priority Queue (2026-03-06 Updated)
+
+| 순위 | 항목 | 상태 | 비고 |
+|------|------|------|------|
+| 1 | PDF 텍스트 아웃라인 검증 | 대기 | 현재 0 elements 변환 - 텍스트 추가 후 테스트 |
+| 2 | Adobe Illustrator 호환성 | 대기 | PDF 벡터 편집 가능 여부 검증 |
+| 3 | 표 만들기 (Table Redesign) | 대기 | 기존 삭제 → Split into Grid 방식 신규 구현 |
+| 4 | 오른쪽 패널 AI 리뷰 제거 검토 | 대기 | 필요성 검토 후 결정 |
+| 5 | 특수 인쇄 레이어 (형압/박/실크) | 미구현 | |
+| 6 | Bleed Guide (재단 여백) | 미구현 | |
+| 7 | Panel Map 시스템 | BLOCKED | 에디터 UI/UX 완성 후 착수 |
+
+### 진행 원칙
+- 위 순서대로 하나씩 완료 후 다음으로 진행
+- 각 작업 완료 시 백업 + git commit + rules.md 업데이트
+- 매 수정마다 반드시 백업 먼저
+
+---
+
+---
+
+## Adobe Illustrator AI 벤치마킹 분석 (2026-03-16)
+
+> 출처: adobe.com/kr/products/illustrator.html, Illustrator 2026 v30.0~v30.2 릴리스 노트
+
+### 프로젝트 비전
+
+**"패키지 인쇄 생산 전체 파이프라인에 AI를 입힌 원스톱 플랫폼"**
+
+Adobe Illustrator = "범용 벡터 그래픽 도구 + AI"
+Packive = **"패키지 구조 인식 + CMYK 네이티브 + 인쇄 생산 특화 AI"**
+
+### 핵심 차별화 (Packive vs Adobe)
+
+| 축 | Packive | Adobe Illustrator |
+|---|---|---|
+| 색상 체계 | CMYK/ICC(FOGRA39) 네이티브 — 생성 결과가 처음부터 인쇄용 | RGB 기반 생성 → CMYK 변환 (색상 차이 발생) |
+| 칼선 구조 인식 | 칼선전개도 자동 분석, Panel Map으로 패널별 디자인 영역 분할, 접힌 상태 연속성 보장 | 범용 벡터 — 패키지 구조 인식 없음 |
+| 워크플로 | 디자인 → 프리플라이트 → PDF/X-4 출력 → 인쇄소 전달 (원스톱) | Illustrator + Acrobat + InDesign 간 이동 필요 |
+| 가격 | 패키지 전문 기능 집중, 합리적 가격 | 월 ~30,000원 (Illustrator 단독) |
+| AI 전략 | 패키지 특화 프롬프트·결과 필터링, 인쇄 안전 색상 범위 내 생성 | 범용 크리에이티브 AI (Firefly + 파트너 모델) |
+
+### Adobe 현재 AI 기능 vs Packive 대응
+
+| Adobe 기능 | 설명 | Packive 대응 전략 |
+|---|---|---|
+| Text to Vector Graphic | 프롬프트 → 편집 가능한 벡터 생성. 파트너 모델(GPT Image 4o, Ideogram 3, Gemini 2.5) 통합. Auto Select 자동 추천 | Phase 3: Recraft V4 벡터 API + 패키지 특화 프롬프트 |
+| Generative Shape Fill | 셰이프 안에 프롬프트 기반 디테일/텍스처 채우기 | Phase 5: Panel Map 면별 AI 디자인 자동 채우기 |
+| Generative Recolor | 프롬프트로 아트워크 색상 팔레트 전체 변경 | CMYK/FOGRA39 범위 내 "인쇄 안전 리컬러" (Phase 6) |
+| Generative Expand | 벡터 아트워크 경계 확장 + 인쇄 도련(bleed) 자동 채우기 | Panel Map 기반 "스마트 블리드" (Phase 6-3) |
+| Turntable (Beta) | 2D 벡터 → 다각도 회전 뷰 AI 생성 | 칼선전개도 → 3D 박스 목업 자동 생성 (Phase 6-6) |
+| Retype | 래스터/아웃라인 텍스트에서 폰트 AI 자동 식별 | 패키지 내 텍스트 폰트 인식 + 대체 추천 (장기) |
+| 중앙 Generative AI 버튼 | 툴바 한 곳에서 모든 AI 접근 | Phase 3-6: 우측 패널 AI 메뉴 통합 |
+
+### Adobe 비-AI 업데이트 벤치마킹
+
+| Adobe 기능 | Packive 대응 |
+|---|---|
+| 스마트 스냅 (끝점/중점/접선/수직/회전 스냅) | Phase 2 확장: 가이드 스냅 + 패키지 특화 스냅 (패널 경계, 안전 영역) |
+| 그라디언트 디더링 | Phase 2-5 그라데이션 기능에 CMYK 디더링 추가 |
+| 아트보드 잠금/색상 | 칼선 잠금 완료, 아트보드 색상 참고 |
+| Measure 면적 측정 | Phase 2 Measure 확장 가능 |
+| 프로젝트 협업 | 장기: 클라우드 협업 + 패키지 승인 워크플로 |
+| Hex 코드 자동완성 | 컬러피커 개선 시 참고 |
+
+### Adobe 전략 방향 3가지
+1. **AI를 창작 엔진으로** — 워크플로 안에 AI 네이티브 통합 (보조 도구가 아님)
+2. **멀티 모델 전략** — Firefly + GPT/Ideogram/Gemini 파트너 통합
+3. **인쇄/생산 강화** — Generative Expand bleed 지원, 정밀 스냅/측정
+
+### Packive만의 차별화 무기
+- **Panel Map**: 칼선 구조 인식 → 면별 디자인 → 템플릿 자동 배치 (Adobe 미보유)
+- **CMYK 네이티브 AI**: 모든 AI 생성 결과가 처음부터 인쇄용 색상
+- **AI 칼선 자동 분류**: 업로드된 EPS/SVG에서 칼선/접선/텍스트 AI 자동 분류 (Ungroup 자동화)
+- **원스톱 인쇄**: 디자인 → 프리플라이트 → PDF/X-4 → 인쇄소 전달
+
+---
+
+## CMYK Soft Proof 미리보기 (추가예정)
+
+### 목적
+- 에디터에서 CMYK 인쇄 결과를 미리 보여주는 기능
+- RGB→CMYK 색상 차이를 사용자가 사전에 인지
+- Adobe Illustrator "View → Proof Colors"와 동일 개념
+
+### 구현 방법
+- ICC FOGRA39 엔진(cmyk-engine.ts)을 활용
+- 캔버스 위에 오버레이로 CMYK Soft Proof 표시
+- 토글 버튼: "CMYK 미리보기 ON/OFF"
+- RGB→CMYK→RGB 역변환으로 모니터에서 CMYK 근사치 표시
+
+### RGB↔CMYK 색상 차이 원칙
+- 밝은 핑크, 네온, 형광색은 CMYK로 정확히 재현 불가 (물리적 한계)
+- PDF에서 colorMap에 있는 색상만 CMYK 변환, 나머지는 RGB 유지
+- 별색(Spot Color)의 정확한 CMYK는 colorMap에 우선 적용
+- 실제 밝은 별색 인쇄는 5색 인쇄(CMYK+별색잉크) 필요 → 장기 과제
+
+---
+
+## 개발 완료 현황 (2026-03-16 업데이트)
+
+### Phase 1 완료 항목
+| # | 작업 | 상태 |
+|---|------|------|
+| 1 | PDF 텍스트 아웃라인 검증 | ✅ 완료 |
+| 2 | Adobe Illustrator 호환성 | ✅ 완료 |
+| 3 | 표 만들기 (Illustrator 스타일) | ✅ 완료 (2026-03-08) |
+| 4 | 표 CMYK 색상 피커 (BG/Text/Border) | ✅ 완료 (2026-03-08) |
+| 5 | 표 다중셀 선택 색상 일괄 적용 | ✅ 완료 (2026-03-08) |
+| 6 | 표 셀 병합/해제 + rebuildTable 안정화 | ✅ 완료 (2026-03-08) |
+
+### Phase 2 완료 항목
+| # | 작업 | 상태 |
+|---|------|------|
+| 1 | Ruler: mm/inch 세분화 눈금, 축별 scaleX/Y, on/off 토글 | ✅ 완료 (2026-03-15) |
+| 2 | Measure: scenePoint 서브픽셀 정밀도 (330mm 기준 오차 0.13mm, 0.04%) | ✅ 완료 (2026-03-15) |
+| 3 | 십자선(crosshair) 커서 — Measure/Ruler 독립 동작 | ✅ 완료 (2026-03-15) |
+| 4 | SVG/EPS 스케일링: Fabric viewBox 왜곡 자동 역보정, 단위 감지 | ✅ 완료 (2026-03-15) |
+| 5 | Ungroup Dieline: JSON serialize → enlivenObjects 개별 복원 | ✅ 완료 (2026-03-16) |
+| 6 | UI/UX: 좌측 4그룹 도구바, Canvas Background 제거, 빈상태 패널 | ✅ 완료 (2026-03-15) |
+| 7 | New 버튼, Status Bar (마우스 좌표, Net size, Zoom, Objects) | ✅ 완료 (2026-03-15) |
+
+### 백업 태그
+- phase1-complete-20260314
+- phase2-complete-20260315_232003
+- ungroup-complete-20260316_002547
+
+---
+
+## 개발 스케줄 (2026-03-16 업데이트) - MUST READ EVERY SESSION
+
+### Phase 1: 벡터 내보내기 + 텍스트 아웃라인 완성 ✅ 완료
+**목표**: 모든 요소가 벡터로 내보내져 Illustrator 편집 가능, CTP 출력 사용 가능
+
+| # | 작업 | 상세 | 상태 |
+|---|------|------|------|
+| 1-1 | SVG 벡터 내보내기 | toSVG()로 Rect/Path/Line 벡터 출력 | ✅ |
+| 1-2 | 표(Table) 벡터 내보내기 | Table Group SVG 정상 출력 | ✅ |
+| 1-3 | opentype.js 텍스트 아웃라인 | 모든 텍스트를 SVG path로 변환 | ✅ |
+| 1-4 | Illustrator 호환 테스트 | SVG/PDF 벡터 편집 가능 확인 | ✅ |
+| 1-5 | CMYK PDF 내보내기 | ICC FOGRA39 기반 CMYK 색상 정확도 | ✅ |
+
+### Phase 2: 줄자(Ruler) + Measure + UI/UX ✅ 완료
+**목표**: Adobe Illustrator와 동일한 정밀 줄자 + 가이드라인 + Measure 도구
+
+| # | 작업 | 상세 | 상태 |
+|---|------|------|------|
+| 2-1 | 상단/좌측 눈금자 렌더링 | mm 단위, zoom/pan 동기화 | ✅ |
+| 2-2 | Measure 도구 | 서브픽셀 정밀도, 축별 px/mm | ✅ |
+| 2-3 | SVG/EPS 정밀 스케일링 | viewBox 왜곡 자동 보정, 오차 0.04% | ✅ |
+| 2-4 | Ungroup Dieline | 칼선 개별 요소 분리, 선택/삭제 가능 | ✅ |
+| 2-5 | 그라데이션(Gradient) 기능 | 선형/원형 그라데이션, CMYK 호환 | 📋 미완 → Phase 6 이동 |
+| 2-6 | 가이드라인 드래그 | 눈금자에서 드래그하여 가이드라인 생성 | 📋 미완 → Phase 6 이동 |
+| 2-7 | 스냅 기능 | 객체가 가이드라인에 스냅 | 📋 미완 → Phase 6 이동 |
+
+### Phase 3: AI 시스템 전면 교체 ← 다음 착수
+### Phase 3: AI 시스템 전면 교체 + 브랜드 자동화 ← 다음 착수
+**목표**: OpenAI 제거 → Recraft V4 Vector API 통합 + Firecrawl 브랜드 추출 + Nano Banana 2 목업
+**예상 기간**: 2~3주
+
+| # | 작업 | 상세 | 비용 | 상태 |
+|---|------|------|------|------|
+| 3-1 | OpenAI API 전체 제거 | generate-image, generate-design, review-design, generate-copy, extract-colors 제거 | $0 | 📋 |
+| 3-2 | Recraft V4 Vector API 연동 | API 키 설정, SDK 설치, 테스트 | $0 | 📋 |
+| 3-3 | AI 벡터 디자인 생성 UI | 로고 벡터화, 일러스트, 배경패턴, 아이콘 SVG 생성 | $0 | 📋 |
+| 3-4 | 브랜드 컬러 팔레트 연동 | 사용자 브랜드 색상을 Recraft 컬러팔레트로 전달 | $0 | 📋 |
+| 3-5 | 생성된 SVG → Fabric.js 로드 | loadSVGFromString()으로 캔버스에 벡터 객체로 배치 | $0 | 📋 |
+| 3-6 | 우측 패널 AI 메뉴 재구성 | AI 벡터 디자인 + AI 추천 템플릿 2개 메뉴로 단순화 | $0 | 📋 |
+| **3-7** | **⭐ Firecrawl 브랜드 추출** | **URL 입력 → 로고, 컬러팔레트(6색), 폰트, 슬로건 자동 추출** | **$0.01/건** | **📋 1순위** |
+| **3-8** | **DESIGN.md 자동 변환** | **Firecrawl 추출 데이터 → DESIGN.md (Stitch 호환) 포맷 자동 생성** | **$0** | **📋 1순위** |
+| **3-9** | **브랜드 에셋 에디터 자동 적용** | **추출된 로고→캔버스, 컬러→팔레트, 폰트→텍스트 도구에 자동 설정** | **$0** | **📋 1순위** |
+| **3-10** | **⭐ Nano Banana 2 3D 목업 생성** | **칼선전개도+디자인 → 포토리얼리스틱 3D 박스 이미지 생성 (gemini-3.1-flash-image-preview)** | **~$0.07/장** | **📋 2순위** |
+| **3-11** | **3D 목업 씬 합성** | **생성된 박스를 매장진열, 배송, 언박싱 등 배경 씬에 합성** | **~$0.07/장** | **📋 2순위** |
+| **3-12** | **목업 UI 패널** | **에디터 우측에 3D 목업 탭 추가, 씬 선택, 실시간 미리보기** | **$0** | **📋 2순위** |
+
+> **3-7~3-9 핵심 워크플로우 (Firecrawl 브랜드 추출)**
+> 1. 사용자가 회사 URL 입력 (예: https://www.starbucks.com)
+> 2. Firecrawl API가 사이트 크롤링 → 로고 URL, 메인 컬러 6색, 폰트, 회사명, 슬로건 추출
+> 3. 추출 데이터를 DESIGN.md 포맷으로 자동 변환 (Stitch/Claude Code 호환)
+> 4. 로고 → 캔버스에 자동 배치, 컬러 → 팔레트에 등록, 폰트 → 텍스트 도구 기본값 설정
+> 5. 비용: Firecrawl 무료 티어 500건/월, 유료 시 ~$0.01/건
+
+> **3-10~3-12 핵심 워크플로우 (Nano Banana 2 3D 목업)**
+> 1. 사용자가 칼선전개도에 디자인 완성
+> 2. 전개도 캡처 이미지 + 박스 타입 정보를 Nano Banana 2 API에 전송
+> 3. 프롬프트: "이 전개도를 접어서 만든 [FEFCO 0201] 박스의 포토리얼리스틱 3D 이미지"
+> 4. Nano Banana 2 (gemini-3.1-flash-image-preview): ~$0.02~0.07/장, 최대 4K, 14장 참조이미지
+> 5. EPM API Preview PNG는 전개도 축소판이므로 3D 용도 불가 (확인 완료 2026-03-28)
+
+### Phase 4: Panel Map 시스템 + Stitch MCP 연동 ⭐ 핵심 차별화
+**목표**: 칼선 전개도의 각 면 자동 인식 + Stitch MCP로 면별 디자인 AI 자동 생성
+**예상 기간**: 3~5일 (Panel Map) + 2~3주 (Stitch MCP)
+
+| # | 작업 | 상세 | 비용 | 상태 |
+|---|------|------|------|------|
+| 4-1 | Panel Data Structure 구현 | id, label, type, path, holes, bounds, designable 속성 | $0 | 📋 |
+| 4-2 | 1순위 박스 5종 면 경로 수학 공식 | 맞뚜껑(A식), 조립박스(B식), 택배박스(FEFCO-0201), 슬리브, 싸바리 | $0 | 📋 |
+| 4-3 | SVG clipPath 면별 채우기 | 면 path → Fabric.js clipPath 변환, 색상/이미지/패턴 클리핑 | $0 | 📋 |
+| 4-4 | 면 선택 UI | 캔버스에서 면 클릭 시 해당 면 하이라이트 + 속성 패널 | $0 | 📋 |
+| 4-5 | 면별 디자인 요소 배치 | 면 상대좌표로 요소 배치, 치수 변경 시 자동 재배치 | $0 | 📋 |
+| **4-6** | **⭐ Stitch MCP 서버 연동** | **Stitch MCP를 Packive 백엔드에 연결, DESIGN.md 컨텍스트 전달** | **$0 (무료)** | **📋 3순위** |
+| **4-7** | **면별 AI 디자인 자동 생성** | **Stitch에 각 면 치수+DESIGN.md 전달 → 면별 HTML/CSS 디자인 생성** | **$0 (무료)** | **📋 3순위** |
+| **4-8** | **생성 디자인 → 에디터 자동 배치** | **Stitch 출력(HTML→이미지) → Panel Map 좌표에 맞춰 자동 정렬** | **$0** | **📋 3순위** |
+
+> **4-6~4-8 핵심 워크플로우 (Stitch MCP 면별 자동 디자인)**
+> 1. Phase 3의 DESIGN.md (브랜드 데이터)를 Stitch MCP 서버에 컨텍스트로 전달
+> 2. Panel Map의 각 면(전면, 후면, 측면, 상단, 하단) 치수를 Stitch에 전달
+> 3. Stitch가 면별 고품질 UI/디자인을 HTML/CSS로 생성 (각 면 = Stitch "스크린")
+> 4. HTML → 이미지 변환 후 칼선전개도 위 정확한 좌표에 자동 배치
+> 5. 경쟁사(Pacdora, Arka, Packlane) 어디에도 없는 기능 — 실시간 브랜드 맞춤 디자인 생성
+> 6. Stitch MCP 서버: 무료, SDK: github.com/google-labs-code/stitch-sdk
+> 7. DESIGN.md: 색상, 타이포그래피, 간격, 컴포넌트 패턴을 마크다운으로 구조화한 에이전트 친화적 파일
+
+### Phase 5: AI 추천 템플릿 + 산업별/상품별 디자인
+**목표**: Panel Map 기반으로 산업별/상품별 벡터 템플릿을 칼선 전개도에 자동 배치
+**예상 기간**: 5~7일
+
+| # | 작업 | 상세 | 상태 |
+|---|------|------|------|
+| 5-1 | 산업별/상품별 분류 체계 | 화장품, 식품, 전자제품, 의류, 의약품 등 카테고리 정의 | 📋 |
+| 5-2 | Recraft V4로 템플릿 벡터 생성 | 카테고리별 5~10개 SVG 디자인 사전 생성 | 📋 |
+| 5-3 | 템플릿 JSON 스키마 | 면별 디자인 요소 배치 정보 (상대좌표, 색상, 텍스트 위치) | 📋 |
+| 5-4 | 원클릭 템플릿 적용 | 템플릿 선택 → Panel Map 면에 자동 배치 → 사용자 커스터마이징 | 📋 |
+| 5-5 | AI 실시간 벡터 생성 | "고급스러운 화장품 느낌" 입력 → Recraft V4로 SVG 생성 → 면에 자동 배치 | 📋 |
+
+### Phase 6: 추가 기능 (장기)
+| # | 작업 | 상세 | 상태 |
+|---|------|------|------|
+| 6-1 | CMYK Soft Proof 미리보기 | RGB→CMYK→RGB 역변환 오버레이 | 📋 대기 |
+| 6-2 | 특수 인쇄 레이어 | 엠보싱/박/실크 레이어 분리 | 📋 대기 |
+| 6-3 | Bleed Guide (재단 여백) | 3~5mm 블리드 가이드 + AI 스마트 블리드 자동 채우기 | 📋 대기 |
+| 6-4 | 별색 Separation PDF | 별색 분판 PDF 내보내기 | 📋 장기 |
+| 6-5 | 2순위 박스 5종 Panel Map | 디스플레이, 파우치, 필로우, 육각형, 서랍형 | 📋 대기 |
+| 6-6 | ~~3D 목업 미리보기~~ | ~~Three.js 방식~~ → **Phase 3-10으로 이동 (Nano Banana 2)** | ✅ 이관 |
+| 6-7 | 가이드라인 드래그 + 스냅 | 가이드 생성/편집/삭제, 스마트 스냅 (Adobe 벤치마킹) | 📋 대기 |
+| 6-8 | 그라데이션(Gradient) | 선형/원형 그라데이션, CMYK 호환, Illustrator 호환 내보내기 | 📋 대기 |
+| 6-9 | AI 인쇄 안전 리컬러 | CMYK/FOGRA39 색역 내 리컬러링 (Adobe Generative Recolor 대응) | 📋 장기 |
+| 6-10 | AI 칼선 자동 분류 | 업로드 EPS/SVG에서 칼선/접선/텍스트 AI 자동 분류 | 📋 장기 |
+| 6-11 | 멀티 모델 AI 허브 | OpenAI/Recraft/Stability 등 백엔드 선택 호출 | 📋 장기 |
+| 6-12 | 인쇄소 연동 API | 디자인 완료 → 인쇄 주문 직결 | 📋 장기 |
+| 6-13 | 다국어 패키지 | 동일 디자인에서 언어만 교체하여 수출용 패키지 생성 | 📋 장기 |
+| 6-14 | 실시간 협업 편집 | 다수 사용자 동시 편집 + 패키지 승인 워크플로 | 📋 장기 |
+| **6-15** | **경쟁사 디자인 참조** | **Firecrawl로 경쟁사 제품 페이지 크롤 → 스타일 추출 → 차별화 제안** | **📋 장기** |
+| **6-16** | **브랜드 데이터 분석** | **수집된 DESIGN.md 축적 → 업종별 패키지 트렌드 분석 B2B 서비스** | **📋 장기** |
+
+> **전체 비용 요약 (AI 파이프라인)**
+> | 도구 | 용도 | 건당 비용 | 비고 |
+> |------|------|----------|------|
+> | Firecrawl | 브랜드 추출 | ~$0.01 | 무료 500건/월 |
+> | Nano Banana 2 | 3D 목업 생성 | ~$0.02~0.07 | gemini-3.1-flash-image-preview |
+> | Nano Banana Pro | 4K 고품질 목업 | ~$0.07~0.15 | gemini-3-pro-image-preview |
+> | Google Stitch MCP | 면별 디자인 생성 | $0 (무료) | MCP 서버 + SDK |
+> | Recraft V4 | 벡터 SVG 생성 | ~$0.04 | 로고/일러스트/패턴 |
+> | **1회 풀 파이프라인** | **URL→디자인→3D목업** | **~$0.08~0.15** | **판매가 $1~3 → 마진 92%+** |
+
+---
+## PDF CMYK Export - ICC 색상 문제 해결 기록 (2026-03-06)
+
+### 최종 작동 방식 (절대 변경 금지)
+1. `pdf-cmyk-export.ts`의 `rgbToCmyk`는 **단순 수학 변환** (fallback용)
+2. `iccRgbToCmyk`는 **ICC FOGRA39 프로파일** 기반 변환 (동적 import)
+3. `buildColorMap`으로 색상 수집 → ICC 엔진으로 업그레이드 (단, `_cmykFill` 사용자 지정 색상은 건너뜀)
+4. `replacePdfColorsInString`에서 **colorMap에 있는 색상만 CMYK 변환**, 없는 색상은 **RGB 유지**
+5. 순수 검정(`#000000`) → `C0 M0 Y0 K100`, 순수 흰색(`#ffffff`) → `C0 M0 Y0 K0` 특수 처리
+
+### 절대 하면 안 되는 것
+- `replacePdfColorsInString`에서 colorMap에 없는 색상을 강제 CMYK 변환하면 **색상 불일치 발생**
+- `cmyk-engine.ts`를 정적 import하면 **Turbopack RangeError: Invalid count value: -1** 발생
+- `text-to-outlines.ts` (opentype.js)를 정적 import하면 **동일 RangeError** 발생
+- `iccRgbToCmyk` 결과값을 clamp(0-100) 하지 않으면 **음수 CMYK값** 발생
+
+### 반드시 동적 import 해야 하는 모듈
+- `cmyk-engine.ts` → `await import("./cmyk-engine")`
+- `text-to-outlines.ts` → `await import("./text-to-outlines")`
+- `pdf-cmyk-export.ts` → unified-editor.tsx에서 `await import("@/lib/pdf-cmyk-export")`
+- `jspdf` → `await import("jspdf")`
+
+---
+
+## 핵심 기술 스택
+
+- **벡터 내보내기**: Fabric.js toSVG() + opentype.js 텍스트 아웃라인
+- **AI 벡터 생성**: Recraft V4 Vector API (SVG 직접 출력, $0.08/이미지)
+- **색상 관리**: ICC FOGRA39 프로파일 기반 CMYK (cmyk-engine.ts)
+- **Panel Map**: 치수 기반 수학 공식 → SVG Path → Fabric.js clipPath
+- **Illustrator 호환**: SVG/PDF 벡터 + 텍스트 아웃라인 + CMYK
+- **프레임워크**: Next.js 16 (Turbopack), TypeScript, Tailwind CSS
+- **캔버스**: Fabric.js v6
+- **상태 관리**: React useState/useRef
+- **버전 관리**: Git (GitHub, feature/cmyk-icc-engine)
+
+---
+
+## 경쟁 우위 (Pacdora/Packify/Adobe 대비)
+
+- AI 벡터 직접 생성 (경쟁사는 래스터 PNG만 생성)
+- ICC CMYK 색상 관리 (경쟁사는 RGB만 지원)
+- 텍스트 자동 아웃라인 (경쟁사는 수동 변환 필요)
+- Illustrator 완전 호환 (경쟁사는 자체 플랫폼 종속)
+- 칼선 + Panel Map + 템플릿 자동 배치 (경쟁사 미보유)
+- Adobe 대비: 패키지 구조 인식, CMYK 네이티브 AI, 원스톱 인쇄 워크플로
+
+---
+
+## 코드 규칙
+
+- `unified-editor.tsx` 3,500줄 초과 시 컴포넌트 분리 필수
+- PowerShell 스크립트로 코드 수정 시 UTF-8 without BOM 저장
+- 매 기능 완료 후 git tag 백업 (형식: {feature}-complete-YYYYMMDD_HHmmss)
+- .next 폴더 삭제 후 npm run dev로 빌드 검증
+- 커밋: feat: 새기능 / fix: 수정 / UI: UI변경 / cleanup: 정리 / revert: 롤백
+
+## 품질 기준
+
+- Measure 정확도: 330mm 기준 오차 ±0.15mm (0.05%) 이내
+- SVG/EPS 스케일링: viewBox 왜곡 자동 보정, 오차 ±0.01mm 이내
+- CMYK 변환: FOGRA39 ICC 기준 ΔE < 2 (인지 차이 없음)
+- PDF 출력: PDF/X-4 규격 준수
+
+---
+
+## 진행 원칙
+
+- Phase 순서대로 진행, 각 Phase 완료 후 다음 착수
+- 매 작업 완료 시 백업 + git commit + rules.md 상태 업데이트
+- 매 수정마다 반드시 백업 먼저
+- Phase 4는 대표자 도메인 지식 협업 필수
+
+---
+
+## 참고 링크
+
+- [Adobe Illustrator AI 기능](https://www.adobe.com/products/illustrator/ai.html)
+- [Illustrator 2026 v30.0 릴리스](https://community.adobe.com/announcements-651/illustrator-2026-v30-0-font-browser-color-snapping-artboards-enhancements-turntable-and-more-817849)
+- [Illustrator What's New](https://helpx.adobe.com/illustrator/desktop/new-features/whats-new.html)
+- [Adobe Firefly](https://www.adobe.com/products/firefly.html)
+
+*이 문서는 개발 진행에 따라 지속적으로 업데이트합니다.*
+
+
+---
+
+## EasyPackMaker API Integration (2025-03-21)
+
+### API Credentials
+- **Username**: Guyhan76 (ID: 161951)
+- **Password**: stored in `.env.local` as `EPM_PASSWORD`
+- **Endpoint**: `https://easypackmaker.com/generator/api`
+- **Catalog**: 654 FEFCO/ECMA templates available
+
+### Token Generation Algorithm
+1. Collect all request fields **except** `Token`
+2. **Include** `Password` as a field (key: `Password`, value: the API password)
+3. Sort all fields by **key name alphabetically**
+4. Concatenate the **values** in that sorted order
+5. Compute **SHA-256** hash of the concatenated string
+6. Use the hash as the `Token` value (exclude `Password` from the final request body)
+
+**Example (GetCatalog request):**
+- Fields: `GetCatalog=all`, `Password=IoZrEZpmFF8T53DI`, `UserName=Guyhan76`
+- Sorted keys: GetCatalog, Password, UserName
+- Concatenated values: `allIoZrEZpmFF8T53DIGuyhan76`
+- Token: SHA-256 of above string
+
+### Dieline Pipeline
+Copy
+Browser (box selection + dimensions) -> POST /api/dieline (Next.js API route) -> EasyPackMaker API (SHA-256 token auth) -> PDF (base64) received -> Inkscape CLI: PDF -> SVG conversion -> SVG returned to client -> Fabric.js canvas renders SVG at exact mm scale
+
+
+### Key Technical Decisions
+
+#### SVG Scaling (mm accuracy)
+- Inkscape exports SVG at **96 DPI** (1 px = 25.4/96 mm = 0.264583 mm)
+- Canvas uses `scaleXRef.current` (px per mm)
+- Formula: `exactScale = (svgPx * 25.4 / 96) * canvasPxPerMm / svgPx`
+- Measured accuracy: **< 0.6 mm error** on 1042 mm dieline (0.06%)
+
+#### Inkscape CLI
+- Path: `C:\Program Files\Inkscape\bin\inkscape.exe`
+- Command: `inkscape --export-type=svg --export-filename=output.svg input.pdf`
+- Timeout: 30 seconds
+
+#### API Cost
+- Same parameters = **cached (free)**
+- Changed parameters = **USD 0.47 per request**
+
+#### Dieline SVG Icon Guidelines
+- Cut lines: `#000000` (pure black K100)
+- Crease lines: `#444444` (dark gray)
+- Panel fill: `#aaaaaa` (medium gray)
+- Stroke-width: proportional to viewBox size (`viewBox_width * 0.0015`, min 2)
+- Card background: white for maximum contrast
+
+### File Structure
+- `src/lib/easypackmaker-api.ts` -- API client (token generation, model request)
+- `src/app/api/dieline/route.ts` -- Next.js API route (PDF generation + Inkscape conversion)
+- `public/dielines/` -- SVG icon thumbnails for box type cards
+- `.env.local` -- `EPM_USERNAME`, `EPM_PASSWORD`
+
+### Environment Variables Required
+EPM_USERNAME=Guyhan76 EPM_PASSWORD=<API password from easypackmaker.com/profile>
+
+---
+
+## Gamma Article Insight - Product Growth Principles (2026-03-22)
+
+> Source: Lenny Podcast - Inside the rise of Gamma
+
+### Principle 1: First 30 Seconds Magic
+- Gamma rebuilt entire product for 3-4 months focusing on new user first experience
+- Packive: Box select -> dimensions -> dieline instant -> AI design, must create WOW in 30sec
+- Ask before every feature: Does this improve the first 30 second experience?
+
+### Principle 2: Vanity vs Core Growth Metrics
+- Vanity: total signups, press coverage, SNS likes
+- Core: revisit rate, organic referral ratio, word-of-mouth new users
+- Packive Core Metrics: dieline-to-design completion rate, PDF export rate, 7-day revisit rate
+- Key question: Do users come back, and do they bring others?
+
+### Principle 3: Real PMF Signal
+- Real PMF: product grows by itself without any marketing
+- Fake growth: spending ad budget to cover real problems
+- If product does not spread by itself, rebuild the product, not increase marketing
+- Packive: confirm organic growth signal before any paid ads
+
+### Principle 4: Micro-Community Strategy
+- 1 big influencer < dozens of trusted small communities
+- Validate by engagement rate (3-5%) not follower count
+- Users must tell product story in their own voice
+- Packive target: small brand owners, Amazon/Coupang sellers, small packaging manufacturers, startup founders
+- Goal: organic word-of-mouth - Finished box design in 5 min with Packive
+
+### Principle 5: Small Team Big Impact
+- Gamma: 50 employees, ARR 100M USD
+- Efficient operation with AI and automation over aggressive hiring
+- Packive: EasyPackMaker API for 654 templates (no manual dev), AI design generation, automate everything possible
+
+### Principle 6: Find Direction from Criticism
+- Worst idea ever feedback became starting point for realistic differentiation
+- Acknowledge competitors (Adobe AI, Esko ArtiosCAD) but focus on differentiation
+- Packive differentiator: print-ready package design in 5 min without professional knowledge
+
+### Dev Checklist (check before every feature)
+- [ ] Does this improve the first 30 second experience?
+- [ ] Does this increase revisit rate?
+- [ ] Does this trigger word-of-mouth? (shareable output?)
+- [ ] Can we deliver same value more simply without this feature?
+- [ ] Did we automate everything automatable?
+
+
+---
+
+## Bleed Guide 실무 규칙 (2026-03-22)
+
+### 인쇄 Bleed 표준
+- **일반 면**: 칼선(trim) 바깥 **3mm** 확장
+- **Glue 탭**: bleed 제외, glue 탭 시작점에서 **5mm** offset
+- **표시**: 초록색 실선 (Pacdora 표준, #22c55e)
+- **Safe Zone**: 표시하지 않음 (비전문가 사용자 혼란 방지)
+- **Trim Line**: 칼선 자체가 trim line이므로 별도 표시 불필요
+
+### 구현 단계
+- **Phase 0 (현재)**: 전체 칼선 bounding box 기준 3mm bleed rect
+- **Phase 4 이후**: Panel Map으로 면별 bleed path 생성, glue 탭 5mm offset 적용
+
+### 참고
+- Pacdora: 초록 실선 bleed, glue 탭 제외, safe zone 미표시
+- 실무 인쇄: bleed 영역까지 디자인 확장 → 절단 후 흰 테두리 방지
+---
+
+
+## 칼선(Dieline) 생성 및 표시 규칙 (2026-03-28 최종 업데이트)
+
+### 1. API 구조
+- EPM API (EasyPackMaker): 칼선 생성 주력 API (0.47달러/건)
+- DCT API (DieCutTemplates): 일부 모델 폴백
+- 우선순위: epmModel 존재 시 EPM 우선 -> DCT 폴백
+- 캐싱: public/dielines/cache/ 에 JSON 저장, 동일 치수 재호출 시 무료
+- 비용 절감 핵심: 불필요한 API 호출 절대 금지. 캐시 확인 후 호출.
+
+### 2. EPM API 호출 옵션 (route.ts)
+- DimensionType: In (내측치수. 사용자 입력값 그대로. EPM이 두께를 더해 외측치수로 변환)
+- KnifeInfo: true (칼선 정보 포함, sizes 데이터용)
+- Sizes: true (치수 정보 포함)
+- GlueZone: fefco_02/03/05/07 또는 A 모델만 적용. fefco-04xx, B10, B20 제외
+- H (height) 파라미터: fefco-0310, B10, B20만 사용. 나머지 모델에 넣으면 400 에러
+- Lid 옵션: B10, B20 전용. options: { Lid: true }
+
+### 3. SVG 정리 함수: cleanInkscapeSvg() (route.ts)
+Inkscape PDF->SVG 변환 후 반드시 cleanInkscapeSvg() 함수를 통과시킴.
+EPM 경로와 DCT 경로 모두 동일하게 적용.
+처리 내용:
+  1. sodipodi:namedview 블록 제거 (Fabric.js 파싱 실패 원인)
+  2. 빈 defs 제거
+  3. inkscape/sodipodi 속성 제거
+  4. xmlns:inkscape, xmlns:sodipodi 제거
+  5. 골방향 마크 제거 (회색 #7b7979)
+  6. 비숫자 aria-label path 제거 + 제곱미터 숫자2 제거
+  7. 빈 그룹 제거
+
+#### 주의: #231f20 (검정 경로) 처리
+- 절대 제거하지 않음! 검정 #231f20 path에는 치수 화살표와 숫자가 포함됨.
+- 이전에 제거했다가 치수 표기가 사라지는 버그 발생.
+- cleanInkscapeSvg()에서 #231f20 관련 코드는 주석 처리됨. 절대 활성화 금지.
+
+### 4. SVG 색상 규칙
+- 빨강 #ed1c24: 칼선 (cut line) -> 유지
+- 초록 #00a650: 접힘선 (crease line) -> 유지
+- 검정 #231f20: 치수 화살표/숫자 -> 유지 (제거 금지)
+- 회색 #7b7979: 골방향 마크 -> 제거
+- aria-label path: Inkscape 변환 텍스트 -> 비숫자만 제거, 숫자(치수값)는 유지
+
+### 5. Multi-Part (2-Piece Box) 처리
+FEFCO 03xx (0301, 0304, 0310) 등은 Body + Lid 2개 도면으로 구성됨.
+
+#### 5-1. PDF 변환 (route.ts)
+- Multi-part 감지: sizes에 숫자 키(1,2)가 있고 PageW가 없으면 multi-part
+- 각 페이지를 Inkscape --pages=N 옵션으로 개별 변환
+- 변환된 SVG들을 세로로 배치 (gap: 60px)
+- Inkscape 1.4.2 이상 필요 (--pages=N 옵션 지원)
+- 각 페이지 SVG에도 cleanInkscapeSvg() 적용 필수
+
+#### 5-2. Info 패널 (unified-editor.tsx)
+- Multi-part sizes 정규화: {1: Body, 2: Lid} -> flat 구조
+- 가장 큰 part를 main으로, Cut/Crease/Total은 합산
+- _multiPart이면 Body/Lid 각각 + Combined 표시
+- Single-part면 기존 방식 (Sizes, S, Paper utilization 표시)
+
+#### 5-3. Multi-part 모델 목록
+- FEFCO 0301: Body + Lid (상하짝 분리)
+- FEFCO 0304: Body + Lid (상하짝 분리)
+- FEFCO 0310: Body + Lid (H 파라미터 필요)
+- ECMA B10: Body + Lid (Lid 옵션 필요)
+- ECMA B20: Body + Lid (Lid 옵션 필요)
+
+### 6. 카드 미리보기 SVG (박스 선택 UI)
+- 위치: public/dielines/previews/<id>.svg
+- 생성 방법 2가지:
+  (A) EPM API 호출 (KnifeInfo:false, Sizes:false) -> 0.47달러 비용
+  (B) 캐시된 SVG에서 빨강+초록 path만 추출 -> 무료 (권장)
+- 방법 B 절차: 캐시 JSON에서 svg 로드 -> #ed1c24 + #00a650 path regex 추출 -> 새 SVG 조립
+- 주의: 미리보기와 실제 생성 결과의 형태가 다르면 안 됨
+- 버그 사례: fefco-0201과 fefco-0203 미리보기가 동일 파일이었음 (MD5 해시로 검출)
+
+### 7. Info 패널 (에디터 자체 렌더링)
+- 위치: Canvas 좌하단 (position:fixed, bottom:40, left:95)
+- 표시 데이터: sizes API 응답 (PageW, PageH, Cut, Crease, Total, Area)
+- 토글: Info On/Off 버튼 (dielineInfoVisible state)
+- SVG 내부 텍스트 사용 금지: Inkscape path 텍스트는 화질 저하
+- New 버튼 클릭 시: setDielineSizes(null), setDielineModelInfo(''), setDielineDims(null)
+
+### 8. Fit 버튼
+- 동작: 캔버스 내 모든 객체의 bounding box 계산 -> 줌+센터링
+- 기존 버그: applyZoom(100) 고정 -> 큰 도면 잘림
+- 수정: getBoundingRect() 기반 실제 fit 계산 + viewportTransform 센터링
+- Auto-zoom: 디라인 로드 시 캔버스보다 크면 자동 줌 축소
+
+### 9. 캐시 키 형식
+- 형식: {model}_{L}_{W}_{D}_{Th}_mm.json
+- 예: fefco_0201_300_200_250_3_mm.json
+- route.ts 변경 후 반드시 캐시 삭제 (Remove-Item public\dielines\cache\*.json)
+- 캐시 삭제 = 재생성 필요 = 비용 발생. 꼭 필요한 경우만 삭제.
+
+### 10. 새 박스 추가 체크리스트
+1. src/lib/dieline-templates.ts에 템플릿 추가 (epmModel, code, nameKo 등)
+2. H 파라미터 필요 여부 확인 (fefco-0310, B10, B20만)
+3. Lid 옵션 필요 여부 확인 (B10, B20만)
+4. GlueZone regex 매칭 확인
+5. 미리보기 SVG 생성 (방법 B 권장: 캐시에서 추출, 무료)
+6. 미리보기 SVG 중복 확인 (MD5 해시 비교)
+7. 테스트 생성 1회 (0.47달러) -> 캐시 저장 확인
+8. 캐시된 SVG 검증: #7b7979 없음, sodipodi/inkscape 없음, #ed1c24+#00a650+#231f20 존재
+9. 브라우저 테스트: 카드 미리보기 + Generate + Info 패널 + Fit 버튼
+10. Multi-part 여부 확인 (sizes에 1,2 키가 있으면 multi-part)
+
+### 11. 절대 금지 사항
+- #231f20 (검정 치수 경로) 제거 -> 치수 표기 사라짐
+- Inkscape --pdf-font-strategy 옵션 사용 -> 텍스트 간격 깨짐
+- SVG 내부 path 텍스트를 Info 표시에 사용 -> 화질 저하
+- 캐시 전체 삭제 후 대량 재생성 -> 불필요한 비용
+- GlueZone/H를 지원하지 않는 모델에 전송 -> 400 에러
+- 미리보기 SVG를 API로 매번 생성 -> 캐시에서 추출하면 무료
+
+### 12. 비용 요약
+- EPM API: 0.47달러/건
+- 새 박스 1종 추가: 테스트 생성 1회 = 0.47달러
+- 미리보기: 캐시 추출(B) = 무료 / API(A) = 0.47달러
+- 동일 치수 반복 호출: 무료 (캐시 히트)
+- 현재 총 투자: 약 55달러 (25개 박스 프리캐시 + 디버깅)
+
+### 13. 주요 파일 경로
+- src/app/api/dieline/route.ts: API 라우트 (EPM 호출 + Inkscape 변환 + cleanInkscapeSvg + 캐시)
+- src/components/editor/unified-editor.tsx: 에디터 (SVG 로드 + Info 패널 + Fit + New 초기화)
+- src/lib/dieline-templates.ts: 박스 템플릿 정의
+- src/lib/easypackmaker-api.ts: EPM API 클라이언트
+- public/dielines/cache/*.json: 캐시된 SVG + sizes
+- public/dielines/previews/*.svg: 박스 선택 카드 미리보기
+
+### 14. 시행착오 히스토리 (반복 금지)
+- 텍스트 화질 저하: Inkscape path 변환 -> sizes 데이터로 Info 패널 자체 렌더링
+- --pdf-font-strategy=substitute: 줄간격 깨짐 -> 옵션 제거
+- --pdf-font-strategy=keep: 여전히 미개선 -> 옵션 완전 제거
+- 치수 표기 사라짐: #231f20 전체 제거 -> 제거 비활성화 (비용 약 1달러)
+- 제곱미터 2 표시: aria-label=2 남음 -> 전용 제거 regex 추가
+- 미리보기 중복: 0201과 0203 동일 SVG -> MD5 해시로 검출, 캐시에서 재추출 (무료)
+- Multi-part 1페이지만: Inkscape 1페이지만 변환 -> --pages=N 개별 변환 (0.47달러)
+- Fabric.js 파싱 실패: sodipodi/inkscape 네임스페이스 -> cleanInkscapeSvg() 메타데이터 제거
+- Info 패널 숫자 빈칸: Multi-part sizes 미지원 -> _multiPart 정규화
+- Fit 안 됨: applyZoom(100) 고정 -> getBoundingRect 기반 실제 fit
+- New 후 Info 남음: state 초기화 누락 -> setDielineSizes(null) 추가
+- batch-precache 실패: JSON 전송 오류 -> curl + file 방식 (비용 약 2달러)
+- B10/B20 400 에러: Lid 옵션 누락 -> options: { Lid: true } (비용 약 1달러)

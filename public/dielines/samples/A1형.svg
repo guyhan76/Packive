@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   version="1.1"
+   id="svg1"
+   width="2376"
+   height="1145.3333"
+   viewBox="0 0 2376 1145.3333"
+   sodipodi:docname="A1형.pdf"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1" />
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1">
+    <inkscape:page
+       x="0"
+       y="0"
+       inkscape:label="1"
+       id="page1"
+       width="2376"
+       height="1145.3333"
+       margin="0"
+       bleed="0" />
+  </sodipodi:namedview>
+  <g
+     id="g1"
+     inkscape:groupmode="layer"
+     inkscape:label="1">
+    <path
+       id="path1"
+       d="m 17817.2,7131.93 -70.9,70.87 -141.7,1388.97 h -2324.4 l -142,-1408.83 m -113.1,5.69 c 0,-30.21 23.7,-55.11 53.8,-56.63 30.2,-1.51 56.2,20.89 59.3,50.94 m -113.1,5.69 V 8591.77 H 9355.79 V 7188.63 m -113.11,-5.69 c 3.03,-30.05 29.09,-52.45 59.26,-50.94 30.17,1.52 53.85,26.42 53.85,56.63 m -113.11,-5.69 -142.01,1408.83 H 6776.26 L 6634.24,7182.94 m -113.1,5.69 c 0,-30.21 23.68,-55.11 53.84,-56.63 30.17,-1.51 56.23,20.89 59.26,50.94 m -113.1,5.69 V 8591.77 H 851.848 V 7131.93 L 1.45313,6904.07 M 17817.2,7131.93 V 1462.64 M 15025.1,7180.12 V 1414.45 M 9355.79,7180.12 V 1414.45 M 6521.14,7180.12 V 1414.45 M 851.848,7123.43 V 1471.14 M 1.45313,6904.07 V 1690.5 M 17808.7,7131.93 h -2718.4 m -71.9,42.52 H 9362.49 m -71.9,-42.52 H 6586.34 m -71.91,42.52 H 860.352 M 17817.2,1462.64 17746.3,1391.77 17604.6,2.79688 h -2324.4 l -142,1408.83312 c -3.1,30.05 -29.1,52.46 -59.3,50.94 -30.1,-1.52 -53.8,-26.42 -53.8,-56.62 V 2.79688 H 9355.79 V 1405.95 c 0,30.2 -23.68,55.1 -53.85,56.62 -30.17,1.52 -56.23,-20.89 -59.26,-50.94 L 9100.67,2.79688 H 6776.26 L 6634.24,1411.63 c -3.03,30.05 -29.09,52.46 -59.26,50.94 -30.16,-1.52 -53.84,-26.42 -53.84,-56.62 V 2.79688 H 851.848 V 1462.64 L 1.45313,1690.5 M 17808.7,1462.64 h -2718.4 m -71.9,-42.52 H 9362.49 m -71.9,42.52 H 6586.34 m -71.91,-42.52 H 860.352 Z"
+       style="fill:none;stroke:#231f20;stroke-width:2.16;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:2.6131;stroke-dasharray:none;stroke-opacity:1"
+       transform="matrix(0.13333333,0,0,-0.13333333,0,1145.3333)" />
+  </g>
+</svg>

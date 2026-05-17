@@ -1,0 +1,56 @@
+<svg id="_레이어_2" data-name="레이어 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200.0 200.0">
+<g transform="translate(10.00,10.00) scale(0.8429)">
+
+  <defs>
+    <style>
+      .s8_sun_c1 {
+        stroke-width: 4px;
+      }
+
+      .s8_sun_c1, .s8_sun_c2 {
+        stroke-linecap: round;
+      }
+
+      .s8_sun_c1, .s8_sun_c2, .s8_sun_c3 {
+        stroke: #000;
+        stroke-miterlimit: 10;
+      }
+
+      .s8_sun_c2 {
+        stroke-width: 11.0px;
+      }
+
+      .s8_sun_c3 {
+        fill: none;
+        stroke-width: 11.0px;
+      }
+    </style>
+  </defs>
+  <g id="Layer_1" data-name="Layer 1">
+    <g>
+      <path d="M102.31,147.94l27.54-11.94-26-11.27c-.97-.42-2.11-.42-3.08,0l-26,11.27,27.54,11.94Z"/>
+      <g>
+        <path d="M99.16,152.75l-27.54-11.94v28c0,1.13.74,2.16,1.9,2.67l25.64,11.11v-29.84Z"/>
+        <path d="M105.46,152.75v29.84l25.64-11.11c1.16-.51,1.9-1.54,1.9-2.67v-28l-27.54,11.94Z"/>
+      </g>
+    </g>
+    <g>
+      <line class="s8_sun_c2" x1="102.31" y1="86.88" x2="38.04" y2="118.07"/>
+      <line class="s8_sun_c2" x1="102.31" y1="86.88" x2="166.58" y2="118.07"/>
+    </g>
+    <g>
+      <circle cx="152.27" cy="54.18" r="8.26" transform="translate(6.28 123.54) rotate(-45)"/>
+      <line class="s8_sun_c1" x1="152.27" y1="30.95" x2="152.27" y2="40.88"/>
+      <line class="s8_sun_c1" x1="152.27" y1="67.49" x2="152.27" y2="77.41"/>
+      <line class="s8_sun_c1" x1="135.84" y1="37.76" x2="142.86" y2="44.78"/>
+      <line class="s8_sun_c1" x1="161.68" y1="63.59" x2="168.7" y2="70.61"/>
+      <line class="s8_sun_c1" x1="129.04" y1="54.18" x2="138.97" y2="54.18"/>
+      <line class="s8_sun_c1" x1="165.57" y1="54.18" x2="175.5" y2="54.18"/>
+      <line class="s8_sun_c1" x1="135.84" y1="70.61" x2="142.86" y2="63.59"/>
+      <line class="s8_sun_c1" x1="161.68" y1="44.78" x2="168.7" y2="37.76"/>
+    </g>
+    <rect class="s8_sun_c3" x="5.5" y="5.5" width="202.54" height="202.54"/>
+  </g>
+
+</g>
+</svg>

@@ -1,0 +1,44 @@
+﻿                              <div className="relative flex items-center gap-1">
+                                <span className="text-[9px] text-gray-400">BG</span>
+                                <div className="w-5 h-5 border border-gray-200 rounded cursor-pointer" style={{backgroundColor: cell.bgColor || "#ffffff"}} onClick={() => setTableCmykOpen(tableCmykOpen === "bg" ? null : "bg")} />
+                                {tableCmykOpen === "bg" && (
+                                  <div className="absolute top-7 left-0 z-50 bg-white border border-gray-300 rounded-lg shadow-lg p-2 w-48" onClick={e => e.stopPropagation()}>
+                                    <div className="text-[9px] font-semibold text-gray-600 mb-1">BG Color (CMYK)</div>
+                                    {(() => { const cm = hexToCmyk(cell.bgColor || "#ffffff"); return (<>
+                                      {(["C","M","Y","K"] as const).map((ch, ci) => (
+                                        <div key={ch} className="flex items-center gap-1">
+                                          <span className="text-[8px] text-gray-500 w-3">{ch}</span>
+                                          <input type="range" min={0} max={100} value={cm[ci]} onChange={e => { const v = [...cm] as [number,number,number,number]; v[ci] = Number(e.target.value); updateAndRebuild("bgColor", cmykToHex(v[0],v[1],v[2],v[3])); }} className="flex-1 h-3 accent-gray-600" />
+                                          <span className="text-[8px] text-gray-500 w-6 text-right">{cm[ci]}</span>
+                                        </div>
+                                      ))}
+                                      <div className="flex items-center gap-1 mt-1 pt-1 border-t">
+                                        <div className="w-6 h-6 rounded border" style={{backgroundColor: cell.bgColor || "#ffffff"}} />
+                                        <span className="text-[8px] text-gray-400 font-mono">{cell.bgColor || "#ffffff"}</span>
+                                      </div>
+                                    </>); })()}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="relative flex items-center gap-1">
+                                <span className="text-[9px] text-gray-400">Text</span>
+                                <div className="w-5 h-5 border border-gray-200 rounded cursor-pointer" style={{backgroundColor: cell.textColor || "#000000"}} onClick={() => setTableCmykOpen(tableCmykOpen === "text" ? null : "text")} />
+                                {tableCmykOpen === "text" && (
+                                  <div className="absolute top-7 left-0 z-50 bg-white border border-gray-300 rounded-lg shadow-lg p-2 w-48" onClick={e => e.stopPropagation()}>
+                                    <div className="text-[9px] font-semibold text-gray-600 mb-1">Text Color (CMYK)</div>
+                                    {(() => { const cm = hexToCmyk(cell.textColor || "#000000"); return (<>
+                                      {(["C","M","Y","K"] as const).map((ch, ci) => (
+                                        <div key={ch} className="flex items-center gap-1">
+                                          <span className="text-[8px] text-gray-500 w-3">{ch}</span>
+                                          <input type="range" min={0} max={100} value={cm[ci]} onChange={e => { const v = [...cm] as [number,number,number,number]; v[ci] = Number(e.target.value); updateAndRebuild("textColor", cmykToHex(v[0],v[1],v[2],v[3])); }} className="flex-1 h-3 accent-gray-600" />
+                                          <span className="text-[8px] text-gray-500 w-6 text-right">{cm[ci]}</span>
+                                        </div>
+                                      ))}
+                                      <div className="flex items-center gap-1 mt-1 pt-1 border-t">
+                                        <div className="w-6 h-6 rounded border" style={{backgroundColor: cell.textColor || "#000000"}} />
+                                        <span className="text-[8px] text-gray-400 font-mono">{cell.textColor || "#000000"}</span>
+                                      </div>
+                                    </>); })()}
+                                  </div>
+                                )}
+                              </div>

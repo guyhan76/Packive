@@ -1,4 +1,4 @@
-﻿// src/app/editor/design/page.tsx
+// src/app/editor/design/page.tsx
 "use client";
 
 import React, { useState, useCallback, useMemo, useEffect, useRef, Suspense } from "react";
@@ -25,21 +25,6 @@ const Box3DPreview = dynamic(
     loading: () => (
       <div className="w-full h-[350px] bg-gray-50 rounded-xl border flex items-center justify-center text-gray-400 text-sm">
         Loading 3D...
-      </div>
-    ),
-  }
-);
-
-const Box3DPreviewAdvanced = dynamic(
-  () => import("@/components/editor/box-3d-preview-advanced"),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="w-full h-[480px] bg-gray-50 rounded-xl border flex items-center justify-center text-gray-400 text-sm">
-        <div className="flex flex-col items-center gap-2">
-          <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-          Loading Advanced 3D Preview...
-        </div>
       </div>
     ),
   }
@@ -788,12 +773,7 @@ function DesignPageInner() {
             </div>
           </div>
           <div data-export-3d>
-            <Box3DPreviewAdvanced
-              L={L} W={W} D={D} T={T}
-              tuckH={tuckH} dustH={dustH} glueW={glueW}
-              bottomH={bottomH} bottomDustH={bottomDustH}
-              panels={panels}
-            />
+            <Box3DPreview L={L} W={W} D={D} panels={panels} />
           </div>
           <div>
             <h3 className="text-sm font-semibold text-gray-700 mb-3">{t("ov.mainBody")}</h3>
