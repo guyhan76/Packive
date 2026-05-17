@@ -479,5 +479,18 @@
   "alert.no3dSession": "이전 3D 목업이 없습니다. 먼저 생성해 주세요.",
   "btn.reopen3d": "최근 3D 다시 열기",
   "shortcut.statusActive": "단축키 ON",
-  "shortcut.statusInactive": "단축키 OFF — 클릭하여 재부착"
+  "shortcut.statusInactive": "단축키 OFF — 클릭하여 재부착",
+  "paper": "용지",
+  "paper.current": "현재",
+  "paper.none": "없음",
+  "paper.white": "화이트",
+  "paper.kraft": "크라프트",
+  "paper.custom": "사용자 지정",
+  "paper.cmykPercent": "CMYK %",
+  "paper.spotName": "별색 이름 (선택)",
+  "paper.spotPlaceholder": "예: Pantone 7506 C",
+  "paper.apply": "적용",
+  "paper.bleed": "여백 (mm)",
+  "paper.bleedHint": "칼선 외곽 여유 (한국 인쇄 표준: 5mm)",
+  "paper.note": "칼선전개도 전체에 적용. CMYK/별색은 PDF 출력에 그대로 반영됩니다."
 }

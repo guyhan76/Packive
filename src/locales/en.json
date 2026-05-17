@@ -479,5 +479,18 @@
   "alert.no3dSession": "No previous 3D mockup found. Generate one first.",
   "btn.reopen3d": "Reopen Last 3D",
   "shortcut.statusActive": "Shortcuts ON",
-  "shortcut.statusInactive": "Shortcuts OFF — click to re-attach"
+  "shortcut.statusInactive": "Shortcuts OFF — click to re-attach",
+  "paper": "Paper",
+  "paper.current": "Current",
+  "paper.none": "None",
+  "paper.white": "White",
+  "paper.kraft": "Kraft",
+  "paper.custom": "Custom",
+  "paper.cmykPercent": "CMYK %",
+  "paper.spotName": "Spot Color Name (optional)",
+  "paper.spotPlaceholder": "e.g., Pantone 7506 C",
+  "paper.apply": "Apply",
+  "paper.bleed": "Bleed (mm)",
+  "paper.bleedHint": "Margin outside the dieline (Korean print standard: 5mm)",
+  "paper.note": "Applied to full dieline. CMYK/Spot color is reflected in PDF output."
 }

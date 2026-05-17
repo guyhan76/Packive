@@ -479,5 +479,18 @@
   "alert.no3dSession": "以前の3Dモックアップがありません。先に生成してください。",
   "btn.reopen3d": "最近の3Dを再度開く",
   "shortcut.statusActive": "ショートカットON",
-  "shortcut.statusInactive": "ショートカットOFF — クリックで再接続"
+  "shortcut.statusInactive": "ショートカットOFF — クリックで再接続",
+  "paper": "用紙",
+  "paper.current": "現在",
+  "paper.none": "なし",
+  "paper.white": "ホワイト",
+  "paper.kraft": "クラフト",
+  "paper.custom": "カスタム",
+  "paper.cmykPercent": "CMYK %",
+  "paper.spotName": "特色名 (任意)",
+  "paper.spotPlaceholder": "例: Pantone 7506 C",
+  "paper.apply": "適用",
+  "paper.bleed": "余白 (mm)",
+  "paper.bleedHint": "ダイライン外側の余裕 (韓国印刷標準: 5mm)",
+  "paper.note": "ダイラインの全体に適用。CMYK/特色はPDF出力に反映されます。"
 }

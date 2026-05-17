@@ -113,7 +113,13 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [rightTab, setRightTab] = useState<RightTab>("properties");
   const [panelMapData, setPanelMapData] = useState<any>(null);
   const [spotTarget, setSpotTarget] = useState<"fill" | "stroke">("fill");
-  const [accOpen, setAccOpen] = useState<Record<string, boolean>>({ position: true, typography: true, color: false, spot: false });
+  const [accOpen, setAccOpen] = useState<Record<string, boolean>>({ position: true, typography: true, color: false, spot: false, paperBg: true });
+  // Paper Background — 사용자 지정 색상 입력 모드
+  const [paperCustomMode, setPaperCustomMode] = useState(false);
+  const [paperCustomCmyk, setPaperCustomCmyk] = useState<[number,number,number,number]>([0, 0, 0, 0]);
+  const [paperCustomSpotName, setPaperCustomSpotName] = useState("");
+  // Paper Background — 칼선 외부 bleed margin (mm). 한국 인쇄 표준: 5mm
+  const [paperBleedMm, setPaperBleedMm] = useState(5);
   const toggleAcc = (key: string) => setAccOpen(prev => ({ ...prev, [key]: !prev[key] }));
   const [color, setColor] = useState("#000000");
   const [fSize, setFSize] = useState(24);
@@ -456,13 +462,13 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
     const c = fcRef.current;
     if (!c) { console.warn("[HIST] push skip — no canvas"); return; }
     if (loadingRef.current) { console.log("[HIST] push skip — loading"); return; }
-    const jsonObj = c.toJSON(["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","_isPanelOverlay","_panelId","_panelRole","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isTable","_tableConfig","_tableRole","_tableRow","_tableCol","_tableId"]);
+    const jsonObj = c.toJSON(["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","_isPanelOverlay","_panelId","_panelRole","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isTable","_tableConfig","_tableRole","_tableRow","_tableCol","_tableId","_isPaperBackground","_paperPreset"]);
     // Fabric toJSON may drop custom props on Image - inject manually
     const objs = c.getObjects();
     if (jsonObj.objects) {
       objs.forEach((obj: any, i: number) => {
         if (!jsonObj.objects[i]) return;
-        ["_isTable","_tableConfig","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","_tableRole","_tableRow","_tableCol","_tableId","name"].forEach((k: string) => {
+        ["_isTable","_tableConfig","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","_tableRole","_tableRow","_tableCol","_tableId","name","_isPaperBackground","_paperPreset"].forEach((k: string) => {
           if ((obj as any)[k] !== undefined) jsonObj.objects[i][k] = (obj as any)[k];
         });
       });
@@ -476,13 +482,133 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
     console.log("[HIST] push ok — len=", h.length, "idx=", historyIdxRef.current, "size=", (json.length/1024).toFixed(1)+"KB");
   }, []);
 
+  // ─── 종이 배경색 (Paper Background) ───
+  // 칼선전개도 bounding box를 채우는 Rect 객체를 가장 뒤에 배치.
+  // 프리셋 White / Kraft + 사용자 지정 CMYK / 별색 지원.
+  // _isGuideLayer: true로 디자인 객체 필터에서 제외, _isPaperBackground: true로 식별.
+
+  // 표준 종이 색상 (Kraft는 일반적인 craft paper 갈색 — Pantone 7506C 근사)
+  const PAPER_PRESETS = {
+    white: { hex: "#FFFFFF", cmyk: [0, 0, 0, 0] as [number,number,number,number] },
+    kraft: { hex: "#C4A56A", cmyk: [15, 30, 55, 20] as [number,number,number,number] },
+  };
+
+  const findPaperBg = useCallback((c: any) => {
+    return c.getObjects().find((o: any) => o._isPaperBackground) || null;
+  }, []);
+
+  const findDielineGroup = useCallback((c: any) => {
+    return c.getObjects().find((o: any) => o._isDieLine && o.type === "group") || null;
+  }, []);
+
+  const applyPaperBg = useCallback((
+    preset: "white" | "kraft" | "custom",
+    customOpts?: { hex: string; cmyk?: [number,number,number,number]; spotName?: string; spotPantone?: string }
+  ) => {
+    const c = fcRef.current; if (!c) return;
+    const F = fabricModRef.current; if (!F) return;
+    const dieline = findDielineGroup(c);
+    if (!dieline) return;
+
+    // 기존 paper bg 제거
+    const existing = findPaperBg(c);
+    if (existing) c.remove(existing);
+
+    // 색상 결정
+    let fillHex: string;
+    let cmyk: [number,number,number,number] | undefined;
+    let spotName: string | undefined;
+    let spotPantone: string | undefined;
+    if (preset === "white") {
+      fillHex = PAPER_PRESETS.white.hex;
+      cmyk = PAPER_PRESETS.white.cmyk;
+    } else if (preset === "kraft") {
+      fillHex = PAPER_PRESETS.kraft.hex;
+      cmyk = PAPER_PRESETS.kraft.cmyk;
+    } else {
+      if (!customOpts) return;
+      fillHex = customOpts.hex;
+      cmyk = customOpts.cmyk;
+      spotName = customOpts.spotName;
+      spotPantone = customOpts.spotPantone;
+    }
+
+    // 칼선 group과 동일한 transform으로 Rect 생성 + bleed margin 적용
+    // bleed = mm 단위 여유. scaleRef.current (px/mm)로 px 변환.
+    // dieline.width/height는 SVG 원본 단위 (scaleX 적용 전), bleed는 PX 단위로 더하면 안 됨.
+    //   → bleed를 scaleX/Y로 나눠서 dieline의 로컬 width/height에 추가
+    const bleedPx = (paperBleedMm || 0) * (scaleRef.current || 1);
+    const sx = dieline.scaleX || 1;
+    const sy = dieline.scaleY || 1;
+    const localBleedX = sx ? bleedPx / sx : 0;
+    const localBleedY = sy ? bleedPx / sy : 0;
+    console.log("[paperBg] dieline transform:", {
+      left: dieline.left, top: dieline.top,
+      width: dieline.width, height: dieline.height,
+      scaleX: sx, scaleY: sy,
+      originX: dieline.originX, originY: dieline.originY,
+      angle: dieline.angle,
+      bleedMm: paperBleedMm, bleedPx,
+    });
+
+    const rect = new F.Rect({
+      left: dieline.left,
+      top: dieline.top,
+      width: (dieline.width || 0) + 2 * localBleedX,
+      height: (dieline.height || 0) + 2 * localBleedY,
+      scaleX: sx,
+      scaleY: sy,
+      originX: dieline.originX || "center",
+      originY: dieline.originY || "center",
+      angle: dieline.angle || 0,
+      fill: fillHex,
+      // 사용자가 클릭해서 자유 리사이즈 가능. 회전만 막음.
+      selectable: true,
+      evented: true,
+      hasControls: true,
+      hasBorders: true,
+      lockRotation: true,
+    });
+    // 커스텀 속성
+    (rect as any)._isPaperBackground = true;
+    (rect as any)._isGuideLayer = true;
+    (rect as any)._paperPreset = preset;
+    if (cmyk) (rect as any)._cmykFill = cmyk;
+    if (spotName) (rect as any)._spotFillName = spotName;
+    if (spotPantone) (rect as any)._spotFillPantone = spotPantone;
+
+    c.add(rect);
+    c.sendObjectToBack(rect);
+    // z-order 강제: _objects 배열 직접 조작 (sendObjectToBack 보완)
+    const _objs = (c as any)._objects;
+    const idx = _objs.indexOf(rect);
+    if (idx > 0) {
+      _objs.splice(idx, 1);
+      _objs.unshift(rect);
+    }
+    // preserveObjectStacking: 선택된 객체가 z-order 무시하고 위로 올라오는 기본 동작 비활성화
+    (c as any).preserveObjectStacking = true;
+    c.requestRenderAll();
+    pushHistory();
+  }, [findDielineGroup, findPaperBg, pushHistory, paperBleedMm]);
+
+  const removePaperBg = useCallback(() => {
+    const c = fcRef.current; if (!c) return;
+    const existing = findPaperBg(c);
+    if (existing) {
+      c.remove(existing);
+      c.requestRenderAll();
+      pushHistory();
+    }
+  }, [findPaperBg, pushHistory]);
+
   const restoreCustomProps = (canvas: any, snapshot: any) => {
     const objs = canvas.getObjects();
     const jsonObjs = snapshot.objects || [];
     objs.forEach((obj: any, i: number) => {
       const src = jsonObjs[i];
       if (!src) return;
-      ["_isTable","_tableConfig","_tableId","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","_tableRole","_tableRow","_tableCol","name","selectable","evented"].forEach(k => {
+      ["_isTable","_tableConfig","_tableId","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","_tableRole","_tableRow","_tableCol","name","selectable","evented","_isPaperBackground","_paperPreset"].forEach(k => {
         if (src[k] !== undefined) obj[k] = src[k];
       });
       // Group 내부 objects도 복원
@@ -539,7 +665,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
   }, []);
   const SAVE_KEY = "packive-temp-design";
   const SAVE_META_KEY = "packive-temp-meta";
- const JSON_PROPS = ["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","_isPanelOverlay","_panelId","_panelRole","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isTable","_tableConfig","_tableRole","_tableRow","_tableCol","_tableId","_markType","_markMemo","_markCmyk","_markHex","_isMarkAnnotation"];
+ const JSON_PROPS = ["_isDieLine","_isFoldLine","_isGuideLayer","_isPanelLabel","_isPanelOverlay","_panelId","_panelRole","selectable","evented","name","_cmykFill","_cmykStroke","_spotFillName","_spotStrokeName","_spotFillPantone","_spotStrokePantone","_isTable","_tableConfig","_tableRole","_tableRow","_tableCol","_tableId","_markType","_markMemo","_markCmyk","_markHex","_isMarkAnnotation","_isPaperBackground","_paperPreset"];
   const [saveStatus, setSaveStatus] = useState<string|null>(null);
 
 
@@ -1102,6 +1228,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
         backgroundColor: '#FFFFFF',
         selection: true,
         perPixelTargetFind: false,
+        preserveObjectStacking: true,  // 선택 시 z-order 유지 (paper bg가 dieline 위로 올라오지 않도록)
       });
 
       fcRef.current = canvas; (window as any).__pc = canvas;
@@ -2549,7 +2676,12 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
   const getSelectedProps = useCallback(() => {
     const c = fcRef.current; if (!c) return null;
     const obj = c.getActiveObject();
-    if (!obj || (obj as any)._isGuideLayer) return null;
+    if (!obj) return null;
+    // _isGuideLayer 객체는 기본 제외, but dieline group과 paper bg는 예외 (속성 패널 표시 필요)
+    const isGuide = (obj as any)._isGuideLayer === true;
+    const isDieline = (obj as any)._isDieLine === true;
+    const isPaperBg = (obj as any)._isPaperBackground === true;
+    if (isGuide && !isDieline && !isPaperBg) return null;
     const isTable = !!(obj as any)._isTable;
     let tableConfig = null;
     if (isTable && (obj as any)._tableConfig) {
@@ -2581,6 +2713,8 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
             _markType: (obj as any)._markType || '',
       _markMemo: (obj as any)._markMemo || '',
       _markCmyk: (obj as any)._markCmyk || null,
+      _isDieLine: (obj as any)._isDieLine === true,
+      _isPaperBackground: (obj as any)._isPaperBackground === true,
 
     };
   }, []);
@@ -2588,6 +2722,27 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
 
   const [canvasReady, setCanvasReady] = useState(false);
   const [selProps, setSelProps] = useState<any>(null);
+
+  // ── Paper bg z-order safety net ──
+  // 매 렌더 직전에 paper bg를 _objects 배열 맨 앞(z=0)으로 강제.
+  // 다른 객체가 z-order를 침범하지 않도록 안전망 역할.
+  useEffect(() => {
+    const c = fcRef.current;
+    if (!c) return;
+    (c as any).preserveObjectStacking = true;
+    const handler = () => {
+      const _objs = (c as any)._objects;
+      if (!Array.isArray(_objs)) return;
+      const pIdx = _objs.findIndex((o: any) => o && o._isPaperBackground);
+      if (pIdx > 0) {
+        const [p] = _objs.splice(pIdx, 1);
+        _objs.unshift(p);
+      }
+    };
+    c.on("before:render", handler);
+    return () => { c.off("before:render", handler); };
+  }, [canvasReady]);
+
   useEffect(() => {
     const c = fcRef.current; if (!c) return;
     const update = () => {
@@ -2750,6 +2905,21 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
       }
     }
     else if (key === "angle") obj.set({ angle: Number(value) });
+    else if (key === "left") { obj.set({ left: Number(value) }); obj.setCoords?.(); }
+    else if (key === "top")  { obj.set({ top:  Number(value) }); obj.setCoords?.(); }
+    else if (key === "width") {
+      // selProps.width = obj.width * scaleX → 신규 scaleX = value / obj.width
+      const baseW = obj.width || 1;
+      const newScaleX = Number(value) / baseW;
+      obj.set({ scaleX: newScaleX });
+      obj.setCoords?.();
+    }
+    else if (key === "height") {
+      const baseH = obj.height || 1;
+      const newScaleY = Number(value) / baseH;
+      obj.set({ scaleY: newScaleY });
+      obj.setCoords?.();
+    }
     else if (key === "fillCmyk") { const cm = value as {c:number;m:number;y:number;k:number}; const hex = cmykToHex(cm.c,cm.m,cm.y,cm.k); obj.set({ fill: hex }); (obj as any)._cmykFill = cm; if ((obj as any)._objects) { (obj as any)._objects.forEach((child: any) => { const cf = child.fill; if (cf && cf !== "none" && cf !== "transparent" && cf !== "") { child.set({ fill: hex }); } if (child._objects) child._objects.forEach((gc: any) => { const gf = gc.fill; if (gf && gf !== "none" && gf !== "transparent" && gf !== "") { gc.set({ fill: hex }); } }); }); } }
     else if (key === "strokeCmyk") { const cm = value as {c:number;m:number;y:number;k:number}; const hex = cmykToHex(cm.c,cm.m,cm.y,cm.k); obj.set({ stroke: hex }); (obj as any)._cmykStroke = cm; if ((obj as any)._objects) { (obj as any)._objects.forEach((child: any) => { child.set({ stroke: hex }); if (child._objects) child._objects.forEach((gc: any) => gc.set({ stroke: hex })); }); } }
     else if (key === "spotFill") { const s = value as {name:string;hex:string;cmyk?:[number,number,number,number]}; obj.set({ fill: s.hex }); (obj as any)._spotFill = true; (obj as any)._spotFillName = s.name; if (s.cmyk) { (obj as any)._cmykFill = {c:s.cmyk[0],m:s.cmyk[1],y:s.cmyk[2],k:s.cmyk[3]}; } if ((obj as any)._objects) { (obj as any)._objects.forEach((child: any) => { const cf = child.fill; if (cf && cf !== "none" && cf !== "transparent" && cf !== "") { child.set({ fill: s.hex }); } if (child._objects) child._objects.forEach((gc: any) => { const gf = gc.fill; if (gf && gf !== "none" && gf !== "transparent" && gf !== "") { gc.set({ fill: s.hex }); } }); }); } }
@@ -4367,6 +4537,122 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
 
 )}
 
+                    {/* ▶ Paper Background — shown when dieline OR paper bg is selected */}
+                    {(selProps._isDieLine || selProps._isPaperBackground) && (() => {
+                      const c = fcRef.current;
+                      const paperBg = c ? findPaperBg(c) : null;
+                      const currentPreset = paperBg ? ((paperBg as any)._paperPreset || "custom") : "none";
+                      const currentHex = paperBg ? ((paperBg as any).fill || "#FFFFFF") : null;
+                      const presetLabel = currentPreset === "none" ? t("paper.none")
+                        : currentPreset === "white" ? t("paper.white")
+                        : currentPreset === "kraft" ? t("paper.kraft")
+                        : t("paper.custom");
+                      return (
+                        <div className="border rounded-lg overflow-hidden mb-2">
+                          <button onClick={() => toggleAcc("paperBg")} className="w-full flex items-center justify-between px-3 py-2 bg-amber-50 hover:bg-amber-100 transition-colors">
+                            <span className="text-[10px] font-semibold text-gray-700 flex items-center gap-1.5">
+                              {currentHex && (
+                                <span className="w-3 h-3 rounded-sm border border-gray-300" style={{ backgroundColor: currentHex }} />
+                              )}
+                              {t("paper")}
+                            </span>
+                            <span className="text-[9px] text-gray-400">{accOpen.paperBg ? "▲" : "▼"}</span>
+                          </button>
+                          {accOpen.paperBg && (
+                            <div className="p-2 space-y-2 border-t">
+                              {/* Current state */}
+                              <div className="text-[9px] text-gray-500">
+                                {t("paper.current")}: <span className="font-semibold text-gray-700">{presetLabel}</span>
+                                {paperBg && (paperBg as any)._cmykFill && (
+                                  <span className="ml-1 text-gray-500">— CMYK {((paperBg as any)._cmykFill as number[]).join("/")}</span>
+                                )}
+                                {paperBg && (paperBg as any)._spotFillName && (
+                                  <span className="ml-1 text-gray-500">— Spot: {(paperBg as any)._spotFillName}</span>
+                                )}
+                              </div>
+                              {/* Bleed margin (mm) — 한국 인쇄 표준 5mm */}
+                              <div className="flex items-center gap-2">
+                                <label className="text-[9px] text-gray-600 font-semibold whitespace-nowrap">{t("paper.bleed")}</label>
+                                <input type="number" min={0} max={50} step={1}
+                                  value={paperBleedMm}
+                                  onChange={e => {
+                                    const v = Math.max(0, Math.min(50, Number(e.target.value) || 0));
+                                    setPaperBleedMm(v);
+                                    // 이미 paper bg가 있으면 새 bleed로 재적용
+                                    if (paperBg && currentPreset !== "none") {
+                                      // 다음 tick에 적용 (state update 반영)
+                                      setTimeout(() => {
+                                        if (currentPreset === "white") applyPaperBg("white");
+                                        else if (currentPreset === "kraft") applyPaperBg("kraft");
+                                        else if (currentPreset === "custom") {
+                                          const hex = (paperBg as any).fill || "#FFFFFF";
+                                          applyPaperBg("custom", {
+                                            hex,
+                                            cmyk: (paperBg as any)._cmykFill,
+                                            spotName: (paperBg as any)._spotFillName,
+                                            spotPantone: (paperBg as any)._spotFillPantone,
+                                          });
+                                        }
+                                      }, 0);
+                                    }
+                                  }}
+                                  className="w-16 border rounded px-1.5 py-0.5 text-[10px]" />
+                                <span className="text-[8px] text-gray-400 leading-tight flex-1">{t("paper.bleedHint")}</span>
+                              </div>
+                              {/* 4 preset buttons */}
+                              <div className="grid grid-cols-4 gap-1">
+                                <button onClick={() => { setPaperCustomMode(false); removePaperBg(); }}
+                                  className={`text-[10px] px-2 py-1.5 border rounded transition-colors ${currentPreset === "none" ? "bg-gray-200 border-gray-400 font-semibold" : "bg-white hover:bg-gray-50"}`}>{t("paper.none")}</button>
+                                <button onClick={() => { setPaperCustomMode(false); applyPaperBg("white"); }}
+                                  className={`text-[10px] px-2 py-1.5 border rounded transition-colors ${currentPreset === "white" ? "bg-gray-200 border-gray-400 font-semibold" : "bg-white hover:bg-gray-50"}`}>{t("paper.white")}</button>
+                                <button onClick={() => { setPaperCustomMode(false); applyPaperBg("kraft"); }}
+                                  className={`text-[10px] px-2 py-1.5 border rounded transition-colors ${currentPreset === "kraft" ? "bg-amber-200 border-amber-400 font-semibold" : "bg-white hover:bg-gray-50"}`}>{t("paper.kraft")}</button>
+                                <button onClick={() => setPaperCustomMode(v => !v)}
+                                  className={`text-[10px] px-2 py-1.5 border rounded transition-colors ${currentPreset === "custom" || paperCustomMode ? "bg-blue-100 border-blue-400 font-semibold" : "bg-white hover:bg-gray-50"}`}>{t("paper.custom")}</button>
+                              </div>
+                              {/* Custom CMYK / Spot color input */}
+                              {paperCustomMode && (
+                                <div className="p-2 bg-gray-50 rounded border space-y-1.5">
+                                  <div className="text-[9px] text-gray-600 font-semibold">{t("paper.cmykPercent")}</div>
+                                  <div className="grid grid-cols-4 gap-1">
+                                    {(["C","M","Y","K"] as const).map((label, i) => (
+                                      <label key={label} className="text-[9px] text-gray-500">
+                                        {label}
+                                        <input type="number" min={0} max={100} value={paperCustomCmyk[i]}
+                                          onChange={e => {
+                                            const v = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                                            setPaperCustomCmyk(prev => { const next = [...prev] as [number,number,number,number]; next[i] = v; return next; });
+                                          }}
+                                          className="w-full border rounded px-1.5 py-0.5 text-[10px] mt-0.5" />
+                                      </label>
+                                    ))}
+                                  </div>
+                                  <div className="text-[9px] text-gray-600 font-semibold mt-1">{t("paper.spotName")}</div>
+                                  <input type="text" value={paperCustomSpotName}
+                                    onChange={e => setPaperCustomSpotName(e.target.value)}
+                                    placeholder={t("paper.spotPlaceholder")}
+                                    className="w-full border rounded px-2 py-1 text-[10px]" />
+                                  <button onClick={() => {
+                                    const hex = cmykToHex(paperCustomCmyk[0], paperCustomCmyk[1], paperCustomCmyk[2], paperCustomCmyk[3]);
+                                    applyPaperBg("custom", {
+                                      hex,
+                                      cmyk: paperCustomCmyk,
+                                      spotName: paperCustomSpotName.trim() || undefined,
+                                    });
+                                    setPaperCustomMode(false);
+                                  }}
+                                    className="w-full text-[10px] px-2 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded font-semibold transition-colors">{t("paper.apply")}</button>
+                                </div>
+                              )}
+                              <div className="text-[8px] text-gray-400 leading-tight">
+                                ※ {t("paper.note")}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
                     {/* ▶ Position & Size Accordion */}
                     <div className="border rounded-lg overflow-hidden">
                       <button onClick={() => toggleAcc("position")} className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors">
@@ -4387,7 +4673,7 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
                               <input type="number" value={Math.round(selProps.angle || 0)} onChange={e => updateProp("angle", Number(e.target.value))} className="w-full border rounded px-2 py-1 text-xs mt-0.5" />
                             </label>
                             <label className="text-[10px] text-gray-500">Opacity
-                              <input type="range" min={0} max={100} value={Math.round((selProps.opacity ?? 1) * 100)} onChange={e => updateProp("opacity", Number(e.target.value))} className="w-full mt-1" />
+                              <input type="range" min={0} max={100} value={Math.round(selProps.opacity ?? 100)} onChange={e => updateProp("opacity", Number(e.target.value))} className="w-full mt-1" />
                             </label>
                           </div>
                         </div>
