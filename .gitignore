@@ -67,3 +67,18 @@ backups/
 /current-*.txt
 /Untitled
 /_scratch/
+
+# AI-generated Python temp scripts + fixtures
+/fix_*.py
+/add_*.py
+/check_*.py
+/chk_*.py
+/find_*.py
+/show_*.py
+/debug_*.py
+/verify_*.py
+/gen_*.py
+/crop_*.py
+/extract_*.py
+/test_*.png
+/temp_*.png
