@@ -1750,7 +1750,17 @@ export default function PanelEditor({
 
     const handleSaveDesign = useCallback(async () => {
       const c=fcRef.current; if(!c) return;
-      const json=c.toJSON(["_isBgImage","_isSafeZone","_isGuideLine","_isGuideText","_isSizeLabel","_isBgPattern","selectable","evented","name"]);
+      // 가이드/세이프존 오브젝트를 일시 제거 후 저장 (사용자 디자인만 저장)
+      const guides: any[] = [];
+      c.getObjects().slice().forEach((o: any) => {
+        if (o._isSafeZone || o._isGuideLine || o._isGuideText || o._isSizeLabel || o._isBgPattern) {
+          guides.push(o); c.remove(o);
+        }
+      });
+      const json=c.toJSON(["_isBgImage","selectable","evented","name"]);
+      // 가이드 오브젝트 복원
+      guides.forEach(g => c.add(g));
+      c.renderAll();
       const b=new Blob([JSON.stringify(json,null,2)],{type:"application/json"});
       if (typeof (window as any).showSaveFilePicker === "function") {
         try { const h=await (window as any).showSaveFilePicker({suggestedName:panelId+"_design.json",types:[{description:"Design JSON",accept:{"application/json":[".json"]}}]}); const w=await h.createWritable(); await w.write(b); await w.close(); } catch(e:any){ if(e.name!=="AbortError") console.error(e); }
@@ -1759,7 +1769,49 @@ export default function PanelEditor({
 
   const handleLoadDesign = useCallback(() => {
     const inp=document.createElement('input'); inp.type='file'; inp.accept='.json';
-    inp.onchange = async (e:any) => { const file=e.target.files?.[0]; if(!file) return; const reader=new FileReader(); reader.onload=async()=>{ try { const json=JSON.parse(reader.result as string); const c=fcRef.current; if(!c) return; await c.loadFromJSON(json); c.getObjects().forEach((o:any)=>{if(o.name==='__bgImage__'){o._isBgImage=true;o.set({selectable:false,evented:false})}}); c.renderAll(); refreshLayers(); pushHistory(); } catch{alert('Load failed')} }; reader.readAsText(file); };
+    inp.onchange = async (e:any) => {
+      const file=e.target.files?.[0]; if(!file) return;
+      const reader=new FileReader();
+      reader.onload=async()=>{
+        try {
+          const json=JSON.parse(reader.result as string);
+          const c=fcRef.current; if(!c) return;
+          // JSON 로드 전: 가이드/세이프존/칼선 오브젝트 필터링
+          if (json && json.objects) {
+            json.objects = json.objects.filter((obj: any) => {
+              // 가이드/세이프존/사이즈라벨 제거
+              if (obj._isSafeZone || obj._isGuideLine || obj._isGuideText || obj._isSizeLabel || obj._isBgPattern) return false;
+              // 배경 이미지가 아닌데 selectable:false, evented:false인 오브젝트 제거 (칼선 SVG 등)
+              if (obj.selectable === false && obj.evented === false && !obj._isBgImage && obj.name !== '__bgImage__') return false;
+              // blob/object URL 이미지 제거 (복원 불가)
+              if (obj.type === 'image' && obj.src && (obj.src.startsWith('blob:') || obj.src.startsWith('object:'))) return false;
+              return true;
+            });
+          }
+          await c.loadFromJSON(json);
+          // 로드 후: 배경 이미지는 잠금, 나머지 사용자 오브젝트는 편집 가능 상태로 복원
+          c.getObjects().forEach((o: any) => {
+            if (o.name === '__bgImage__' || o._isBgImage) {
+              o._isBgImage = true;
+              o.set({ selectable: false, evented: false });
+            } else {
+              // 사용자 디자인 오브젝트: 편집 가능 상태 보장
+              if (o.selectable === false && !o._isSafeZone && !o._isGuideLine && !o._isGuideText && !o._isSizeLabel) {
+                o.set({ selectable: true, evented: true });
+              }
+            }
+          });
+          // 혹시 남아있는 가이드 오브젝트 제거
+          c.getObjects().slice().forEach((o: any) => {
+            if (o._isSafeZone || o._isGuideLine || o._isGuideText || o._isSizeLabel || o._isBgPattern) c.remove(o);
+          });
+          c.renderAll();
+          refreshLayers();
+          pushHistory();
+        } catch { alert('Load failed'); }
+      };
+      reader.readAsText(file);
+    };
     inp.click();
   }, [refreshLayers]);
  
