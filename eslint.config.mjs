@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Packive: archive + backup folders + scripts (utility batch files)
+    "_archive/**",
+    "backups/**",
+    "scripts/**",
+    "node_modules/**",
   ]),
 ]);
 
