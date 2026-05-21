@@ -4563,9 +4563,11 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
                               {/* Current state */}
                               <div className="text-[9px] text-gray-500">
                                 {t("paper.current")}: <span className="font-semibold text-gray-700">{presetLabel}</span>
-                                {paperBg && (paperBg as any)._cmykFill && (
-                                  <span className="ml-1 text-gray-500">— CMYK {((paperBg as any)._cmykFill as number[]).join("/")}</span>
-                                )}
+                                {paperBg && (paperBg as any)._cmykFill && (() => {
+                                  const cf = (paperBg as any)._cmykFill;
+                                  const txt = Array.isArray(cf) ? cf.join("/") : `${cf.c}/${cf.m}/${cf.y}/${cf.k}`;
+                                  return <span className="ml-1 text-gray-500">— CMYK {txt}</span>;
+                                })()}
                                 {paperBg && (paperBg as any)._spotFillName && (
                                   <span className="ml-1 text-gray-500">— Spot: {(paperBg as any)._spotFillName}</span>
                                 )}
