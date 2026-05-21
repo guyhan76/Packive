@@ -11,6 +11,8 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "backups/**",
+    "_archive/**",
+    "scripts/**",
     "lib/blender_mockup.py",
     "public/**",
     "node_modules/**",
