@@ -520,11 +520,12 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
     let spotName: string | undefined;
     let spotPantone: string | undefined;
     if (preset === "white") {
-      fillHex = PAPER_PRESETS.white.hex;
       cmyk = PAPER_PRESETS.white.cmyk;
+      // 화면 hex를 CMYK에서 파생(FOGRA39 ICC). CMYK가 원본, 화면색은 그 인쇄 미리보기.
+      fillHex = cmykToHex(cmyk[0], cmyk[1], cmyk[2], cmyk[3]);
     } else if (preset === "kraft") {
-      fillHex = PAPER_PRESETS.kraft.hex;
       cmyk = PAPER_PRESETS.kraft.cmyk;
+      fillHex = cmykToHex(cmyk[0], cmyk[1], cmyk[2], cmyk[3]);
     } else {
       if (!customOpts) return;
       fillHex = customOpts.hex;
@@ -573,7 +574,9 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
     (rect as any)._isPaperBackground = true;
     (rect as any)._isGuideLayer = true;
     (rect as any)._paperPreset = preset;
-    if (cmyk) (rect as any)._cmykFill = cmyk;
+    // _cmykFill 표준 형식은 객체 {c,m,y,k} (buildColorMap/PDF export가 객체로 소비).
+    // 배열을 그대로 저장하면 export 시 cmyk.c가 undefined→NaN→검정으로 출력됨.
+    if (cmyk) (rect as any)._cmykFill = { c: cmyk[0], m: cmyk[1], y: cmyk[2], k: cmyk[3] };
     if (spotName) (rect as any)._spotFillName = spotName;
     if (spotPantone) (rect as any)._spotFillPantone = spotPantone;
 

@@ -306,8 +306,9 @@ export async function exportCmykPdf(
     } else if (includeDieline) {
       // Include dieline: hide panel labels and non-guide layers keep as-is
       if (isPanelLabel) { obj.set({ visible: false }); }
-      // Dieline objects stay visible, other guide elements hidden
-      if (obj._isGuideLayer && !isDieLineObj) { obj.set({ visible: false }); }
+      // Dieline objects stay visible, other guide elements hidden.
+      // 종이배경(paperBg)은 _isGuideLayer지만 디자인 요소이므로 보존.
+      if (obj._isGuideLayer && !isDieLineObj && !obj._isPaperBackground) { obj.set({ visible: false }); }
     } else {
       // No dieline: hide all guide layer objects
       if (obj._isGuideLayer) { obj.set({ visible: false }); }

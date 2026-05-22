@@ -146,6 +146,40 @@ function getTextAttributes(el: Element): {
   };
 }
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+// 한 글자씩 path를 그려 g에 추가한다.
+// opentype.js 1.3.5는 일부 폰트(예: Inter)의 GSUB lookupType6/substFormat2를
+// getPath(문자열) 호출 시 처리하지 못하고 throw하지만, 한 글자씩 호출하면
+// ligature substitution 후보가 없어 안전하게 통과한다. CJK 경로 + 라틴 폴백 공용.
+function appendCharByChar(
+  font: any, doc: Document, g: Element,
+  text: string, startX: number, y: number, fontSize: number,
+  fill: string, stroke: string, strokeWidth: number
+): void {
+  let xOffset = startX;
+  for (const char of text) {
+    const charPath = font.getPath(char, xOffset, y, fontSize);
+    const charPathData = charPath.toPathData(2);
+    if (charPathData && charPathData !== "M0 0Z" && charPathData.length > 10) {
+      const pathEl = doc.createElementNS(SVG_NS, "path");
+      pathEl.setAttribute("d", charPathData);
+      pathEl.setAttribute("fill", fill);
+      if (stroke !== "none") {
+        pathEl.setAttribute("stroke", stroke);
+        pathEl.setAttribute("stroke-width", String(strokeWidth));
+      }
+      g.appendChild(pathEl);
+    }
+    const glyph = font.charToGlyph(char);
+    if (glyph && glyph.advanceWidth) {
+      xOffset += (glyph.advanceWidth / font.unitsPerEm) * fontSize;
+    } else {
+      xOffset += fontSize * 0.6; // fallback advance
+    }
+  }
+}
+
 export async function convertTextToOutlines(svgEl: Element): Promise<number> {
   const textElements = svgEl.querySelectorAll("text");
   console.log("[OUTLINE] Found", textElements.length, "text elements in SVG");
@@ -195,13 +229,15 @@ export async function convertTextToOutlines(svgEl: Element): Promise<number> {
 
         if (hasCJK) {
           // Render character by character for CJK to handle composite glyphs properly
-          let xOffset = tx;
-          for (const char of text) {
-            const charPath = font.getPath(char, xOffset, ty, tFontSize);
-            const charPathData = charPath.toPathData(2);
-            if (charPathData && charPathData !== "M0 0Z" && charPathData.length > 10) {
-              const pathEl = doc.createElementNS("http://www.w3.org/2000/svg", "path");
-              pathEl.setAttribute("d", charPathData);
+          appendCharByChar(font, doc, g, text, tx, ty, tFontSize, tFill, attrs.stroke, attrs.strokeWidth);
+        } else {
+          // Latin text - render all at once; fall back to char-by-char on GSUB errors
+          try {
+            const path = font.getPath(text, tx, ty, tFontSize);
+            const pathData = path.toPathData(2);
+            if (pathData && pathData.length > 5) {
+              const pathEl = doc.createElementNS(SVG_NS, "path");
+              pathEl.setAttribute("d", pathData);
               pathEl.setAttribute("fill", tFill);
               if (attrs.stroke !== "none") {
                 pathEl.setAttribute("stroke", attrs.stroke);
@@ -209,27 +245,9 @@ export async function convertTextToOutlines(svgEl: Element): Promise<number> {
               }
               g.appendChild(pathEl);
             }
-            // Advance x position based on glyph width
-            const glyph = font.charToGlyph(char);
-            if (glyph && glyph.advanceWidth) {
-              xOffset += (glyph.advanceWidth / font.unitsPerEm) * tFontSize;
-            } else {
-              xOffset += tFontSize * 0.6; // fallback advance
-            }
-          }
-        } else {
-          // Latin text - render all at once
-          const path = font.getPath(text, tx, ty, tFontSize);
-          const pathData = path.toPathData(2);
-          if (pathData && pathData.length > 5) {
-            const pathEl = doc.createElementNS("http://www.w3.org/2000/svg", "path");
-            pathEl.setAttribute("d", pathData);
-            pathEl.setAttribute("fill", tFill);
-            if (attrs.stroke !== "none") {
-              pathEl.setAttribute("stroke", attrs.stroke);
-              pathEl.setAttribute("stroke-width", String(attrs.strokeWidth));
-            }
-            g.appendChild(pathEl);
+          } catch (e: any) {
+            console.warn("[OUTLINE] getPath failed (GSUB unsupported?), char-by-char fallback:", e?.message);
+            appendCharByChar(font, doc, g, text, tx, ty, tFontSize, tFill, attrs.stroke, attrs.strokeWidth);
           }
         }
       }
@@ -240,13 +258,15 @@ export async function convertTextToOutlines(svgEl: Element): Promise<number> {
       const hasCJK = /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(text);
 
       if (hasCJK) {
-        let xOffset = attrs.x;
-        for (const char of text) {
-          const charPath = font.getPath(char, xOffset, attrs.y, attrs.fontSize);
-          const charPathData = charPath.toPathData(2);
-          if (charPathData && charPathData !== "M0 0Z" && charPathData.length > 10) {
-            const pathEl = doc.createElementNS("http://www.w3.org/2000/svg", "path");
-            pathEl.setAttribute("d", charPathData);
+        appendCharByChar(font, doc, g, text, attrs.x, attrs.y, attrs.fontSize, attrs.fill, attrs.stroke, attrs.strokeWidth);
+      } else {
+        // Latin text - render all at once; fall back to char-by-char on GSUB errors
+        try {
+          const path = font.getPath(text, attrs.x, attrs.y, attrs.fontSize);
+          const pathData = path.toPathData(2);
+          if (pathData && pathData.length > 5) {
+            const pathEl = doc.createElementNS(SVG_NS, "path");
+            pathEl.setAttribute("d", pathData);
             pathEl.setAttribute("fill", attrs.fill);
             if (attrs.stroke !== "none") {
               pathEl.setAttribute("stroke", attrs.stroke);
@@ -254,25 +274,9 @@ export async function convertTextToOutlines(svgEl: Element): Promise<number> {
             }
             g.appendChild(pathEl);
           }
-          const glyph = font.charToGlyph(char);
-          if (glyph && glyph.advanceWidth) {
-            xOffset += (glyph.advanceWidth / font.unitsPerEm) * attrs.fontSize;
-          } else {
-            xOffset += attrs.fontSize * 0.6;
-          }
-        }
-      } else {
-        const path = font.getPath(text, attrs.x, attrs.y, attrs.fontSize);
-        const pathData = path.toPathData(2);
-        if (pathData && pathData.length > 5) {
-          const pathEl = doc.createElementNS("http://www.w3.org/2000/svg", "path");
-          pathEl.setAttribute("d", pathData);
-          pathEl.setAttribute("fill", attrs.fill);
-          if (attrs.stroke !== "none") {
-            pathEl.setAttribute("stroke", attrs.stroke);
-            pathEl.setAttribute("stroke-width", String(attrs.strokeWidth));
-          }
-          g.appendChild(pathEl);
+        } catch (e: any) {
+          console.warn("[OUTLINE] getPath failed (GSUB unsupported?), char-by-char fallback:", e?.message);
+          appendCharByChar(font, doc, g, text, attrs.x, attrs.y, attrs.fontSize, attrs.fill, attrs.stroke, attrs.strokeWidth);
         }
       }
     }
