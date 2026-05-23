@@ -89,6 +89,64 @@ function hsvToHex(h:number,s:number,v:number): string {
   return "#"+[r+m,g+m,b+m].map(v=>Math.max(0,Math.min(255,Math.round(v*255))).toString(16).padStart(2,"0")).join("");
 }
 
+// ─── CMYK Soft Proof (인쇄색 미리보기) 헬퍼 ───
+// 디자인 객체의 표시색을 FOGRA39 인쇄색(sRGB→CMYK→sRGB round-trip)으로 바꿔
+// 캔버스가 PDF 출력색과 일치하도록 한다. 원본색은 _origFill/_origStroke에 보존.
+function _spHexToRgb(s: string): { r: number; g: number; b: number } | null {
+  let m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(s);
+  if (m) return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) };
+  m = /rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i.exec(s);
+  if (m) return { r: +m[1], g: +m[2], b: +m[3] };
+  return null;
+}
+function _proofHex(color: string): string | null {
+  const rgb = _spHexToRgb(color);
+  if (!rgb) return null;
+  const [c, m, y, k] = srgbToCmyk(rgb.r, rgb.g, rgb.b);
+  const [r, g, b] = cmykToSrgb(c, m, y, k);
+  return "#" + [r, g, b].map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("");
+}
+// 칼선·접선·가이드·패널라벨·종이배경은 인쇄 가이드/이미 인쇄색이므로 제외.
+function _isSoftProofTarget(o: any): boolean {
+  return !o._isDieLine && !o._isFoldLine && !o._isGuideLayer && !o._isPanelLabel && !o._isPaperBackground;
+}
+// walker를 모듈 스코프로 분리해 캔버스 전체용/단일 객체용에서 동일 로직 재사용.
+function _walkApplyProof(o: any): void {
+  if (!_isSoftProofTarget(o)) return;             // 칼선/가이드 그룹은 자식까지 통째 skip
+  if (o._objects) o._objects.forEach(_walkApplyProof);  // 디자인 그룹(표 등)은 자식 재귀
+  if (typeof o.fill === "string" && o.fill) {
+    const ph = _proofHex(o.fill);
+    if (ph && ph.toLowerCase() !== o.fill.toLowerCase()) { o._origFill = o.fill; o.set({ fill: ph }); }
+  }
+  if (typeof o.stroke === "string" && o.stroke) {
+    const ph = _proofHex(o.stroke);
+    if (ph && ph.toLowerCase() !== o.stroke.toLowerCase()) { o._origStroke = o.stroke; o.set({ stroke: ph }); }
+  }
+}
+function _walkClearProof(o: any): void {
+  if (o._objects) o._objects.forEach(_walkClearProof);
+  if (o._origFill !== undefined) { o.set({ fill: o._origFill }); delete o._origFill; }
+  if (o._origStroke !== undefined) { o.set({ stroke: o._origStroke }); delete o._origStroke; }
+}
+function applySoftProofColors(c: any): void {
+  if (!isReverseLUTReady()) return;
+  c.getObjects().forEach(_walkApplyProof);
+  c.requestRenderAll();
+}
+function clearSoftProofColors(c: any): void {
+  c.getObjects().forEach(_walkClearProof);
+  c.requestRenderAll();
+}
+// 단일 객체(active object 등) 단위 — updateProp 같은 좁은 범위 가드용.
+// 캔버스 전체 순회 대신 그 객체만 처리 → 색 변경 핸들러 진입 시 비용 최소.
+function applySoftProofToObject(o: any): void {
+  if (!isReverseLUTReady()) return;
+  _walkApplyProof(o);
+}
+function clearSoftProofFromObject(o: any): void {
+  _walkClearProof(o);
+}
+
 export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: UnifiedEditorProps) {
   const { t, locale } = useI18n();
   
@@ -233,6 +291,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
  const [gradDirection, setGradDirection] = useState<"r"|"br"|"b"|"bl"|"l"|"tl"|"t"|"tr"|"radial">("r");
 
   const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null);
+  const [softProof, setSoftProof] = useState(false);  // CMYK Soft Proof (인쇄색 미리보기) 토글
   const [showPreflight, setShowPreflight] = useState(false);
   // ─── AI Panel State ───
   const [aiTab, setAiTab] = useState<"generate"|"vectorize"|"removebg"|"credits">("generate");
@@ -605,6 +664,21 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
     }
   }, [findPaperBg, pushHistory]);
 
+  // CMYK Soft Proof 토글 — 표시 전용(원본색 보존, pushHistory 호출 안 함).
+  // export/save는 별도 가드로 항상 원본색 기준 동작 → 이중 변환 방지.
+  const toggleSoftProof = useCallback(() => {
+    const c = fcRef.current; if (!c) return;
+    setSoftProof(prev => {
+      if (!prev) {
+        if (!isReverseLUTReady()) { alert("FOGRA39 프로파일 로딩 중입니다. 잠시 후 다시 시도해 주세요."); return prev; }
+        applySoftProofColors(c);
+        return true;
+      }
+      clearSoftProofColors(c);
+      return false;
+    });
+  }, []);
+
   const restoreCustomProps = (canvas: any, snapshot: any) => {
     const objs = canvas.getObjects();
     const jsonObjs = snapshot.objects || [];
@@ -675,6 +749,9 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
 
   const fileSave = useCallback(() => {
     const c = fcRef.current; if (!c) return;
+    // Soft Proof가 켜져 있으면 원본색으로 저장(인쇄색이 파일에 박히는 것 방지).
+    const _proofWasOn = softProof;
+    if (_proofWasOn) clearSoftProofColors(c);
     try {
       // Fabric JSON + Packive 메타데이터 (dielineDims, model info 등) 결합
       const fabricJson = c.toJSON(JSON_PROPS);
@@ -704,7 +781,8 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
       setTimeout(() => setSaveStatus(null), 2000);
       console.log("[SAVE] File saved:", name, (json.length/1024).toFixed(1), "KB");
     } catch (e: any) { alert(t("alert.saveFailed").replace("{error}", e?.message || String(e))); }
-  }, [dielineDims, dielineModelInfo, dielineSizes, dielineFileName, t]);
+    if (_proofWasOn) applySoftProofColors(c);
+  }, [dielineDims, dielineModelInfo, dielineSizes, dielineFileName, t, softProof]);
 
   const fileLoadRef = useRef<HTMLInputElement>(null);
 
@@ -2227,6 +2305,9 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
   const handleExport = useCallback(async (type: "png" | "pdf" | "dieline" | "boxFaces") => {
     const c = fcRef.current; if (!c) return;
     setExporting(type);
+    // Soft Proof가 켜져 있으면 원본색으로 복원 후 출력(이중 CMYK 변환 방지). 끝나면 재적용.
+    const _proofWasOn = softProof;
+    if (_proofWasOn) clearSoftProofColors(c);
     try {
       if (type === "png") {
         const pureGuides = c.getObjects().filter((o: any) => o._isGuideLayer && !o._isDieLine);
@@ -2416,8 +2497,9 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
         }
       }
     } catch (e: any) { if (e?.message && !["no dieline", "no dieline group", "no faces extracted", "not enough vert folds"].includes(e.message)) alert("Export failed: " + e.message); }
+    if (_proofWasOn) applySoftProofColors(c);
     setExporting(null); setShowExport(false);
-  }, [dielineDims])
+  }, [dielineDims, softProof])
 
   // ─── 3D Mockup (Blender) — 사용자 디자인을 R3F 박스에 매핑 ───
   // 6면 추출 → POST /api/generate-3d-mockup → 새 탭 (design hash 전달, fold 슬라이더 on-demand 작동)
@@ -2854,6 +2936,11 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
   const updateProp = useCallback((key: string, value: any) => {
     const c = fcRef.current; if (!c) return;
     const obj = c.getActiveObject(); if (!obj) return;
+    // Soft Proof 가드 — 색 키일 때만 그 객체의 Proof를 잠시 풀고 변경 후 재적용.
+    // _origFill/_origStroke가 항상 "사용자가 의도한 진짜 색"을 가리키게 유지.
+    const _isColorKey = key === "fill" || key === "stroke" || key === "fillCmyk" || key === "strokeCmyk" || key === "spotFill" || key === "spotStroke";
+    const _proofGuard = softProof && _isColorKey;
+    if (_proofGuard) clearSoftProofFromObject(obj);
     if (key === "opacity") obj.set({ opacity: value / 100 });
     else if (key === "fontSize") obj.set({ fontSize: Number(value) });
     else if (key === "fontFamily") {
@@ -2929,10 +3016,11 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
     else if (key === "spotStroke") { const s = value as {name:string;hex:string;cmyk?:[number,number,number,number]}; obj.set({ stroke: s.hex }); (obj as any)._spotStroke = true; (obj as any)._spotStrokeName = s.name; if (s.cmyk) { (obj as any)._cmykStroke = {c:s.cmyk[0],m:s.cmyk[1],y:s.cmyk[2],k:s.cmyk[3]}; } if (!obj.strokeWidth || obj.strokeWidth < 0.5) obj.set({ strokeWidth: 1 }); }
     else if (key === "clearSpotFill") { delete (obj as any)._spotFillName; delete (obj as any)._spotFillPantone; }
     else if (key === "clearSpotStroke") { delete (obj as any)._spotStrokeName; delete (obj as any)._spotStrokePantone; }
+    if (_proofGuard) applySoftProofToObject(obj);
     c.requestRenderAll();
     setSelProps(getSelectedProps());
     pushHistory();
-  }, [getSelectedProps, pushHistory]);
+  }, [getSelectedProps, pushHistory, softProof]);
 
   // ─── Google Fonts (subset) ───
   const FONTS = useMemo(() => [
@@ -4485,6 +4573,9 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
                   setShowPreflight(true);
                 }} className="px-1.5 py-0.5 rounded text-[10px] font-medium text-gray-400 hover:text-orange-600 hover:bg-orange-50 transition-colors">
                   Pre-flight
+                </button>
+                <button onClick={toggleSoftProof} title="CMYK 인쇄색 미리보기 (Soft Proof)" className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${softProof ? "bg-blue-100 text-blue-700" : "text-gray-400 hover:text-gray-600"}`}>
+                  {softProof ? "CMYK Proof ON" : "CMYK Proof"}
                 </button>
                 <span>Objects: {layersList.length}</span>
                 {selectedPanel && <span className="text-[#4fc3f7]">Panel: {selectedPanel}</span>}
