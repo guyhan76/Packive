@@ -332,20 +332,22 @@ export async function exportCmykPdf(
         tempCanvas.height = natH;
         const ctx = tempCanvas.getContext("2d");
         if (!ctx) continue;
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(0, 0, natW, natH);
+        // 투명 PNG의 알파를 보존해야 함. 흰 배경 합성 시 투명 영역이
+        // 흰 사각형(바운딩박스)으로 박혀버림 → fillRect 제거.
         ctx.drawImage(el as HTMLImageElement, 0, 0);
         // CMYK simulation: convert each pixel RGB->CMYK->RGB via FOGRA39
         if (cmykEngine?.isReverseLUTReady()) {
           const imgData = ctx.getImageData(0, 0, natW, natH);
           const px = imgData.data;
           for (let pi = 0; pi < px.length; pi += 4) {
+            // 투명 픽셀은 변환 생략(RGB 0,0,0이 일부 렌더러에서 검정으로 새는 것 방지)
+            if (px[pi + 3] === 0) continue;
             const [c, m, y, k] = cmykEngine.srgbToCmyk(px[pi], px[pi+1], px[pi+2]);
             const [nr, ng, nb] = cmykEngine.cmykToSrgb(c, m, y, k);
             px[pi] = nr; px[pi+1] = ng; px[pi+2] = nb;
           }
           ctx.putImageData(imgData, 0, 0);
-          console.log("[PDF] Image CMYK-simulated: " + natW + "x" + natH);
+          console.log("[PDF] Image CMYK-simulated (alpha preserved): " + natW + "x" + natH);
         }
         // src는 HTMLImageElement에만 존재. canvas는 undefined로 처리.
         origSrcs.set(imgObj, (el instanceof HTMLImageElement ? el.src : "") || "");
