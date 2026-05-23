@@ -259,6 +259,60 @@ function _bytesToLatin1(bytes: Uint8Array): string {
   return s;
 }
 
+// PDF 내 stream 데이터 영역들 — 객체 헤더 스캔 시 stream 안의 우연 매치를 제외하기 위해.
+// 정상 stream 시작 = dict 닫는 ">>" 다음 whitespace + "stream\n" 또는 "stream\r\n".
+// 단순화: 모든 "stream\n"/"stream\r" 시작점 + 다음 "endstream" 끝점.
+function _findStreamRegions(pdf: string): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  let pos = 0;
+  while (true) {
+    let s = pdf.indexOf("stream", pos);
+    if (s < 0) break;
+    // "endstream"의 일부면 skip
+    if (s >= 3 && pdf.substring(s - 3, s) === "end") { pos = s + 6; continue; }
+    // stream 키워드 다음 EOL
+    let dataStart = s + 6;
+    if (pdf[dataStart] === "\r") dataStart++;
+    if (pdf[dataStart] === "\n") dataStart++;
+    // 앞쪽 검증: ">>"가 whitespace 거쳐 있어야 정상 stream
+    let p = s - 1;
+    while (p > 0 && (pdf[p] === " " || pdf[p] === "\n" || pdf[p] === "\r" || pdf[p] === "\t")) p--;
+    if (p < 1 || pdf[p] !== ">" || pdf[p - 1] !== ">") { pos = s + 6; continue; }
+    const e = pdf.indexOf("endstream", dataStart);
+    if (e < 0) break;
+    out.push([dataStart, e]);
+    pos = e + 9;
+  }
+  return out;
+}
+
+// PDF 전체에서 모든 `<N> <G> obj` 헤더의 실제 byte offset 수집. stream 영역 안의 우연 매치는 제외.
+// 옛 xref 안의 stale offset들을 무시하고 정확한 위치 재발견 — 이게 옵션 A의 핵심.
+function _scanAllObjects(pdf: string): Map<number, { gen: number; offset: number }> {
+  const streams = _findStreamRegions(pdf);
+  const inStream = (idx: number): boolean => {
+    for (let i = 0; i < streams.length; i++) {
+      if (idx >= streams[i][0] && idx < streams[i][1]) return true;
+    }
+    return false;
+  };
+  const result = new Map<number, { gen: number; offset: number }>();
+  // 줄 시작의 "<N> <G> obj\b" — PDF 본문에서 객체 헤더는 줄 시작에 위치(jsPDF 출력 형식).
+  const re = /(?:^|\r\n|\n|\r)(\d+)\s+(\d+)\s+obj\b/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(pdf)) !== null) {
+    // m.index가 가리키는 newline 다음 위치 = 헤더 시작
+    let headerStart = m.index;
+    while (headerStart < pdf.length && (pdf[headerStart] === "\r" || pdf[headerStart] === "\n")) headerStart++;
+    if (inStream(headerStart)) continue;
+    const num = parseInt(m[1], 10);
+    const gen = parseInt(m[2], 10);
+    // 같은 N의 객체가 PDF에 여러 번 있으면 마지막을 채택 (원본 PDF에선 보통 없지만 incremental 누적은 가능)
+    result.set(num, { gen, offset: headerStart });
+  }
+  return result;
+}
+
 async function embedIccOutputIntent(rawPdf: string): Promise<string> {
   try {
     // ─── ① ICC bytes 확보 ───
@@ -268,51 +322,35 @@ async function embedIccOutputIntent(rawPdf: string): Promise<string> {
       return rawPdf;
     }
 
-    // ─── ② 안전장치 A: xref 형식 감지 ───
-    // 마지막 startxref → 원본 xref offset 추출 → 그 위치에 "xref\n" 키워드 있어야 traditional.
-    // 없으면 cross-reference stream(/Type /XRef) 형식이므로 abort.
-    const lastStartxrefIdx = rawPdf.lastIndexOf("startxref");
-    if (lastStartxrefIdx < 0) {
-      console.warn("[PDF/ICC] no startxref found, abort");
-      return rawPdf;
-    }
-    const startxrefMatch = rawPdf.substring(lastStartxrefIdx).match(/startxref\s+(\d+)\s+%%EOF/);
-    if (!startxrefMatch) {
-      console.warn("[PDF/ICC] startxref offset parse failed, abort");
-      return rawPdf;
-    }
-    const declaredXrefOffset = parseInt(startxrefMatch[1], 10);
-    let prevXrefOffset = declaredXrefOffset;
-    const declaredProbe = rawPdf.substring(declaredXrefOffset, declaredXrefOffset + 5);
-    if (declaredProbe !== "xref\n" && declaredProbe !== "xref\r") {
-      // jsPDF가 만든 PDF + replacePdfColorsInString의 RGB→CMYK 치환으로 PDF byte 수가 증가했지만
-      // jsPDF의 startxref offset은 치환 전 기준이라 어긋남. PDF spec 위반이지만 reader는 관용적으로 처리.
-      // 우리는 실제 xref 키워드 위치를 PDF 끝부터 역방향 검색해 사용. /Prev 포인터에도 정확한 값 박음.
-      // cross-reference stream(/Type /XRef)이면 단독 "xref\n" 키워드가 없으므로 abort.
-      let foundXref = -1;
+    // ─── ② 안전장치 A: cross-reference stream 배제 ───
+    // 옛 xref entries는 stale일 수 있어 사용 안 함(replacePdfColorsInString이 PDF byte를 변경).
+    // 우리는 PDF 전체 객체 스캔으로 실제 offset을 재발견(_scanAllObjects).
+    // 단 cross-reference stream(/Type /XRef) 형식의 PDF는 객체 헤더 패턴이 달라 처리 불가 → abort.
+    // 판정: PDF 안에 단독 "xref\n" 키워드(startxref 제외)가 하나라도 있어야 traditional.
+    let hasStandaloneXref = false;
+    {
       let searchFrom = rawPdf.length;
       while (true) {
         const idx = rawPdf.lastIndexOf("xref\n", searchFrom);
         if (idx < 0) break;
-        // "startxref\n"이 아닌 단독 "xref\n"만 채택
-        if (idx < 5 || rawPdf.substring(idx - 5, idx) !== "start") { foundXref = idx; break; }
+        if (idx < 5 || rawPdf.substring(idx - 5, idx) !== "start") { hasStandaloneXref = true; break; }
         searchFrom = idx - 1;
       }
-      if (foundXref < 0) {
-        console.warn("[PDF/ICC] no standalone 'xref\\n' keyword in PDF (likely cross-reference stream), abort");
-        return rawPdf;
-      }
-      console.warn("[PDF/ICC] declared startxref " + declaredXrefOffset
-        + " stale (got '" + declaredProbe.replace(/[\r\n]/g, "\\n")
-        + "'); using actual xref at offset " + foundXref
-        + " (byte drift " + (foundXref - declaredXrefOffset) + " — likely from RGB→CMYK byte expansion in replacePdfColorsInString)");
-      prevXrefOffset = foundXref;
+    }
+    if (!hasStandaloneXref) {
+      console.warn("[PDF/ICC] no standalone 'xref\\n' keyword (likely cross-reference stream), abort");
+      return rawPdf;
     }
 
     // ─── ③ trailer 파싱 — /Root, /Size 추출 ───
+    const lastStartxrefIdx = rawPdf.lastIndexOf("startxref");
+    if (lastStartxrefIdx < 0) {
+      console.warn("[PDF/ICC] no startxref keyword, abort");
+      return rawPdf;
+    }
     const trailerIdx = rawPdf.lastIndexOf("trailer", lastStartxrefIdx);
-    if (trailerIdx < 0 || trailerIdx < prevXrefOffset) {
-      console.warn("[PDF/ICC] trailer not found between xref and startxref, abort");
+    if (trailerIdx < 0) {
+      console.warn("[PDF/ICC] trailer not found before startxref, abort");
       return rawPdf;
     }
     const trailerSection = rawPdf.substring(trailerIdx, lastStartxrefIdx);
@@ -331,7 +369,6 @@ async function embedIccOutputIntent(rawPdf: string): Promise<string> {
     const prevSize = parseInt(sizeMatch[1], 10);
 
     // ─── ④ Catalog 객체 본문 추출 ───
-    // `<catNum> <catGen> obj` 헤더 찾기 → `<<`부터 짝맞춰 `>>`까지가 dict 본문.
     const catHeader = catNum + " " + catGen + " obj";
     const catHeaderIdx = rawPdf.indexOf(catHeader);
     if (catHeaderIdx < 0) {
@@ -343,25 +380,22 @@ async function embedIccOutputIntent(rawPdf: string): Promise<string> {
       console.warn("[PDF/ICC] catalog dict '<<' not found near header, abort");
       return rawPdf;
     }
-    // dict 깊이 추적해 outer dict 닫는 `>>` 찾기 (중첩 dict 안전).
     let depth = 0, catDictEnd = -1;
     for (let i = catDictStart; i < rawPdf.length - 1; i++) {
       if (rawPdf[i] === "<" && rawPdf[i + 1] === "<") { depth++; i++; }
       else if (rawPdf[i] === ">" && rawPdf[i + 1] === ">") {
         depth--; i++;
-        if (depth === 0) { catDictEnd = i + 1; break; }   // catDictEnd = `>>` 닫힘 직후
+        if (depth === 0) { catDictEnd = i + 1; break; }
       }
     }
     if (catDictEnd < 0) {
       console.warn("[PDF/ICC] catalog dict close '>>' not found, abort");
       return rawPdf;
     }
-    let catBody = rawPdf.substring(catDictStart, catDictEnd);    // "<< ... >>"
-    // 기존 /OutputIntents 키 제거(있다면 — 예: 이전 stub OutputIntent).
+    let catBody = rawPdf.substring(catDictStart, catDictEnd);
     catBody = catBody.replace(/\/OutputIntents\s*\[[^\]]*\]/g, "");
 
     // ─── ⑤ 새 객체 번호 할당 ───
-    // PDF /Size = 사용된 객체 번호 최대 + 1. 즉 가용 다음 번호 = prevSize.
     const iccObjNum = prevSize;
     const oiObjNum  = prevSize + 1;
     const newSize   = prevSize + 2;
@@ -370,7 +404,7 @@ async function embedIccOutputIntent(rawPdf: string): Promise<string> {
       return rawPdf;
     }
 
-    // ─── ⑥ Catalog override 본문 — outer `>>` 직전에 /OutputIntents 키 삽입 ───
+    // ─── ⑥ Catalog override 본문 ───
     const newCatBody = catBody.replace(/>>\s*$/, " /OutputIntents [" + oiObjNum + " 0 R] >>");
     if (newCatBody === catBody) {
       console.warn("[PDF/ICC] catalog body update failed (regex mismatch), abort");
@@ -388,7 +422,7 @@ async function embedIccOutputIntent(rawPdf: string): Promise<string> {
       "endstream\n" +
       "endobj\n";
 
-    // ─── ⑧ OutputIntent dict 객체 (PDF/X-4: /S /GTS_PDFX + /DestOutputProfile) ───
+    // ─── ⑧ OutputIntent dict 객체 ───
     const oiObjText =
       oiObjNum + " 0 obj\n" +
       "<< /Type /OutputIntent /S /GTS_PDFX " +
@@ -399,39 +433,64 @@ async function embedIccOutputIntent(rawPdf: string): Promise<string> {
       "/DestOutputProfile " + iccObjNum + " 0 R >>\n" +
       "endobj\n";
 
-    // ─── ⑨ Catalog override 객체 (같은 번호로 재선언 — incremental update의 핵심) ───
+    // ─── ⑨ Catalog override 객체 ───
     const catOverrideText =
       catNum + " " + catGen + " obj\n" +
       newCatBody + "\n" +
       "endobj\n";
 
-    // ─── ⑩ Byte offset 계산 — Latin-1 매핑이라 .length가 byte 수와 일치 ───
+    // ─── ⑩ 옛 xref 무시, PDF 전체 객체 스캔으로 실제 byte offset 수집 (옵션 A 핵심) ───
+    // 옛 xref entries는 jsPDF + replacePdfColorsInString 조합 때문에 stale(byte 어긋남).
+    // 새 xref에 모든 객체(원본 N개 + 새 2개 + Catalog override)를 정확한 offset으로 등록 → /Prev 제거.
+    const scanned = _scanAllObjects(rawPdf);
+    if (scanned.size < 1) {
+      console.warn("[PDF/ICC] object scan found 0 objects, abort");
+      return rawPdf;
+    }
+    if (!scanned.has(catNum)) {
+      console.warn("[PDF/ICC] scanned objects missing catalog #" + catNum + ", abort");
+      return rawPdf;
+    }
+
+    // ─── ⑪ 새 객체들의 byte offset 계산 ───
     let prefix = rawPdf;
     if (!prefix.endsWith("\n")) prefix += "\n";
-    const iccOffset    = prefix.length;
-    const oiOffset     = iccOffset + iccObjText.length;
-    const catOffset    = oiOffset  + oiObjText.length;
+    const iccOffset     = prefix.length;
+    const oiOffset      = iccOffset + iccObjText.length;
+    const catOffset     = oiOffset  + oiObjText.length;
     const newXrefOffset = catOffset + catOverrideText.length;
 
-    // ─── ⑪ 새 xref subsection들 — 객체 번호 오름차순 정렬 ───
-    // entry 형식: "%010d %05d <n|f> \n" (정확히 20 byte, PDF spec §7.5.4)
+    // ─── ⑫ 통합 객체 맵 — 스캔된 원본 + 새 객체. Catalog는 override offset으로 덮어씀 ───
+    const allObjs = new Map<number, { gen: number; offset: number }>(scanned);
+    allObjs.set(iccObjNum, { gen: 0, offset: iccOffset });
+    allObjs.set(oiObjNum,  { gen: 0, offset: oiOffset });
+    allObjs.set(catNum,    { gen: catGen, offset: catOffset });
+
+    // ─── ⑬ 새 xref — 단일 subsection `0 newSize`로 모든 객체 등록 (PDF spec §7.5.4 §7.5.6) ───
+    // entry 형식 정확히 20 byte: "%010d %05d <n|f> \n"
     const xrefEntry = (off: number, gen: number, type: "n" | "f"): string =>
       off.toString().padStart(10, "0") + " " + gen.toString().padStart(5, "0") + " " + type + " \n";
-    // Catalog는 보통 작은 번호(1·2), ICC/OI는 prevSize~ → 두 subsection으로 분리.
-    const xrefText =
-      "xref\n" +
-      catNum + " 1\n" + xrefEntry(catOffset, catGen, "n") +
-      iccObjNum + " 2\n" + xrefEntry(iccOffset, 0, "n") + xrefEntry(oiOffset, 0, "n");
+    let xrefText = "xref\n0 " + newSize + "\n";
+    let registered = 0, missing = 0;
+    for (let i = 0; i < newSize; i++) {
+      if (i === 0) {
+        // object 0은 항상 head of free list, gen 65535
+        xrefText += "0000000000 65535 f \n";
+        continue;
+      }
+      const e = allObjs.get(i);
+      if (e) { xrefText += xrefEntry(e.offset, e.gen, "n"); registered++; }
+      else   { xrefText += "0000000000 00000 f \n"; missing++; }
+    }
 
-    // ─── ⑫ 새 trailer — /Prev로 원본 xref 체인 ───
+    // ─── ⑭ 새 trailer — /Prev 없음(옛 xref 완전 무시) ───
     const trailerText =
       "trailer\n" +
       "<< /Size " + newSize +
       " /Root " + catNum + " " + catGen + " R" +
-      " /Prev " + prevXrefOffset +
       " >>\n";
 
-    // ─── ⑬ 결과 조립 ───
+    // ─── ⑮ 결과 조립 ───
     const result =
       prefix +
       iccObjText +
@@ -442,7 +501,7 @@ async function embedIccOutputIntent(rawPdf: string): Promise<string> {
       "startxref\n" + newXrefOffset + "\n" +
       "%%EOF\n";
 
-    // ─── ⑭ 안전장치 B: 결과 자체 검증 ───
+    // ─── ⑯ 안전장치 B: 결과 자체 검증 ───
     // B1. %%EOF 종료
     if (!result.trimEnd().endsWith("%%EOF")) {
       console.warn("[PDF/ICC] B1 fail: result not ending with %%EOF, abort");
@@ -456,12 +515,12 @@ async function embedIccOutputIntent(rawPdf: string): Promise<string> {
         + ", got " + (tailMatch ? tailMatch[1] : "null") + "), abort");
       return rawPdf;
     }
-    // B2b. newXrefOffset 위치에 정확히 "xref\n" 키워드 존재
+    // B2b. newXrefOffset 위치에 정확히 "xref\n" 존재
     if (result.substring(newXrefOffset, newXrefOffset + 5) !== "xref\n") {
       console.warn("[PDF/ICC] B2b fail: 'xref\\n' not at offset " + newXrefOffset + ", abort");
       return rawPdf;
     }
-    // B3. ICC stream의 /Length가 실제 byte 수와 일치
+    // B3. ICC stream /Length 일치
     const iccObjAt = result.indexOf(iccObjNum + " 0 obj");
     if (iccObjAt < 0) {
       console.warn("[PDF/ICC] B3 fail: ICC obj header not found in result, abort");
@@ -473,11 +532,35 @@ async function embedIccOutputIntent(rawPdf: string): Promise<string> {
         + ", got " + (iccLenMatch ? iccLenMatch[1] : "null") + "), abort");
       return rawPdf;
     }
+    // B4. 샘플링 검증 — 스캔된 객체 일부의 entry offset 위치에 실제 헤더 있는지.
+    //     "object 1 entry offset이 가리키는 byte에 진짜 '1 0 obj'가 있나?" — stale 방지 핵심.
+    const sampleNums: number[] = [];
+    const usedNums = Array.from(allObjs.keys()).filter(n => n > 0).sort((a, b) => a - b);
+    if (usedNums.length > 0) {
+      sampleNums.push(usedNums[0]);                                    // 첫 객체
+      if (usedNums.length > 2) sampleNums.push(usedNums[Math.floor(usedNums.length / 2)]);  // 중간
+      sampleNums.push(usedNums[usedNums.length - 1]);                  // 마지막(보통 catNum 또는 oiObjNum)
+      sampleNums.push(iccObjNum);                                      // 새 ICC
+      sampleNums.push(oiObjNum);                                       // 새 OI
+      sampleNums.push(catNum);                                         // Catalog override
+    }
+    for (const n of sampleNums) {
+      const e = allObjs.get(n);
+      if (!e) continue;
+      const expectedHeader = n + " " + e.gen + " obj";
+      const actualAt = result.substring(e.offset, e.offset + expectedHeader.length);
+      if (actualAt !== expectedHeader) {
+        console.warn("[PDF/ICC] B4 fail: object #" + n + " header mismatch at offset " + e.offset
+          + " (expected '" + expectedHeader + "', got '" + actualAt + "'), abort");
+        return rawPdf;
+      }
+    }
 
-    console.log("[PDF/ICC] OutputIntent embedded:",
+    console.log("[PDF/ICC] OutputIntent embedded (full xref rebuild):",
       "icc=" + iccLen + "B,",
       "objs=#" + iccObjNum + ",#" + oiObjNum + ",cat=#" + catNum + "(override),",
-      "prevXref=" + prevXrefOffset + " newXref=" + newXrefOffset + ",",
+      "scanned=" + scanned.size + " orig objs,",
+      "newXref=" + newXrefOffset + " /Size=" + newSize + " registered=" + registered + " missing(free)=" + missing + ",",
       "+" + (result.length - rawPdf.length) + " bytes");
     return result;
   } catch (e) {
