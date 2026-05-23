@@ -478,8 +478,6 @@
   "alert.saveFailed": "Save failed: {error}",
   "alert.no3dSession": "No previous 3D mockup found. Generate one first.",
   "btn.reopen3d": "Reopen Last 3D",
-  "shortcut.statusActive": "Shortcuts ON",
-  "shortcut.statusInactive": "Shortcuts OFF — click to re-attach",
   "paper": "Paper",
   "paper.current": "Current",
   "paper.none": "None",

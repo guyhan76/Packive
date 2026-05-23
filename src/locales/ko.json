@@ -478,8 +478,6 @@
   "alert.saveFailed": "저장 실패: {error}",
   "alert.no3dSession": "이전 3D 목업이 없습니다. 먼저 생성해 주세요.",
   "btn.reopen3d": "최근 3D 다시 열기",
-  "shortcut.statusActive": "단축키 ON",
-  "shortcut.statusInactive": "단축키 OFF — 클릭하여 재부착",
   "paper": "용지",
   "paper.current": "현재",
   "paper.none": "없음",

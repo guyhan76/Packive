@@ -478,8 +478,6 @@
   "alert.saveFailed": "保存失敗: {error}",
   "alert.no3dSession": "以前の3Dモックアップがありません。先に生成してください。",
   "btn.reopen3d": "最近の3Dを再度開く",
-  "shortcut.statusActive": "ショートカットON",
-  "shortcut.statusInactive": "ショートカットOFF — クリックで再接続",
   "paper": "用紙",
   "paper.current": "現在",
   "paper.none": "なし",

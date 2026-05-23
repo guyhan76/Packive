@@ -1798,13 +1798,11 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
   const shortcutHandlersRef = useRef<{ undo: any; redo: any; fileSave: any; pushHistory: any; refreshLayers: any; drawMode: boolean; measureMode: boolean; setDrawMode: any; setMeasureMode: any; setMeasureResult: any; setMeasurePts: any; setMeasureMouseMm: any }>({ undo, redo, fileSave, pushHistory, refreshLayers, drawMode, measureMode, setDrawMode, setMeasureMode, setMeasureResult, setMeasurePts, setMeasureMouseMm });
   useEffect(() => { shortcutHandlersRef.current = { undo, redo, fileSave, pushHistory, refreshLayers, drawMode, measureMode, setDrawMode, setMeasureMode, setMeasureResult, setMeasurePts, setMeasureMouseMm }; });
 
-  // 단축키 부착 상태 — UI 인디케이터로 표시 + heartbeat로 자동 재부착
-  const [shortcutsAttached, setShortcutsAttached] = useState(false);
+  // 단축키 heartbeat 재부착용 타임스탬프 (인디케이터 UI는 제거됨)
   const lastShortcutFireRef = useRef<number>(Date.now());
 
   useEffect(() => {
     console.log("[SC] handler mount-once attached to window (capture)");
-    setShortcutsAttached(true);
     const handler = async (e: KeyboardEvent) => {
       lastShortcutFireRef.current = Date.now();
       // ★ 키 정규화: 한국어 IME/Caps Lock/Shift 상태에서 e.key가 대문자로 오는 케이스 처리
@@ -2042,19 +2040,16 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
     // ★ 안전망: heartbeat 4초마다 remove+add로 강제 재부착 (HMR/외부 라이브러리가 떼어가도 복구)
     //   동일 (target, type, listener, capture) 조합은 중복 등록 무시되므로 중복 발화 위험 X
     window.addEventListener("keydown", handler, true);
-    setShortcutsAttached(true);
     const hb = window.setInterval(() => {
       try {
         window.removeEventListener("keydown", handler, true);
         window.addEventListener("keydown", handler, true);
-        setShortcutsAttached(true);
       } catch {}
     }, 4000);
     return () => {
       console.log("[SC] handler detached (unmount)");
       window.clearInterval(hb);
       window.removeEventListener("keydown", handler, true);
-      setShortcutsAttached(false);
     };
         }, []);
 
@@ -4666,15 +4661,6 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
                 <span>Net: {(svgMmWRef.current > 0 ? svgMmWRef.current : totalW).toFixed(2)} x {(svgMmHRef.current > 0 ? svgMmHRef.current : totalH).toFixed(2)} mm</span>
                 <span>Zoom: {zoom}%</span>
                 <span className="mx-1 text-gray-300">|</span>
-                {/* 단축키 상태 인디케이터 — 녹색=정상, 빨강=떨어짐. 클릭하면 새로고침 안내 */}
-                <span
-                  title={shortcutsAttached ? t("shortcut.statusActive") : t("shortcut.statusInactive")}
-                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${shortcutsAttached ? "text-emerald-600" : "text-red-600 cursor-pointer animate-pulse"}`}
-                  onClick={() => { if (!shortcutsAttached) window.location.reload(); }}
-                >
-                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${shortcutsAttached ? "bg-emerald-500" : "bg-red-500"}`}></span>
-                  {shortcutsAttached ? "⌨" : "⌨!"}
-                </span>
                 <button
                   onClick={handleOpen3DMockup}
                   disabled={generating3D}
