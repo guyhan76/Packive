@@ -373,7 +373,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [rulerScroll, setRulerScroll] = useState({ left: 0, top: 0 });
   const [guides, setGuides] = useState<Array<{ id: string; pos: number; dir: "h" | "v" }>>([]);
   const [showBleedGuides, setShowBleedGuides] = useState(false);
-  const [dielineInfoVisible, setDielineInfoVisible] = useState(true);
+  const [dielineInfoVisible, setDielineInfoVisible] = useState(false);
   const [dielineSizes, setDielineSizes] = useState<any>(null);
   const [dielineDims, setDielineDims] = useState<any>(null);
   const [show3DMockup, setShow3DMockup] = useState(false);
@@ -3340,6 +3340,16 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
               });
               const infoCount = group._objects.filter((ch: any) => ch._isDielineInfo).length;
               console.log("[Dieline-Upload] Tagged " + infoCount + " info children inside group");
+              // 초기 표시 상태를 dielineInfoVisible에 맞춰 동기화 (기본 false → 로드 시 숨김)
+              const applyVis = (o: any) => {
+                if (o._isDielineInfo || o._isPanelLabel || o._isPanelOverlay || o._isDimLine || o._isDimArrow) {
+                  o.visible = dielineInfoVisible;
+                }
+                if (o.type === "group" && typeof o.getObjects === "function") {
+                  o.getObjects().forEach(applyVis);
+                }
+              };
+              group._objects.forEach(applyVis);
             }
 
             // ─── Accurate mm scaling ───
@@ -4454,6 +4464,16 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
               });
               const infoCount = group._objects.filter((ch: any) => ch._isDielineInfo).length;
               console.log("[Dieline-EPM] Tagged " + infoCount + " info children inside group");
+              // 초기 표시 상태를 dielineInfoVisible에 맞춰 동기화 (기본 false → 로드 시 숨김)
+              const applyVis = (o: any) => {
+                if (o._isDielineInfo || o._isPanelLabel || o._isPanelOverlay || o._isDimLine || o._isDimArrow) {
+                  o.visible = dielineInfoVisible;
+                }
+                if (o.type === "group" && typeof o.getObjects === "function") {
+                  o.getObjects().forEach(applyVis);
+                }
+              };
+              group._objects.forEach(applyVis);
             }
           (group as any)._isDieLine = true;
           group.name = "__dieline_upload__";
