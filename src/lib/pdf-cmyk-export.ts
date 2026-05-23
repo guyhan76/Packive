@@ -224,6 +224,247 @@ function replacePdfColorsInString(pdf: string, colorMap: Map<string, CMYKColor>)
  */
 
 
+// ─── FOGRA39 ICC OutputIntent 임베드 (PDF Incremental Update) ───
+// 원본 PDF의 xref/trailer는 보존, 끝에 새 ICC stream + OutputIntent dict + Catalog override
+// + 새 xref + 새 trailer(/Prev로 원본 xref 연결) + startxref + %%EOF를 append.
+//
+// 안전장치 A: xref 형식 런타임 감지 — traditional xref만 처리, cross-reference stream이면 abort.
+// 안전장치 B: 결과 PDF 자체 검증 — %%EOF 종료, startxref offset 일치, ICC /Length 일치.
+// 둘 중 어느 단계든 실패 시 원본 rawPdf 그대로 반환.
+// "OutputIntent는 부가 기능. 깨진 PDF 만들 바엔 정상 PDF 반환." (graceful degradation)
+
+let _iccBytesCache: Uint8Array | null = null;
+async function loadFogra39IccBytes(): Promise<Uint8Array | null> {
+  if (_iccBytesCache) return _iccBytesCache;
+  try {
+    const res = await fetch("/icc/CoatedFOGRA39.icc");
+    if (!res.ok) { console.warn("[PDF/ICC] fetch failed:", res.status, res.statusText); return null; }
+    const buf = await res.arrayBuffer();
+    _iccBytesCache = new Uint8Array(buf);
+    return _iccBytesCache;
+  } catch (e) {
+    console.warn("[PDF/ICC] fetch error:", e);
+    return null;
+  }
+}
+
+// Uint8Array → Latin-1 string (1 byte = 1 char). 기존 PDF 후처리 코드(line 591~597)와 같은 매핑.
+function _bytesToLatin1(bytes: Uint8Array): string {
+  let s = "";
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+    s += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+  return s;
+}
+
+async function embedIccOutputIntent(rawPdf: string): Promise<string> {
+  try {
+    // ─── ① ICC bytes 확보 ───
+    const iccBytes = await loadFogra39IccBytes();
+    if (!iccBytes || iccBytes.length === 0) {
+      console.warn("[PDF/ICC] ICC bytes unavailable, skip OutputIntent embed");
+      return rawPdf;
+    }
+
+    // ─── ② 안전장치 A: xref 형식 감지 ───
+    // 마지막 startxref → 원본 xref offset 추출 → 그 위치에 "xref\n" 키워드 있어야 traditional.
+    // 없으면 cross-reference stream(/Type /XRef) 형식이므로 abort.
+    const lastStartxrefIdx = rawPdf.lastIndexOf("startxref");
+    if (lastStartxrefIdx < 0) {
+      console.warn("[PDF/ICC] no startxref found, abort");
+      return rawPdf;
+    }
+    const startxrefMatch = rawPdf.substring(lastStartxrefIdx).match(/startxref\s+(\d+)\s+%%EOF/);
+    if (!startxrefMatch) {
+      console.warn("[PDF/ICC] startxref offset parse failed, abort");
+      return rawPdf;
+    }
+    const prevXrefOffset = parseInt(startxrefMatch[1], 10);
+    const xrefProbe = rawPdf.substring(prevXrefOffset, prevXrefOffset + 5);
+    if (xrefProbe !== "xref\n" && xrefProbe !== "xref\r") {
+      console.warn("[PDF/ICC] xref format not traditional at offset " + prevXrefOffset
+        + " (got '" + xrefProbe.replace(/[\r\n]/g, "\\n") + "'), abort. PDF likely uses cross-reference stream.");
+      return rawPdf;
+    }
+
+    // ─── ③ trailer 파싱 — /Root, /Size 추출 ───
+    const trailerIdx = rawPdf.lastIndexOf("trailer", lastStartxrefIdx);
+    if (trailerIdx < 0 || trailerIdx < prevXrefOffset) {
+      console.warn("[PDF/ICC] trailer not found between xref and startxref, abort");
+      return rawPdf;
+    }
+    const trailerSection = rawPdf.substring(trailerIdx, lastStartxrefIdx);
+    const rootMatch = trailerSection.match(/\/Root\s+(\d+)\s+(\d+)\s+R/);
+    if (!rootMatch) {
+      console.warn("[PDF/ICC] /Root not found in trailer, abort");
+      return rawPdf;
+    }
+    const catNum = parseInt(rootMatch[1], 10);
+    const catGen = parseInt(rootMatch[2], 10);
+    const sizeMatch = trailerSection.match(/\/Size\s+(\d+)/);
+    if (!sizeMatch) {
+      console.warn("[PDF/ICC] /Size not found in trailer, abort");
+      return rawPdf;
+    }
+    const prevSize = parseInt(sizeMatch[1], 10);
+
+    // ─── ④ Catalog 객체 본문 추출 ───
+    // `<catNum> <catGen> obj` 헤더 찾기 → `<<`부터 짝맞춰 `>>`까지가 dict 본문.
+    const catHeader = catNum + " " + catGen + " obj";
+    const catHeaderIdx = rawPdf.indexOf(catHeader);
+    if (catHeaderIdx < 0) {
+      console.warn("[PDF/ICC] catalog object header '" + catHeader + "' not found, abort");
+      return rawPdf;
+    }
+    const catDictStart = rawPdf.indexOf("<<", catHeaderIdx);
+    if (catDictStart < 0 || catDictStart - catHeaderIdx > 200) {
+      console.warn("[PDF/ICC] catalog dict '<<' not found near header, abort");
+      return rawPdf;
+    }
+    // dict 깊이 추적해 outer dict 닫는 `>>` 찾기 (중첩 dict 안전).
+    let depth = 0, catDictEnd = -1;
+    for (let i = catDictStart; i < rawPdf.length - 1; i++) {
+      if (rawPdf[i] === "<" && rawPdf[i + 1] === "<") { depth++; i++; }
+      else if (rawPdf[i] === ">" && rawPdf[i + 1] === ">") {
+        depth--; i++;
+        if (depth === 0) { catDictEnd = i + 1; break; }   // catDictEnd = `>>` 닫힘 직후
+      }
+    }
+    if (catDictEnd < 0) {
+      console.warn("[PDF/ICC] catalog dict close '>>' not found, abort");
+      return rawPdf;
+    }
+    let catBody = rawPdf.substring(catDictStart, catDictEnd);    // "<< ... >>"
+    // 기존 /OutputIntents 키 제거(있다면 — 예: 이전 stub OutputIntent).
+    catBody = catBody.replace(/\/OutputIntents\s*\[[^\]]*\]/g, "");
+
+    // ─── ⑤ 새 객체 번호 할당 ───
+    // PDF /Size = 사용된 객체 번호 최대 + 1. 즉 가용 다음 번호 = prevSize.
+    const iccObjNum = prevSize;
+    const oiObjNum  = prevSize + 1;
+    const newSize   = prevSize + 2;
+    if (catNum >= iccObjNum) {
+      console.warn("[PDF/ICC] unexpected: catNum(" + catNum + ") >= iccObjNum(" + iccObjNum + "), abort");
+      return rawPdf;
+    }
+
+    // ─── ⑥ Catalog override 본문 — outer `>>` 직전에 /OutputIntents 키 삽입 ───
+    const newCatBody = catBody.replace(/>>\s*$/, " /OutputIntents [" + oiObjNum + " 0 R] >>");
+    if (newCatBody === catBody) {
+      console.warn("[PDF/ICC] catalog body update failed (regex mismatch), abort");
+      return rawPdf;
+    }
+
+    // ─── ⑦ ICC stream 객체 ───
+    const iccLen = iccBytes.length;
+    const iccBin = _bytesToLatin1(iccBytes);
+    const iccObjText =
+      iccObjNum + " 0 obj\n" +
+      "<< /N 4 /Length " + iccLen + " >>\n" +
+      "stream\n" +
+      iccBin + "\n" +
+      "endstream\n" +
+      "endobj\n";
+
+    // ─── ⑧ OutputIntent dict 객체 (PDF/X-4: /S /GTS_PDFX + /DestOutputProfile) ───
+    const oiObjText =
+      oiObjNum + " 0 obj\n" +
+      "<< /Type /OutputIntent /S /GTS_PDFX " +
+      "/OutputConditionIdentifier (FOGRA39) " +
+      "/OutputCondition (Coated FOGRA39 \\(ISO 12647-2:2004\\)) " +
+      "/Info (Coated FOGRA39) " +
+      "/RegistryName (http://www.color.org) " +
+      "/DestOutputProfile " + iccObjNum + " 0 R >>\n" +
+      "endobj\n";
+
+    // ─── ⑨ Catalog override 객체 (같은 번호로 재선언 — incremental update의 핵심) ───
+    const catOverrideText =
+      catNum + " " + catGen + " obj\n" +
+      newCatBody + "\n" +
+      "endobj\n";
+
+    // ─── ⑩ Byte offset 계산 — Latin-1 매핑이라 .length가 byte 수와 일치 ───
+    let prefix = rawPdf;
+    if (!prefix.endsWith("\n")) prefix += "\n";
+    const iccOffset    = prefix.length;
+    const oiOffset     = iccOffset + iccObjText.length;
+    const catOffset    = oiOffset  + oiObjText.length;
+    const newXrefOffset = catOffset + catOverrideText.length;
+
+    // ─── ⑪ 새 xref subsection들 — 객체 번호 오름차순 정렬 ───
+    // entry 형식: "%010d %05d <n|f> \n" (정확히 20 byte, PDF spec §7.5.4)
+    const xrefEntry = (off: number, gen: number, type: "n" | "f"): string =>
+      off.toString().padStart(10, "0") + " " + gen.toString().padStart(5, "0") + " " + type + " \n";
+    // Catalog는 보통 작은 번호(1·2), ICC/OI는 prevSize~ → 두 subsection으로 분리.
+    const xrefText =
+      "xref\n" +
+      catNum + " 1\n" + xrefEntry(catOffset, catGen, "n") +
+      iccObjNum + " 2\n" + xrefEntry(iccOffset, 0, "n") + xrefEntry(oiOffset, 0, "n");
+
+    // ─── ⑫ 새 trailer — /Prev로 원본 xref 체인 ───
+    const trailerText =
+      "trailer\n" +
+      "<< /Size " + newSize +
+      " /Root " + catNum + " " + catGen + " R" +
+      " /Prev " + prevXrefOffset +
+      " >>\n";
+
+    // ─── ⑬ 결과 조립 ───
+    const result =
+      prefix +
+      iccObjText +
+      oiObjText +
+      catOverrideText +
+      xrefText +
+      trailerText +
+      "startxref\n" + newXrefOffset + "\n" +
+      "%%EOF\n";
+
+    // ─── ⑭ 안전장치 B: 결과 자체 검증 ───
+    // B1. %%EOF 종료
+    if (!result.trimEnd().endsWith("%%EOF")) {
+      console.warn("[PDF/ICC] B1 fail: result not ending with %%EOF, abort");
+      return rawPdf;
+    }
+    // B2. 마지막 startxref 뒤 숫자 = newXrefOffset
+    const tailStartIdx = result.lastIndexOf("startxref");
+    const tailMatch = result.substring(tailStartIdx).match(/startxref\s+(\d+)\s+%%EOF/);
+    if (!tailMatch || parseInt(tailMatch[1], 10) !== newXrefOffset) {
+      console.warn("[PDF/ICC] B2 fail: startxref offset mismatch (expected " + newXrefOffset
+        + ", got " + (tailMatch ? tailMatch[1] : "null") + "), abort");
+      return rawPdf;
+    }
+    // B2b. newXrefOffset 위치에 정확히 "xref\n" 키워드 존재
+    if (result.substring(newXrefOffset, newXrefOffset + 5) !== "xref\n") {
+      console.warn("[PDF/ICC] B2b fail: 'xref\\n' not at offset " + newXrefOffset + ", abort");
+      return rawPdf;
+    }
+    // B3. ICC stream의 /Length가 실제 byte 수와 일치
+    const iccObjAt = result.indexOf(iccObjNum + " 0 obj");
+    if (iccObjAt < 0) {
+      console.warn("[PDF/ICC] B3 fail: ICC obj header not found in result, abort");
+      return rawPdf;
+    }
+    const iccLenMatch = result.substring(iccObjAt, iccObjAt + 200).match(/\/Length\s+(\d+)/);
+    if (!iccLenMatch || parseInt(iccLenMatch[1], 10) !== iccLen) {
+      console.warn("[PDF/ICC] B3 fail: ICC /Length mismatch (expected " + iccLen
+        + ", got " + (iccLenMatch ? iccLenMatch[1] : "null") + "), abort");
+      return rawPdf;
+    }
+
+    console.log("[PDF/ICC] OutputIntent embedded:",
+      "icc=" + iccLen + "B,",
+      "objs=#" + iccObjNum + ",#" + oiObjNum + ",cat=#" + catNum + "(override),",
+      "prevXref=" + prevXrefOffset + " newXref=" + newXrefOffset + ",",
+      "+" + (result.length - rawPdf.length) + " bytes");
+    return result;
+  } catch (e) {
+    console.warn("[PDF/ICC] embed exception, return original PDF:", e);
+    return rawPdf;
+  }
+}
 
 
 
@@ -600,18 +841,12 @@ export async function exportCmykPdf(
   rawPdf = replacePdfColorsInString(rawPdf, colorMap);
 
   // Step 7b: Vector colors converted to CMYK, images remain DeviceRGB (CMYK-simulated pixels)
-  // Step 7b-2: Inject CMYK OutputIntent into PDF Catalog to suppress Illustrator dialog
-  // Find /Type /Catalog and add /OutputIntents array
-  const catIdx = rawPdf.indexOf("/Type /Catalog");
-  if (catIdx >= 0) {
-    const catEnd = rawPdf.indexOf(">>", catIdx);
-    if (catEnd > catIdx && !rawPdf.substring(catIdx, catEnd).includes("/OutputIntents")) {
-      const oiEntry = " /OutputIntents [<< /Type /OutputIntent /S /GTS_PDFX /OutputConditionIdentifier (FOGRA39) /RegistryName (http://www.color.org) /Info (FOGRA39) >>]";
-      rawPdf = rawPdf.substring(0, catEnd) + oiEntry + rawPdf.substring(catEnd);
-      console.log("[PDF] Step 7b-2: CMYK OutputIntent injected into Catalog");
-    }
-  }
-console.log("[PDF] Step 8: CMYK conversion complete, length:", rawPdf.length);
+  // Step 7b-2: FOGRA39 ICC OutputIntent 임베드 (PDF/X-4 — DestOutputProfile이 실제 ICC stream을 가리킴).
+  // 이전의 stub OutputIntent는 DestOutputProfile이 없어 Acrobat/Illustrator가 SWOP default로 fallback,
+  // 그게 "PDF가 Proof ON 화면보다 어두움"의 직접 원인이었음. 진짜 ICC 임베드로 교체.
+  // 실패 시 헬퍼가 원본 rawPdf 그대로 반환(graceful degradation) → PDF 출력 자체는 보장.
+  rawPdf = await embedIccOutputIntent(rawPdf);
+  console.log("[PDF] Step 8: CMYK conversion complete, length:", rawPdf.length);
 
   const outLen = rawPdf.length;
   const outBuf = new Uint8Array(outLen);
