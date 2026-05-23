@@ -281,12 +281,32 @@ async function embedIccOutputIntent(rawPdf: string): Promise<string> {
       console.warn("[PDF/ICC] startxref offset parse failed, abort");
       return rawPdf;
     }
-    const prevXrefOffset = parseInt(startxrefMatch[1], 10);
-    const xrefProbe = rawPdf.substring(prevXrefOffset, prevXrefOffset + 5);
-    if (xrefProbe !== "xref\n" && xrefProbe !== "xref\r") {
-      console.warn("[PDF/ICC] xref format not traditional at offset " + prevXrefOffset
-        + " (got '" + xrefProbe.replace(/[\r\n]/g, "\\n") + "'), abort. PDF likely uses cross-reference stream.");
-      return rawPdf;
+    const declaredXrefOffset = parseInt(startxrefMatch[1], 10);
+    let prevXrefOffset = declaredXrefOffset;
+    const declaredProbe = rawPdf.substring(declaredXrefOffset, declaredXrefOffset + 5);
+    if (declaredProbe !== "xref\n" && declaredProbe !== "xref\r") {
+      // jsPDF가 만든 PDF + replacePdfColorsInString의 RGB→CMYK 치환으로 PDF byte 수가 증가했지만
+      // jsPDF의 startxref offset은 치환 전 기준이라 어긋남. PDF spec 위반이지만 reader는 관용적으로 처리.
+      // 우리는 실제 xref 키워드 위치를 PDF 끝부터 역방향 검색해 사용. /Prev 포인터에도 정확한 값 박음.
+      // cross-reference stream(/Type /XRef)이면 단독 "xref\n" 키워드가 없으므로 abort.
+      let foundXref = -1;
+      let searchFrom = rawPdf.length;
+      while (true) {
+        const idx = rawPdf.lastIndexOf("xref\n", searchFrom);
+        if (idx < 0) break;
+        // "startxref\n"이 아닌 단독 "xref\n"만 채택
+        if (idx < 5 || rawPdf.substring(idx - 5, idx) !== "start") { foundXref = idx; break; }
+        searchFrom = idx - 1;
+      }
+      if (foundXref < 0) {
+        console.warn("[PDF/ICC] no standalone 'xref\\n' keyword in PDF (likely cross-reference stream), abort");
+        return rawPdf;
+      }
+      console.warn("[PDF/ICC] declared startxref " + declaredXrefOffset
+        + " stale (got '" + declaredProbe.replace(/[\r\n]/g, "\\n")
+        + "'); using actual xref at offset " + foundXref
+        + " (byte drift " + (foundXref - declaredXrefOffset) + " — likely from RGB→CMYK byte expansion in replacePdfColorsInString)");
+      prevXrefOffset = foundXref;
     }
 
     // ─── ③ trailer 파싱 — /Root, /Size 추출 ───
