@@ -372,7 +372,6 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [rulerUnit, setRulerUnit] = useState<"mm" | "inch">("mm");
   const [rulerScroll, setRulerScroll] = useState({ left: 0, top: 0 });
   const [guides, setGuides] = useState<Array<{ id: string; pos: number; dir: "h" | "v" }>>([]);
-  const [snapEnabled, setSnapEnabled] = useState(true);
   const [showBleedGuides, setShowBleedGuides] = useState(false);
   const [dielineInfoVisible, setDielineInfoVisible] = useState(true);
   const [dielineSizes, setDielineSizes] = useState<any>(null);
@@ -1727,10 +1726,9 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
 
       // Mouse wheel zoom
 
-        // ─── Snap on move ───
+        // ─── Snap on move (always enabled) ───
         canvas.on("object:moving", (e: any) => {
           if (!e.target) return;
-          if (!snapEnabled) { setSnapLines([]); return; }
           const snap = calcSnap(e.target, canvas, 8);
           e.target.set({ left: snap.x, top: snap.y });
           e.target.setCoords();
@@ -2422,6 +2420,17 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
     // Soft Proof가 켜져 있으면 원본으로 복원 후 출력(이중 CMYK 변환 방지). 끝나면 재적용.
     const _proofWasOn = softProof;
     if (_proofWasOn) { clearSoftProofColors(c); clearSoftProofFromImages(c); }
+    // Pre-flight: PDF/dieline 내보내기 직전 자동 검사. errors > 0이면 모달로 차단.
+    if (type === "pdf" || type === "dieline") {
+      const pf = runPreflight(c, { scale: scaleRef.current });
+      if (pf.summary.errors > 0) {
+        setPreflightResult(pf);
+        setShowPreflight(true);
+        if (_proofWasOn) { applySoftProofColors(c); await applySoftProofToImages(c); }
+        setExporting(null);
+        return;
+      }
+    }
     try {
       if (type === "png") {
         const pureGuides = c.getObjects().filter((o: any) => o._isGuideLayer && !o._isDieLine);
@@ -4620,8 +4629,8 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
                   <div style={{color:"#888"}}>Total: {dielineSizes.Total?.toFixed(0)} mm</div>
                 </div>
               )}
-              {/* Snap guide lines overlay - canvas-local coords */}
-              {snapEnabled && snapLines.length > 0 && fcRef.current && (
+              {/* Snap guide lines overlay - canvas-local coords (snap always on) */}
+              {snapLines.length > 0 && fcRef.current && (
                 <svg
                   style={{
                     position: "absolute",
@@ -4657,9 +4666,6 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
                 <span>Net: {(svgMmWRef.current > 0 ? svgMmWRef.current : totalW).toFixed(2)} x {(svgMmHRef.current > 0 ? svgMmHRef.current : totalH).toFixed(2)} mm</span>
                 <span>Zoom: {zoom}%</span>
                 <span className="mx-1 text-gray-300">|</span>
-                <button onClick={() => { setSnapEnabled(p => { if(p) setSnapLines([]); return !p; }); }} className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${snapEnabled ? "bg-blue-100 text-blue-700" : "text-gray-400 hover:text-gray-600"}`}>
-                  {snapEnabled ? "Snap ON" : "Snap OFF"}
-                </button>
                 {/* 단축키 상태 인디케이터 — 녹색=정상, 빨강=떨어짐. 클릭하면 새로고침 안내 */}
                 <span
                   title={shortcutsAttached ? t("shortcut.statusActive") : t("shortcut.statusInactive")}
@@ -4680,14 +4686,6 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
                   {generating3D ? "Generating 3D..." : "3D Mockup"}
                 </button>
 
-                <button onClick={() => {
-                  const cv = fcRef.current; if (!cv) return;
-                  const result = runPreflight(cv, { scale: scaleRef.current });
-                  setPreflightResult(result);
-                  setShowPreflight(true);
-                }} className="px-1.5 py-0.5 rounded text-[10px] font-medium text-gray-400 hover:text-orange-600 hover:bg-orange-50 transition-colors">
-                  Pre-flight
-                </button>
                 <button onClick={toggleSoftProof} disabled={proofBusy} title="CMYK 인쇄색 미리보기 (Soft Proof)" className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${proofBusy ? "text-amber-500 animate-pulse cursor-wait" : softProof ? "bg-blue-100 text-blue-700" : "text-gray-400 hover:text-gray-600"}`}>
                   {proofBusy ? "Proofing..." : softProof ? "CMYK Proof ON" : "CMYK Proof"}
                 </button>
