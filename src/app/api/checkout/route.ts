@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { stripe } from '@/lib/stripe';
+import { getStripe } from '@/lib/stripe';
+
+// 빌드 시 정적 평가/page data collection을 건너뛰고 런타임에만 실행되도록 강제.
+// Stripe 초기화가 빌드 단계에서 일어나지 않게 한다.
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,7 +25,7 @@ export async function POST(req: NextRequest) {
     const selected = prices[plan];
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://packive-git-main-guyhan76s-projects.vercel.app';
 
-    const session = await stripe.checkout.sessions.create({
+    const session = await getStripe().checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'subscription',
       line_items: [

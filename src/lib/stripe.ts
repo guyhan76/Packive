@@ -1,9 +1,26 @@
 import Stripe from 'stripe';
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    // Stripe SDK 버전마다 expected apiVersion 문자열이 달라 cast로 유연성 확보
-    apiVersion: '2026-02-25.clover' as Stripe.LatestApiVersion,
-});
+// Stripe 클라이언트는 모듈 최상단(빌드 시점)이 아니라 런타임 첫 호출에 초기화한다.
+// 최상단에서 new Stripe(undefined)를 평가하면 빌드의 page data collection 단계에서
+// "Neither apiKey nor config.authenticator provided" 에러로 빌드 전체가 깨진다.
+// STRIPE_SECRET_KEY가 placeholder/미설정이어도 빌드는 통과해야 하므로 지연 초기화한다.
+let _stripe: Stripe | null = null;
+
+export function getStripe(): Stripe {
+  if (!_stripe) {
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key || key === 'placeholder') {
+      throw new Error(
+        'STRIPE_SECRET_KEY가 설정되지 않았습니다 (placeholder/미설정). 결제 기능을 쓰려면 환경변수를 설정하세요.'
+      );
+    }
+    _stripe = new Stripe(key, {
+      // Stripe SDK 버전마다 expected apiVersion 문자열이 달라 cast로 유연성 확보
+      apiVersion: '2026-02-25.clover' as Stripe.LatestApiVersion,
+    });
+  }
+  return _stripe;
+}
 
 export const PLANS = {
   free: {
