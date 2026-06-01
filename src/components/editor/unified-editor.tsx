@@ -252,6 +252,27 @@ function clearSoftProofFromImages(c: any): void {
   c.requestRenderAll();
 }
 
+// ─── AI 이미지 최소 해상도 검증 ───
+// Recraft remove-bg/vectorize는 256px 미만 이미지에서 400 에러를 낸다.
+// 업로드 직후 클라이언트에서 크기를 확인해 친절한 안내를 띄우고 호출 자체를 막는다.
+function validateAiImageSize(file: File): Promise<string | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const w = img.naturalWidth, h = img.naturalHeight;
+      if (w < 256 || h < 256) {
+        resolve(`이미지가 너무 작습니다 (${w}×${h}px). 최소 256×256px 이상 이미지가 필요합니다.`);
+      } else {
+        resolve(null);
+      }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve("이미지를 읽을 수 없습니다. PNG/JPG 파일인지 확인하세요."); };
+    img.src = url;
+  });
+}
+
 export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: UnifiedEditorProps) {
   const { t, locale } = useI18n();
   
@@ -398,6 +419,7 @@ export default function UnifiedEditor({ L, W, D, material, boxType, onBack }: Un
   const [softProof, setSoftProof] = useState(false);  // CMYK Soft Proof (인쇄색 미리보기) 토글
   const [proofBusy, setProofBusy] = useState(false);  // 이미지 시뮬 처리 중 — 버튼 disable
   const [showPreflight, setShowPreflight] = useState(false);
+  const pendingExportRef = useRef<"pdf" | "dieline" | null>(null);  // Pre-flight 차단 시 강제출력용 보류 타입
   // ─── AI Panel State ───
   const [aiTab, setAiTab] = useState<"generate"|"vectorize"|"removebg"|"credits">("generate");
   const [aiPrompt, setAiPrompt] = useState("");
@@ -1175,9 +1197,11 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
 
   // ─── AI: Vectorize Image ───
   const handleAiVectorize = useCallback(async (file: File) => {
+    setAiError("");
+    const sizeErr = await validateAiImageSize(file);
+    if (sizeErr) { setAiError(sizeErr); return; }
     setAiVecLoading(true);
     setAiVecResult(null);
-    setAiError("");
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -1198,9 +1222,11 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
 
   // ─── AI: Remove Background ───
   const handleAiRemoveBg = useCallback(async (file: File) => {
+    setAiError("");
+    const sizeErr = await validateAiImageSize(file);
+    if (sizeErr) { setAiError(sizeErr); return; }
     setAiBgLoading(true);
     setAiBgResult(null);
-    setAiError("");
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -2409,17 +2435,19 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
 
 
   // ─── Export ───
-  const handleExport = useCallback(async (type: "png" | "pdf" | "dieline" | "boxFaces") => {
+  const handleExport = useCallback(async (type: "png" | "pdf" | "dieline" | "boxFaces", opts?: { bypassPreflight?: boolean }) => {
     const c = fcRef.current; if (!c) return;
     setExporting(type);
     // Soft Proof가 켜져 있으면 원본으로 복원 후 출력(이중 CMYK 변환 방지). 끝나면 재적용.
     const _proofWasOn = softProof;
     if (_proofWasOn) { clearSoftProofColors(c); clearSoftProofFromImages(c); }
-    // Pre-flight: PDF/dieline 내보내기 직전 자동 검사. errors > 0이면 모달로 차단.
-    if (type === "pdf" || type === "dieline") {
+    // Pre-flight: PDF/dieline 내보내기 직전 자동 검사. errors > 0이면 모달로 안내한다.
+    // 단 사용자가 모달에서 "무시하고 출력"을 누르면 bypassPreflight=true로 재호출되어 통과(경고는 보여주되 출력은 사용자 선택).
+    if ((type === "pdf" || type === "dieline") && !opts?.bypassPreflight) {
       const pf = runPreflight(c, { scale: scaleRef.current });
       if (pf.summary.errors > 0) {
         setPreflightResult(pf);
+        pendingExportRef.current = type;
         setShowPreflight(true);
         if (_proofWasOn) { applySoftProofColors(c); await applySoftProofToImages(c); }
         setExporting(null);
@@ -6043,9 +6071,9 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
 
                 {/* Error display */}
                 {aiError && (
-                  <div className="bg-red-900/30 border border-red-700 rounded p-2 text-red-300 text-[10px]">
-                    {aiError}
-                    <button onClick={()=>setAiError("")} className="ml-2 text-red-400 hover:text-red-200">✕</button>
+                  <div className="bg-red-950/80 border border-red-500 rounded p-2 text-red-50 text-[10px] font-medium flex items-start gap-2">
+                    <span className="flex-1">{aiError}</span>
+                    <button onClick={()=>setAiError("")} className="text-red-200 hover:text-white shrink-0">✕</button>
                   </div>
                 )}
 
@@ -6577,9 +6605,20 @@ const [savedCustomMarks, setSavedCustomMarks] = useState<{name:string;cmyk:[numb
 
        {/* Footer */}
        <div className="px-6 py-4 border-t border-gray-100">
-         <button onClick={() => setShowPreflight(false)} className="w-full py-2.5 rounded-xl bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 transition-colors">
-           Done
-         </button>
+         {preflightResult.summary.errors > 0 ? (
+           <div className="flex gap-2">
+             <button onClick={() => setShowPreflight(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-sm font-medium hover:bg-gray-200 transition-colors">
+               취소
+             </button>
+             <button onClick={() => { const ty = pendingExportRef.current; setShowPreflight(false); if (ty) { handleExport(ty, { bypassPreflight: true }); } }} className="flex-1 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 transition-colors">
+               무시하고 출력
+             </button>
+           </div>
+         ) : (
+           <button onClick={() => setShowPreflight(false)} className="w-full py-2.5 rounded-xl bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 transition-colors">
+             Done
+           </button>
+         )}
        </div>
 
      </div>
